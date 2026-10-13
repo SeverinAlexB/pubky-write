@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, type Database } from "./database.ts";
 import {
   applySteps,
+  copyDocument,
   createDocument,
   deleteDocument,
   getDocumentContent,
@@ -103,6 +104,17 @@ describe("document list", () => {
     expect(renameDocument(db, id, "   ")!.title).toBe("Untitled document");
     expect(deleteDocument(db, id)).toBe(true);
     expect(openDocument(db, id)).toBeNull();
+  });
+
+  it("copies a document's content under a new title", () => {
+    const original = createDocument(db, "Plan", 1);
+    applySteps(db, original.id, { clientId: "a", version: 0, steps: insertTextSteps(original.id, "Budget") });
+    const copy = copyDocument(db, original.id, 5)!;
+
+    expect(copy.title).toBe("Copy of Plan");
+    expect(textOf(copy.id)).toBe("Budget");
+    expect(listDocuments(db, { query: "budget" })).toHaveLength(2);
+    expect(copyDocument(db, "missing")).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import { X } from "lucide-react";
+import { Icon } from "../components/Icon.tsx";
 
 type Heading = { level: number; text: string; pos: number };
 
@@ -32,7 +32,7 @@ export function OutlinePanel({ editor, onClose }: { editor: Editor; onClose: () 
       <div className="outline-header">
         <h2>Outline</h2>
         <button type="button" className="icon-button small" aria-label="Close outline" onClick={onClose}>
-          <X size={18} />
+          <Icon name="close" />
         </button>
       </div>
       {headings.length === 0 ? (

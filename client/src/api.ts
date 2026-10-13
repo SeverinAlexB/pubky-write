@@ -41,6 +41,7 @@ export const api = {
   },
   createDocument: (title?: string) =>
     request<DocumentSummary>("/api/documents", { method: "POST", body: JSON.stringify({ title }) }),
+  copyDocument: (id: string) => request<DocumentSummary>(`/api/documents/${id}/copy`, { method: "POST" }),
   openDocument: (id: string) => request<OpenedDocument>(`/api/documents/${id}`),
   renameDocument: (id: string, title: string) =>
     request<DocumentSummary>(`/api/documents/${id}`, { method: "PATCH", body: JSON.stringify({ title }) }),

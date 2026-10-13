@@ -2,8 +2,8 @@ import type { CommentThread } from "@docs/shared";
 import { isCollapsed } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import { CheckCircle2, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../components/Icon.tsx";
 import { formatShortDate } from "../format.ts";
 import { getCommentAnchors } from "./commentAnchors.ts";
 
@@ -60,7 +60,7 @@ export function CommentsPanel({
       <div className="panel-header">
         <h2>Comments</h2>
         <button type="button" className="icon-button" aria-label="Close comments" onClick={onClose}>
-          <X size={20} />
+          <Icon name="close" />
         </button>
       </div>
       {resolvedCount > 0 && (
@@ -122,7 +122,7 @@ export function CommentsPanel({
                       void onResolve(thread.id, !thread.resolved);
                     }}
                   >
-                    {thread.resolved ? <RotateCcw size={18} /> : <CheckCircle2 size={18} />}
+                    <Icon name={thread.resolved ? "restart_alt" : "check_circle"} />
                   </button>
                   <button
                     type="button"
@@ -134,7 +134,7 @@ export function CommentsPanel({
                       if (confirm("Delete this comment thread?")) void onDelete(thread.id);
                     }}
                   >
-                    <Trash2 size={18} />
+                    <Icon name="delete" />
                   </button>
                 </div>
               </div>

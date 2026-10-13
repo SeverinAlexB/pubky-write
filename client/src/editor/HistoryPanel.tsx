@@ -1,9 +1,9 @@
 import type { Revision, RevisionWithContent } from "@docs/shared";
 import { documentExtensions } from "@docs/shared";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api.ts";
+import { Icon } from "../components/Icon.tsx";
 import { formatDateTime } from "../format.ts";
 
 type HistoryPanelProps = {
@@ -34,7 +34,7 @@ export function HistoryPanel({ documentId, selected, onSelect, onRestore, onClos
       <div className="history-header">
         <h2>Version history</h2>
         <button type="button" className="icon-button" aria-label="Close version history" onClick={onClose}>
-          <X size={20} />
+          <Icon name="close" />
         </button>
       </div>
       {error && <p className="error">Couldn't load history: {error}</p>}

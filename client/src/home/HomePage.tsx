@@ -1,8 +1,8 @@
 import type { DocumentSort, DocumentSummary } from "@docs/shared";
-import { ExternalLink, FileText, MoreVertical, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api } from "../api.ts";
+import { Icon } from "../components/Icon.tsx";
 import { Menu } from "../components/Menu.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { formatShortDate } from "../format.ts";
@@ -63,7 +63,7 @@ export function HomePage() {
           <span>Docs</span>
         </Link>
         <div className="search" role="search">
-          <Search size={20} aria-hidden />
+          <Icon name="search" />
           <input
             type="search"
             placeholder="Search"
@@ -73,7 +73,7 @@ export function HomePage() {
           />
           {query && (
             <button type="button" className="icon-button" aria-label="Clear search" onClick={() => setQuery("")}>
-              <X size={18} />
+              <Icon name="close" />
             </button>
           )}
         </div>
@@ -84,7 +84,7 @@ export function HomePage() {
           <h2 id="start-heading">Start a new document</h2>
           <button type="button" className="template-card" onClick={createBlank}>
             <span className="template-preview">
-              <Plus size={48} strokeWidth={1.25} aria-hidden />
+              <Icon name="add" size={48} />
             </span>
             <span className="template-name">Blank document</span>
           </button>
@@ -115,21 +115,21 @@ export function HomePage() {
           {documents?.map((doc) => (
             <li key={doc.id} className="document-row">
               <Link to={`/d/${doc.id}`} className="document-link">
-                <FileText size={20} className="document-icon" aria-hidden />
+                <Icon name="description" className="document-icon" />
                 <span className="document-title">{doc.title}</span>
                 <span className="document-date">{formatShortDate(dateFor(doc))}</span>
               </Link>
               <Menu
-                label={<MoreVertical size={18} />}
+                label={<Icon name="more_vert" />}
                 buttonClassName="icon-button"
                 ariaLabel={`More actions for ${doc.title}`}
                 align="end"
                 entries={[
-                  { label: "Rename", icon: <Pencil size={16} />, onSelect: () => setRenaming(doc) },
-                  { label: "Remove", icon: <Trash2 size={16} />, onSelect: () => void remove(doc) },
+                  { label: "Rename", icon: "edit", onSelect: () => setRenaming(doc) },
+                  { label: "Remove", icon: "delete", onSelect: () => void remove(doc) },
                   {
                     label: "Open in new tab",
-                    icon: <ExternalLink size={16} />,
+                    icon: "open_in_new",
                     onSelect: () => window.open(`/d/${doc.id}`, "_blank"),
                   },
                 ]}

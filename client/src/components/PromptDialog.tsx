@@ -37,16 +37,19 @@ export function PromptDialog({
         }}
       >
         <h2>{title}</h2>
-        <label>
-          <span className="visually-hidden">{label}</span>
+        <label className="text-field">
           <input
             autoFocus
             value={value}
-            placeholder={placeholder}
+            // The label stands in for the placeholder until the field is focused.
+            placeholder={placeholder ?? " "}
             aria-label={label}
             onChange={(event) => setValue(event.target.value)}
             onFocus={(event) => event.target.select()}
           />
+          <span className="text-field-label" aria-hidden>
+            {label}
+          </span>
         </label>
         <div className="dialog-actions">
           <button type="button" className="button-secondary" onClick={onCancel}>

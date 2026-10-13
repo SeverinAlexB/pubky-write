@@ -5,9 +5,10 @@ test("font, font size, line spacing and indent are kept", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();
 
-  await page.getByLabel("Font", { exact: true }).selectOption("Georgia");
-  await page.getByLabel("Font size", { exact: true }).fill("18");
-  await page.getByLabel("Font size", { exact: true }).press("Enter");
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Georgia" }).click();
+  await page.getByRole("textbox", { name: "Font size" }).fill("18");
+  await page.getByRole("textbox", { name: "Font size" }).press("Enter");
   await editor(page).click();
   await page.keyboard.type("Large serif text");
   await page.keyboard.press(`${mod}+Shift+.`); // next size up from 18 is 24
@@ -27,7 +28,7 @@ test("font, font size, line spacing and indent are kept", async ({ page }) => {
   await expect(paragraph.locator("span").last()).toHaveAttribute("style", /font-size: 24pt/);
 
   await paragraph.click();
-  await expect(page.getByLabel("Font", { exact: true })).toHaveValue("Georgia");
+  await expect(page.getByRole("button", { name: "Font", exact: true })).toHaveText("Georgia");
 });
 
 test("Tab nests list items instead of indenting the paragraph", async ({ page }) => {
@@ -92,7 +93,7 @@ test("the outline lists headings and jumps to them", async ({ page }) => {
   await page.reload();
   await expect(outline).toBeHidden(); // the choice is remembered
   await page.getByRole("button", { name: "View" }).click();
-  await page.getByRole("menuitemcheckbox", { name: "Show outline" }).click();
+  await page.getByRole("menuitem", { name: "Expand tabs and outlines sidebar" }).click();
   await expect(outline).toBeVisible();
 });
 

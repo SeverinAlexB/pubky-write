@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import type { CreateCommentRequest, DocumentSort, SubmitStepsRequest } from "@docs/shared";
+import { toMarkdown, type CreateCommentRequest, type DocumentSort, type SubmitStepsRequest } from "@docs/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -17,6 +17,7 @@ import {
 import { inTransaction, type Database } from "./database.ts";
 import {
   applySteps,
+  copyDocument,
   createDocument,
   deleteDocument,
   getDocumentContent,
@@ -27,7 +28,6 @@ import {
   restoreRevision,
 } from "./documents.ts";
 import { toDocx } from "./export/docx.ts";
-import { toMarkdown } from "./export/markdown.ts";
 import { getRevision, listRevisions } from "./revisions.ts";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -65,6 +65,8 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
   });
 
   app.get("/api/documents/:id", (c) => c.json(found(openDocument(db, c.req.param("id")))));
+
+  app.post("/api/documents/:id/copy", (c) => c.json(found(copyDocument(db, c.req.param("id"))), 201));
 
   app.patch("/api/documents/:id", async (c) => {
     const { title } = await c.req.json<{ title: string }>();

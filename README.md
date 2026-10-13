@@ -38,10 +38,16 @@ npm start          # http://localhost:3001
 - **Document list:** create, open, rename, delete, search titles and contents,
   sort by last opened, last modified or title.
 - **Editor:** paragraph styles (normal text, headings 1–3), fonts and font
-  sizes, bold, italic, underline, strikethrough, text and highlight colour,
-  links, images (toolbar, paste or drag and drop), tables, bulleted and numbered
-  lists, alignment, line spacing, indentation (Tab and Shift+Tab), quotes, code
-  blocks, horizontal lines, undo and redo, zoom.
+  sizes, bold, italic, underline, strikethrough (Format > Text, ⌘⇧X), text and
+  highlight colour, paint format, links, images (upload, by URL, paste or drag
+  and drop), tables (Insert > Table size grid), bulleted and numbered lists,
+  alignment, line spacing, indentation (Tab, Shift+Tab, ⌘] and ⌘[), quotes,
+  code blocks, horizontal lines, undo and redo, zoom (presets, typed or Fit).
+- **Menus and toolbar:** a File / Edit / View / Insert / Format / Tools menu
+  bar with submenus and keyboard navigation, and a toolbar whose controls move
+  into a "More" row when the window is narrow. Menu items for features that
+  are not built yet are shown disabled; they call the optional actions listed
+  in `client/src/editor/actions.ts`.
 - **Find and replace** (⌘F, ⌘⇧H) with match case, **word count** (⌘⇧C) for the
   document or the selection, and a **document outline** of all headings.
 - **Comments:** select text and add a comment (⌘⌥M), reply, resolve, reopen or
@@ -53,8 +59,11 @@ npm start          # http://localhost:3001
 - **Version history:** edits are grouped into sessions separated by 5 minutes
   of inactivity. Select a version to preview it, then restore it. Restoring
   replaces only the text that differs, so comments on unchanged text survive.
-- **Export:** File > Download as Word (.docx) or Markdown (.md). PDF uses the
-  browser's print dialog with print styles that output only the page.
+- **Export:** File > Download as Microsoft Word (.docx), plain text (.txt) or
+  Markdown (.md). PDF uses the browser's print dialog with print styles that
+  output only the page. Edit > Copy as Markdown copies the selection.
+- **Make a copy:** File > Make a copy creates "Copy of <title>" without the
+  comments.
 
 Keyboard shortcuts follow the reference product, for example ⌘K for links, ⌘⌥1–3 for
 headings, ⌘⇧8 for bulleted lists and ⌘⌥⇧H for version history.
@@ -91,7 +100,7 @@ as the sync already does for conflicts.
 
 | Path      | Contents                                                       |
 | --------- | -------------------------------------------------------------- |
-| `shared/` | Document schema and API types used by both sides               |
+| `shared/` | Document schema, API types and Markdown export used by both sides |
 | `server/` | Hono API, SQLite storage (`node:sqlite`), revisions, exports   |
 | `client/` | React app: document list, editor, toolbar, version history     |
 | `e2e/`    | Playwright end-to-end tests                                    |
@@ -103,6 +112,7 @@ as the sync already does for conflicts.
 | ---------------------------------------------------- | --------------------------------------- |
 | `GET /api/documents?q=&sort=`                        | List or search documents                |
 | `POST /api/documents`                                | Create a document                       |
+| `POST /api/documents/:id/copy`                       | Make a copy                             |
 | `GET /api/documents/:id`                             | Open a document (content, version, comments) |
 | `PATCH /api/documents/:id`                           | Rename                                  |
 | `DELETE /api/documents/:id`                          | Delete                                  |

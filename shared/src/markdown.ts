@@ -1,6 +1,6 @@
 // Converts a document to GitHub-flavoured Markdown. Formatting Markdown cannot express
 // (underline, highlight, alignment, colour) uses inline HTML or is dropped.
-import { documentSchema } from "@docs/shared";
+import { documentSchema } from "./schema.ts";
 import { defaultMarkdownSerializer, MarkdownSerializer, type MarkdownSerializerState } from "prosemirror-markdown";
 import type { Node } from "@tiptap/pm/model";
 

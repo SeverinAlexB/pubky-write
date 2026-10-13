@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../components/Icon.tsx";
 import { getSearchState, goToMatch, replaceAll, replaceCurrent, setSearch } from "./search.ts";
 
 type FindBarProps = {
@@ -80,13 +80,13 @@ export function FindBar({ editor, showReplace: initialShowReplace, focusRequest,
           {query ? `${search.count === 0 ? 0 : search.current + 1} of ${search.count}` : ""}
         </span>
         <button type="button" className="icon-button small" aria-label="Previous match" disabled={search.count === 0} onClick={() => go(-1)}>
-          <ChevronUp size={18} />
+          <Icon name="keyboard_arrow_up" />
         </button>
         <button type="button" className="icon-button small" aria-label="Next match" disabled={search.count === 0} onClick={() => go(1)}>
-          <ChevronDown size={18} />
+          <Icon name="keyboard_arrow_down" />
         </button>
         <button type="button" className="icon-button small" aria-label="Close find" onClick={close}>
-          <X size={18} />
+          <Icon name="close" />
         </button>
       </div>
       <div className="find-options">

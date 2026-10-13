@@ -19,3 +19,16 @@ export function editor(page: Page) {
 export async function waitUntilSaved(page: Page): Promise<void> {
   await expect(page.getByRole("status").first()).toHaveAttribute("title", "Saved");
 }
+
+/** Opens the toolbar's Styles menu and applies a paragraph style. */
+export async function chooseStyle(page: Page, style: string): Promise<void> {
+  await page.getByRole("button", { name: "Styles" }).click();
+  await page.getByRole("menuitemcheckbox", { name: style, exact: true }).click();
+}
+
+/** Chooses File > Download > `format`. */
+export async function chooseDownload(page: Page, format: string): Promise<void> {
+  await page.getByRole("button", { name: "File" }).click();
+  await page.getByRole("menuitem", { name: "Download" }).hover();
+  await page.getByRole("menuitem", { name: format }).click();
+}

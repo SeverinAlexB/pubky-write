@@ -39,14 +39,25 @@ const orderBy: Record<DocumentSort, string> = {
   title: "title COLLATE NOCASE ASC",
 };
 
-export function createDocument(db: Database, title = UNTITLED, now = Date.now()): DocumentSummary {
+export function createDocument(
+  db: Database,
+  title = UNTITLED,
+  now = Date.now(),
+  doc = Node.fromJSON(documentSchema, emptyDocument),
+): DocumentSummary {
   const id = randomUUID();
-  const doc = Node.fromJSON(documentSchema, emptyDocument);
   db.prepare(
     `INSERT INTO documents (id, title, content, plain_text, version, created_at, updated_at, last_opened_at)
      VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
-  ).run(id, normalizeTitle(title), JSON.stringify(doc.toJSON()), "", now, now, now);
+  ).run(id, normalizeTitle(title), JSON.stringify(doc.toJSON()), plainText(doc), now, now, now);
   return { id, title: normalizeTitle(title), createdAt: now, updatedAt: now, lastOpenedAt: now };
+}
+
+/** File > Make a copy: a new document named "Copy of <title>" with the same content, without comments. */
+export function copyDocument(db: Database, id: string, now = Date.now()): DocumentSummary | null {
+  const row = findRow(db, id);
+  if (!row) return null;
+  return createDocument(db, `Copy of ${row.title}`, now, Node.fromJSON(documentSchema, JSON.parse(row.content)));
 }
 
 export function listDocuments(db: Database, options: { query?: string; sort?: DocumentSort } = {}): DocumentSummary[] {

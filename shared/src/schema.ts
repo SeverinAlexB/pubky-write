@@ -6,6 +6,7 @@ import Image from "@tiptap/extension-image";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import { Color, FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
+import Strike from "@tiptap/extension-strike";
 import StarterKit from "@tiptap/starter-kit";
 import { ParagraphFormat } from "./paragraphFormat.ts";
 
@@ -15,6 +16,13 @@ export const documentExtensions: AnyExtension[] = [
     link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
     // Undo history is configured by the editor so it can be left out on the server.
     undoRedo: false,
+    strike: false,
+  }),
+  // Strikethrough is ⌘+Shift+X, as in Format > Text.
+  Strike.extend({
+    addKeyboardShortcuts() {
+      return { "Mod-Shift-x": () => this.editor.commands.toggleStrike() };
+    },
   }),
   TextStyle,
   Color,

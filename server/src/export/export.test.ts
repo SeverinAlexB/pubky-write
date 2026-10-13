@@ -1,8 +1,7 @@
-import { documentSchema } from "@docs/shared";
+import { documentSchema, toMarkdown } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import { describe, expect, it } from "vitest";
 import { halfPoints, hexColor, toDocx } from "./docx.ts";
-import { toMarkdown } from "./markdown.ts";
 
 const text = (value: string, marks: { type: string; attrs?: Record<string, unknown> }[] = []) => ({
   type: "text",

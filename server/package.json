@@ -13,8 +13,7 @@
     "@tiptap/pm": "^3.32.0",
     "docx": "^9.10.0",
     "hono": "^4.13.13",
-    "image-size": "^2.0.4",
-    "prosemirror-markdown": "^1.13.8"
+    "image-size": "^2.0.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

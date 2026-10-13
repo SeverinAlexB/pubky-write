@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { createDocument, editor, mod, waitUntilSaved } from "./helpers.ts";
+import { chooseDownload, chooseStyle, createDocument, editor, mod, waitUntilSaved } from "./helpers.ts";
 
 test("typing is saved and survives a reload", async ({ page }) => {
   await createDocument(page);
@@ -17,7 +17,7 @@ test("formatting from the toolbar and keyboard is kept", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();
 
-  await page.getByLabel("Styles").selectOption("h1");
+  await chooseStyle(page, "Heading 1");
   await page.keyboard.type("Plan");
   await page.keyboard.press("Enter");
   await page.keyboard.type("Some ");
@@ -25,7 +25,7 @@ test("formatting from the toolbar and keyboard is kept", async ({ page }) => {
   await page.keyboard.type("bold");
   await page.keyboard.press(`${mod}+b`);
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: /Bulleted list/ }).click();
+  await page.getByRole("button", { name: /^Bulleted list \(/ }).click();
   await page.keyboard.type("First");
   await page.keyboard.press("Enter");
   await page.keyboard.type("Second");
@@ -84,20 +84,18 @@ test("an earlier version can be previewed and restored from version history", as
 test("exports Markdown and Word files", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();
-  await page.getByLabel("Styles").selectOption("h2");
+  await chooseStyle(page, "Heading 2");
   await page.keyboard.type("Export me");
   await waitUntilSaved(page);
 
-  await page.getByRole("button", { name: "File" }).click();
   const markdownDownload = page.waitForEvent("download");
-  await page.getByRole("menuitem", { name: "Download as Markdown (.md)" }).click();
+  await chooseDownload(page, "Markdown (.md)");
   const markdown = await markdownDownload;
   expect(markdown.suggestedFilename()).toBe("Untitled document.md");
   expect(await readFile(await markdown.path(), "utf8")).toBe("## Export me\n");
 
-  await page.getByRole("button", { name: "File" }).click();
   const wordDownload = page.waitForEvent("download");
-  await page.getByRole("menuitem", { name: "Download as Word (.docx)" }).click();
+  await chooseDownload(page, "Microsoft Word (.docx)");
   const word = await wordDownload;
   expect(word.suggestedFilename()).toBe("Untitled document.docx");
   expect((await readFile(await word.path())).subarray(0, 2).toString()).toBe("PK");
