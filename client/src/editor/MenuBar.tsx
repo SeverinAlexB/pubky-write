@@ -3,19 +3,24 @@ import {
   Download,
   FilePlus,
   FileText,
+  Hash,
   History,
   ImagePlus,
   Link2,
   Minus,
+  PanelLeft,
   Pencil,
   Printer,
   Redo2,
+  Search,
   Table2,
   Trash2,
   Undo2,
 } from "lucide-react";
+import { lineSpacings } from "@docs/shared";
 import { Menu } from "../components/Menu.tsx";
-import { applyParagraphStyle, modKey, paragraphStyles } from "./Toolbar.tsx";
+import { changeFontSize } from "./extensions.ts";
+import { applyParagraphStyle, lineSpacingLabel, modKey, paragraphStyles } from "./Toolbar.tsx";
 
 export type MenuActions = {
   newDocument: () => void;
@@ -26,10 +31,13 @@ export type MenuActions = {
   deleteDocument: () => void;
   insertLink: () => void;
   insertImage: () => void;
+  find: (withReplace: boolean) => void;
+  wordCount: () => void;
+  toggleOutline: () => void;
 };
 
 /** The File / Edit / Insert / Format menus under the document title. */
-export function MenuBar({ editor, actions }: { editor: Editor; actions: MenuActions }) {
+export function MenuBar({ editor, actions, outlineOpen }: { editor: Editor; actions: MenuActions; outlineOpen: boolean }) {
   const run = () => editor.chain().focus();
 
   return (
@@ -57,6 +65,15 @@ export function MenuBar({ editor, actions }: { editor: Editor; actions: MenuActi
           { label: "Redo", icon: <Redo2 size={16} />, shortcut: `${modKey}Shift+Z`, onSelect: () => run().redo().run() },
           "separator",
           { label: "Select all", shortcut: `${modKey}A`, onSelect: () => run().selectAll().run() },
+          "separator",
+          { label: "Find", icon: <Search size={16} />, shortcut: `${modKey}F`, onSelect: () => actions.find(false) },
+          { label: "Find and replace", shortcut: `${modKey}Shift+H`, onSelect: () => actions.find(true) },
+        ]}
+      />
+      <Menu
+        label="View"
+        entries={[
+          { label: "Show outline", icon: <PanelLeft size={16} />, checked: outlineOpen, onSelect: actions.toggleOutline },
         ]}
       />
       <Menu
@@ -91,12 +108,26 @@ export function MenuBar({ editor, actions }: { editor: Editor; actions: MenuActi
           { label: "Quote", shortcut: `${modKey}Shift+B`, onSelect: () => run().toggleBlockquote().run() },
           { label: "Code block", shortcut: `${modKey}Alt+C`, onSelect: () => run().toggleCodeBlock().run() },
           "separator",
+          ...lineSpacings.map((spacing) => ({
+            label: `Line spacing: ${lineSpacingLabel(spacing)}`,
+            onSelect: () => run().setLineSpacing(spacing).run(),
+          })),
+          { label: "Increase indent", shortcut: "Tab", onSelect: () => run().changeIndent(1).run() },
+          { label: "Decrease indent", shortcut: "Shift+Tab", onSelect: () => run().changeIndent(-1).run() },
+          "separator",
+          { label: "Increase font size", shortcut: `${modKey}Shift+.`, onSelect: () => changeFontSize(editor, 1) },
+          { label: "Decrease font size", shortcut: `${modKey}Shift+,`, onSelect: () => changeFontSize(editor, -1) },
+          "separator",
           {
             label: "Clear formatting",
             shortcut: `${modKey}\\`,
             onSelect: () => run().unsetAllMarks().setTextAlign("left").run(),
           },
         ]}
+      />
+      <Menu
+        label="Tools"
+        entries={[{ label: "Word count", icon: <Hash size={16} />, shortcut: `${modKey}Shift+C`, onSelect: actions.wordCount }]}
       />
     </nav>
   );

@@ -5,8 +5,9 @@ import Highlight from "@tiptap/extension-highlight";
 import Image from "@tiptap/extension-image";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
-import { Color, TextStyle } from "@tiptap/extension-text-style";
+import { Color, FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import StarterKit from "@tiptap/starter-kit";
+import { ParagraphFormat } from "./paragraphFormat.ts";
 
 export const documentExtensions: AnyExtension[] = [
   StarterKit.configure({
@@ -17,8 +18,11 @@ export const documentExtensions: AnyExtension[] = [
   }),
   TextStyle,
   Color,
+  FontFamily,
+  FontSize,
   Highlight.configure({ multicolor: true }),
   TextAlign.configure({ types: ["heading", "paragraph"] }),
+  ParagraphFormat,
   Image.configure({ inline: false, allowBase64: false }),
   Table.configure({ resizable: false }),
   TableRow,

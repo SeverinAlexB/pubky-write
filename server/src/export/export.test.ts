@@ -1,7 +1,7 @@
 import { documentSchema } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import { describe, expect, it } from "vitest";
-import { hexColor, toDocx } from "./docx.ts";
+import { halfPoints, hexColor, toDocx } from "./docx.ts";
 import { toMarkdown } from "./markdown.ts";
 
 const text = (value: string, marks: { type: string; attrs?: Record<string, unknown> }[] = []) => ({
@@ -94,5 +94,13 @@ describe("hexColor", () => {
     expect(hexColor("#1155cc")).toBe("1155CC");
     expect(hexColor("rgb(255, 0, 16)")).toBe("FF0010");
     expect(hexColor("red")).toBeUndefined();
+  });
+});
+
+describe("halfPoints", () => {
+  it("converts font sizes to Word half-points", () => {
+    expect(halfPoints("11pt")).toBe(22);
+    expect(halfPoints("16px")).toBe(24);
+    expect(halfPoints("big")).toBeUndefined();
   });
 });

@@ -6,10 +6,15 @@ import { Link, useNavigate } from "react-router";
 import { api, stepsTransport } from "../api.ts";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { editorExtensions } from "./extensions.ts";
+import { FindBar } from "./FindBar.tsx";
 import { HistoryPanel, RevisionPreview } from "./HistoryPanel.tsx";
 import { MenuBar, type MenuActions } from "./MenuBar.tsx";
+import { OutlinePanel } from "./OutlinePanel.tsx";
 import { DocumentSync, type SaveStatus } from "./sync.ts";
 import { Toolbar } from "./Toolbar.tsx";
+import { WordCountDialog } from "./WordCountDialog.tsx";
+
+const OUTLINE_SETTING = "docs.outlineOpen";
 
 type DocumentEditorProps = {
   document: OpenedDocument;
@@ -25,6 +30,9 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [linkDialog, setLinkDialog] = useState<{ href: string } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [preview, setPreview] = useState<RevisionWithContent | null>(null);
+  const [find, setFind] = useState<{ replace: boolean; request: number } | null>(null);
+  const [wordCountOpen, setWordCountOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(() => localStorage.getItem(OUTLINE_SETTING) !== "false");
   const sync = useRef<DocumentSync | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -99,15 +107,31 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   }, [title]);
 
   useEffect(() => {
-    const openHistoryShortcut = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.altKey && event.shiftKey && event.code === "KeyH") {
-        event.preventDefault();
-        setHistoryOpen(true);
-      }
+    localStorage.setItem(OUTLINE_SETTING, String(outlineOpen));
+  }, [outlineOpen]);
+
+  // Shortcuts that work anywhere on the page, overriding the browser's own find.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const shortcut = `${event.altKey ? "Alt+" : ""}${event.shiftKey ? "Shift+" : ""}${event.code}`;
+      const action = {
+        "Alt+Shift+KeyH": () => setHistoryOpen(true),
+        KeyF: () => openFind(false),
+        "Shift+KeyH": () => openFind(true),
+        "Shift+KeyC": () => setWordCountOpen(true),
+      }[shortcut];
+      if (!action) return;
+      event.preventDefault();
+      action();
     };
-    window.addEventListener("keydown", openHistoryShortcut);
-    return () => window.removeEventListener("keydown", openHistoryShortcut);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  function openFind(replace: boolean) {
+    setFind((previous) => ({ replace: replace || (previous?.replace ?? false), request: (previous?.request ?? 0) + 1 }));
+  }
 
   handlers.current.openLinkDialog = () => setLinkDialog({ href: editor.getAttributes("link").href ?? "" });
   handlers.current.insertImages = (files, at) => void insertImages(editor, files, at);
@@ -161,6 +185,9 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     },
     insertLink: () => handlers.current.openLinkDialog(),
     insertImage: () => imageInput.current?.click(),
+    find: openFind,
+    wordCount: () => setWordCountOpen(true),
+    toggleOutline: () => setOutlineOpen((open) => !open),
   };
 
   return (
@@ -189,7 +216,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             />
             <SaveIndicator status={status} />
           </div>
-          <MenuBar editor={editor} actions={actions} />
+          <MenuBar editor={editor} actions={actions} outlineOpen={outlineOpen} />
         </div>
         <button
           type="button"
@@ -214,6 +241,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       )}
 
       <div className="editor-workspace">
+        {outlineOpen && !historyOpen && <OutlinePanel editor={editor} onClose={() => setOutlineOpen(false)} />}
+        {find && !historyOpen && (
+          <FindBar editor={editor} showReplace={find.replace} focusRequest={find.request} onClose={() => setFind(null)} />
+        )}
         <div className="editor-scroll">
           <div className="page" style={{ zoom }} hidden={preview !== null}>
             <EditorContent editor={editor} />
@@ -246,6 +277,16 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           event.target.value = "";
         }}
       />
+
+      {wordCountOpen && (
+        <WordCountDialog
+          editor={editor}
+          onClose={() => {
+            setWordCountOpen(false);
+            editor.commands.focus();
+          }}
+        />
+      )}
 
       {linkDialog && (
         <PromptDialog

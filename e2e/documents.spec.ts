@@ -1,22 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { expect, test, type Page } from "@playwright/test";
-
-const mod = process.platform === "darwin" ? "Meta" : "Control";
-
-async function createDocument(page: Page): Promise<void> {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Blank document" }).click();
-  await expect(page).toHaveURL(/\/d\/[\w-]+$/);
-  await expect(page.getByLabel("Document content")).toBeVisible();
-}
-
-function editor(page: Page) {
-  return page.getByLabel("Document content");
-}
-
-async function waitUntilSaved(page: Page): Promise<void> {
-  await expect(page.getByRole("status")).toHaveAttribute("title", "Saved");
-}
+import { expect, test } from "@playwright/test";
+import { createDocument, editor, mod, waitUntilSaved } from "./helpers.ts";
 
 test("typing is saved and survives a reload", async ({ page }) => {
   await createDocument(page);

@@ -27,6 +27,8 @@ type Block = Paragraph | Table;
 type ListContext = { kind: "bullet" | "ordered"; level: number; instance: number };
 
 const MAX_IMAGE_WIDTH_PX = 600;
+/** Half an inch, matching the editor's indent step. */
+const TWIPS_PER_INDENT = 720;
 const ORDERED_LIST = "ordered-list";
 
 const alignments = {
@@ -76,6 +78,8 @@ class DocxConverter {
   private async block(node: Node, list: ListContext | undefined, quoted: boolean): Promise<Block[]> {
     const base: IParagraphOptions = {
       alignment: alignments[node.attrs.textAlign as keyof typeof alignments],
+      ...(node.attrs.lineSpacing && { spacing: { line: Math.round(240 * node.attrs.lineSpacing) } }),
+      ...(node.attrs.indent && { indent: { left: TWIPS_PER_INDENT * node.attrs.indent } }),
       ...(quoted && { indent: { left: 720 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: "CCCCCC", space: 12 } } }),
       ...listOptions(list),
     };
@@ -179,6 +183,8 @@ function textRun(text: string, marks: readonly Mark[]): TextRun {
   const has = (name: string) => marks.some((mark) => mark.type.name === name);
   const attr = (name: string, key: string) => marks.find((mark) => mark.type.name === name)?.attrs[key];
   const color = hexColor(attr("textStyle", "color"));
+  const fontFamily = attr("textStyle", "fontFamily") as string | undefined;
+  const fontSize = halfPoints(attr("textStyle", "fontSize"));
   const highlight = hexColor(attr("highlight", "color") ?? (has("highlight") ? "#FFFF00" : undefined));
   return new TextRun({
     text,
@@ -186,7 +192,8 @@ function textRun(text: string, marks: readonly Mark[]): TextRun {
     italics: has("italic"),
     strike: has("strike"),
     underline: has("underline") || has("link") ? {} : undefined,
-    font: has("code") ? "Courier New" : undefined,
+    font: has("code") ? "Courier New" : fontFamily?.split(",")[0]?.replace(/["']/g, "").trim(),
+    size: fontSize,
     color: has("link") ? "1155CC" : color,
     shading: highlight ? { type: ShadingType.CLEAR, fill: highlight } : undefined,
   });
@@ -207,6 +214,14 @@ function children(node: Node): Node[] {
   const result: Node[] = [];
   node.forEach((child) => result.push(child));
   return result;
+}
+
+/** Converts "11pt" or "16px" to Word's half-point font size. */
+export function halfPoints(value: unknown): number | undefined {
+  const match = typeof value === "string" ? value.trim().match(/^(\d+(?:\.\d+)?)(pt|px)$/) : null;
+  if (!match) return undefined;
+  const points = match[2] === "px" ? Number(match[1]) * 0.75 : Number(match[1]);
+  return Math.round(points * 2);
 }
 
 /** Accepts `#rgb`, `#rrggbb` and `rgb(r, g, b)`; returns `RRGGBB` or undefined. */

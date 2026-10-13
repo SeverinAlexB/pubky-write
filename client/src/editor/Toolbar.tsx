@@ -10,10 +10,15 @@ import {
   Columns3,
   Highlighter,
   ImagePlus,
+  IndentDecrease,
+  IndentIncrease,
   Italic,
   Link2,
   List,
   ListOrdered,
+  ListChevronsUpDown,
+  Minus,
+  Plus,
   Printer,
   Redo2,
   RemoveFormatting,
@@ -24,8 +29,12 @@ import {
   Underline,
   Undo2,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { DEFAULT_LINE_SPACING, lineSpacings } from "@docs/shared";
+import { useEffect, useState, type ReactNode } from "react";
+import { Menu } from "../components/Menu.tsx";
 import { ColorPicker } from "./ColorPicker.tsx";
+import { changeFontSize, currentFontSize, setFontSize } from "./extensions.ts";
+import { DEFAULT_FONT, fontFamilies } from "./fonts.ts";
 
 export const zoomLevels = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2];
 
@@ -76,6 +85,9 @@ export function Toolbar({ editor, zoom, onZoomChange, onLink, onImage, onPrint }
       bulletList: editor.isActive("bulletList"),
       orderedList: editor.isActive("orderedList"),
       inTable: editor.isActive("table"),
+      fontFamily: (editor.getAttributes("textStyle").fontFamily as string | undefined) ?? DEFAULT_FONT,
+      fontSize: currentFontSize(editor),
+      lineSpacing: (editor.getAttributes(editor.isActive("heading") ? "heading" : "paragraph").lineSpacing as number | null) ?? DEFAULT_LINE_SPACING,
     }),
   });
 
@@ -117,6 +129,31 @@ export function Toolbar({ editor, zoom, onZoomChange, onLink, onImage, onPrint }
           </option>
         ))}
       </select>
+      <Divider />
+      <select
+        className="tool-select font-select"
+        aria-label="Font"
+        value={state.fontFamily}
+        onChange={(event) =>
+          event.target.value === DEFAULT_FONT
+            ? run().unsetFontFamily().run()
+            : run().setFontFamily(event.target.value).run()
+        }
+      >
+        {[...new Set([...fontFamilies, state.fontFamily])].map((font) => (
+          <option key={font} value={font} style={{ fontFamily: font }}>
+            {font}
+          </option>
+        ))}
+      </select>
+      <Divider />
+      <ToolButton label={`Decrease font size (${modKey}Shift+,)`} onClick={() => changeFontSize(editor, -1)}>
+        <Minus size={16} />
+      </ToolButton>
+      <FontSizeInput size={state.fontSize} onChange={(size) => setFontSize(editor, size)} />
+      <ToolButton label={`Increase font size (${modKey}Shift+.)`} onClick={() => changeFontSize(editor, 1)}>
+        <Plus size={16} />
+      </ToolButton>
       <Divider />
       <ToolButton label={`Bold (${modKey}B)`} active={state.bold} onClick={() => run().toggleBold().run()}>
         <Bold size={18} />
@@ -171,12 +208,29 @@ export function Toolbar({ editor, zoom, onZoomChange, onLink, onImage, onPrint }
       <ToolButton label={`Justify (${modKey}Shift+J)`} active={state.align === "justify"} onClick={() => run().setTextAlign("justify").run()}>
         <AlignJustify size={18} />
       </ToolButton>
+      <Menu
+        label={<ListChevronsUpDown size={18} />}
+        buttonClassName="tool-button"
+        ariaLabel="Line & paragraph spacing"
+        title="Line & paragraph spacing"
+        entries={lineSpacings.map((spacing) => ({
+          label: lineSpacingLabel(spacing),
+          checked: state.lineSpacing === spacing,
+          onSelect: () => run().setLineSpacing(spacing).run(),
+        }))}
+      />
       <Divider />
       <ToolButton label={`Bulleted list (${modKey}Shift+8)`} active={state.bulletList} onClick={() => run().toggleBulletList().run()}>
         <List size={18} />
       </ToolButton>
       <ToolButton label={`Numbered list (${modKey}Shift+7)`} active={state.orderedList} onClick={() => run().toggleOrderedList().run()}>
         <ListOrdered size={18} />
+      </ToolButton>
+      <ToolButton label="Decrease indent (Shift+Tab)" onClick={() => run().changeIndent(-1).run()}>
+        <IndentDecrease size={18} />
+      </ToolButton>
+      <ToolButton label="Increase indent (Tab)" onClick={() => run().changeIndent(1).run()}>
+        <IndentIncrease size={18} />
       </ToolButton>
       <ToolButton label={`Clear formatting (${modKey}\\)`} onClick={() => run().unsetAllMarks().setTextAlign("left").run()}>
         <RemoveFormatting size={18} />
@@ -231,6 +285,43 @@ function ToolButton({
     >
       {children}
     </button>
+  );
+}
+
+export function lineSpacingLabel(spacing: number): string {
+  if (spacing === 1) return "Single";
+  if (spacing === 2) return "Double";
+  return String(spacing);
+}
+
+/** Shows the size at the cursor; typing a number and pressing Enter applies it. */
+function FontSizeInput({ size, onChange }: { size: number; onChange: (size: number) => void }) {
+  const [draft, setDraft] = useState(String(size));
+  useEffect(() => setDraft(String(size)), [size]);
+
+  const commit = () => {
+    const value = Number(draft);
+    if (Number.isFinite(value) && value > 0 && value !== size) onChange(value);
+    else setDraft(String(size));
+  };
+
+  return (
+    <input
+      className="font-size-input"
+      aria-label="Font size"
+      inputMode="decimal"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onFocus={(event) => event.target.select()}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+        }
+        if (event.key === "Escape") setDraft(String(size));
+      }}
+    />
   );
 }
 
