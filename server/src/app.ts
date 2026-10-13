@@ -1,0 +1,155 @@
+import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
+import type { DocumentSort, SubmitStepsRequest } from "@docs/shared";
+import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import type { Database } from "./database.ts";
+import {
+  applySteps,
+  createDocument,
+  deleteDocument,
+  getDocumentContent,
+  InvalidStepsError,
+  listDocuments,
+  openDocument,
+  renameDocument,
+  restoreRevision,
+} from "./documents.ts";
+import { toDocx } from "./export/docx.ts";
+import { toMarkdown } from "./export/markdown.ts";
+import { getRevision, listRevisions } from "./revisions.ts";
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const imageTypes: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+};
+const contentTypes = Object.fromEntries(Object.entries(imageTypes).map(([type, ext]) => [ext, type]));
+const sorts: DocumentSort[] = ["lastOpened", "lastModified", "title"];
+
+export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string }): Hono {
+  mkdirSync(uploadsDir, { recursive: true });
+  const app = new Hono();
+
+  app.onError((error, c) => {
+    if (error instanceof HTTPException) return error.getResponse();
+    if (error instanceof InvalidStepsError) return c.json({ error: error.message }, 400);
+    console.error(error);
+    return c.json({ error: "Internal server error" }, 500);
+  });
+
+  app.get("/api/documents", (c) => {
+    const sort = c.req.query("sort") as DocumentSort | undefined;
+    return c.json(listDocuments(db, { query: c.req.query("q"), sort: sort && sorts.includes(sort) ? sort : undefined }));
+  });
+
+  app.post("/api/documents", async (c) => {
+    const body = await c.req.json<{ title?: string }>().catch(() => ({}) as { title?: string });
+    return c.json(createDocument(db, body.title), 201);
+  });
+
+  app.get("/api/documents/:id", (c) => c.json(found(openDocument(db, c.req.param("id")))));
+
+  app.patch("/api/documents/:id", async (c) => {
+    const { title } = await c.req.json<{ title: string }>();
+    if (typeof title !== "string") throw new HTTPException(400, { message: "title is required" });
+    return c.json(found(renameDocument(db, c.req.param("id"), title)));
+  });
+
+  app.delete("/api/documents/:id", (c) => {
+    found(deleteDocument(db, c.req.param("id")) || null);
+    return c.body(null, 204);
+  });
+
+  app.post("/api/documents/:id/steps", async (c) => {
+    const body = await c.req.json<SubmitStepsRequest>();
+    if (typeof body.clientId !== "string" || !Number.isInteger(body.version) || !Array.isArray(body.steps)) {
+      throw new HTTPException(400, { message: "clientId, version and steps are required" });
+    }
+    const result = found(applySteps(db, c.req.param("id"), body));
+    if (result.kind === "conflict") {
+      const { kind: _kind, ...conflict } = result;
+      return c.json(conflict, 409);
+    }
+    return c.json({ version: result.version });
+  });
+
+  app.get("/api/documents/:id/revisions", (c) => c.json(listRevisions(db, c.req.param("id"))));
+
+  app.get("/api/documents/:id/revisions/:revisionId", (c) =>
+    c.json(found(getRevision(db, c.req.param("id"), Number(c.req.param("revisionId"))))),
+  );
+
+  app.post("/api/documents/:id/revisions/:revisionId/restore", (c) =>
+    c.json(found(restoreRevision(db, c.req.param("id"), Number(c.req.param("revisionId"))))),
+  );
+
+  app.get("/api/documents/:id/export/:format", async (c) => {
+    const { title, doc } = found(getDocumentContent(db, c.req.param("id")));
+    const format = c.req.param("format");
+    if (format === "md") {
+      return download(toMarkdown(doc), `${title}.md`, "text/markdown; charset=utf-8");
+    }
+    if (format === "docx") {
+      const buffer = await toDocx(doc, title, (src) => readUpload(uploadsDir, src));
+      return download(
+        new Uint8Array(buffer),
+        `${title}.docx`,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      );
+    }
+    throw new HTTPException(404, { message: `Unknown export format: ${format}` });
+  });
+
+  app.post("/api/uploads", async (c) => {
+    const form = await c.req.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) throw new HTTPException(400, { message: "file is required" });
+    const extension = imageTypes[file.type];
+    if (!extension) throw new HTTPException(415, { message: "Only PNG, JPEG, GIF and WebP images are supported" });
+    if (file.size > MAX_UPLOAD_BYTES) throw new HTTPException(413, { message: "Images can be at most 10 MB" });
+
+    const name = `${randomUUID()}${extension}`;
+    await writeFile(join(uploadsDir, name), new Uint8Array(await file.arrayBuffer()));
+    return c.json({ url: `/uploads/${name}` }, 201);
+  });
+
+  app.get("/uploads/:name", async (c) => {
+    const name = c.req.param("name");
+    const data = await readUpload(uploadsDir, `/uploads/${name}`);
+    if (!data) throw new HTTPException(404, { message: "Not found" });
+    return c.body(new Uint8Array(data), 200, {
+      "Content-Type": contentTypes[extname(name)] ?? "application/octet-stream",
+      "Cache-Control": "public, max-age=31536000, immutable",
+    });
+  });
+
+  return app;
+}
+
+function found<T>(value: T | null | undefined): T {
+  if (value === null || value === undefined) throw new HTTPException(404, { message: "Not found" });
+  return value;
+}
+
+/** Reads an uploaded image by its `/uploads/<name>` URL; other URLs are not read. */
+async function readUpload(uploadsDir: string, src: string): Promise<Buffer | null> {
+  if (!src.startsWith("/uploads/")) return null;
+  const name = basename(src);
+  if (name !== src.slice("/uploads/".length)) return null;
+  return readFile(join(uploadsDir, name)).catch(() => null);
+}
+
+function download(body: string | Uint8Array<ArrayBuffer>, filename: string, contentType: string): Response {
+  const safeName = filename.replace(/[\\/:*?"<>|\r\n]+/g, "_");
+  return new Response(body, {
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}`,
+    },
+  });
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@docs/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "NODE_ENV=production tsx src/index.ts"
+  },
+  "dependencies": {
+    "@docs/shared": "*",
+    "@hono/node-server": "^2.1.5",
+    "@tiptap/core": "^3.32.0",
+    "@tiptap/pm": "^3.32.0",
+    "docx": "^9.10.0",
+    "hono": "^4.13.13",
+    "image-size": "^2.0.4",
+    "prosemirror-markdown": "^1.13.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.23.15"
+  }
+}
