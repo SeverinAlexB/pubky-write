@@ -17,6 +17,7 @@ import {
   List,
   ListOrdered,
   ListChevronsUpDown,
+  MessageSquarePlus,
   Minus,
   Plus,
   Printer,
@@ -62,10 +63,11 @@ type ToolbarProps = {
   onZoomChange: (zoom: number) => void;
   onLink: () => void;
   onImage: () => void;
+  onComment: () => void;
   onPrint: () => void;
 };
 
-export function Toolbar({ editor, zoom, onZoomChange, onLink, onImage, onPrint }: ToolbarProps) {
+export function Toolbar({ editor, zoom, onZoomChange, onLink, onImage, onComment, onPrint }: ToolbarProps) {
   const state = useEditorState({
     editor,
     selector: ({ editor }) => ({
@@ -85,6 +87,7 @@ export function Toolbar({ editor, zoom, onZoomChange, onLink, onImage, onPrint }
       bulletList: editor.isActive("bulletList"),
       orderedList: editor.isActive("orderedList"),
       inTable: editor.isActive("table"),
+      hasSelection: !editor.state.selection.empty,
       fontFamily: (editor.getAttributes("textStyle").fontFamily as string | undefined) ?? DEFAULT_FONT,
       fontSize: currentFontSize(editor),
       lineSpacing: (editor.getAttributes(editor.isActive("heading") ? "heading" : "paragraph").lineSpacing as number | null) ?? DEFAULT_LINE_SPACING,
@@ -184,6 +187,9 @@ export function Toolbar({ editor, zoom, onZoomChange, onLink, onImage, onPrint }
       <Divider />
       <ToolButton label={`Insert link (${modKey}K)`} active={state.link} onClick={onLink}>
         <Link2 size={18} />
+      </ToolButton>
+      <ToolButton label={`Add comment (${modKey}Alt+M)`} disabled={!state.hasSelection} onClick={onComment}>
+        <MessageSquarePlus size={18} />
       </ToolButton>
       <ToolButton label="Insert image" onClick={onImage}>
         <ImagePlus size={18} />

@@ -7,6 +7,7 @@ import {
   History,
   ImagePlus,
   Link2,
+  MessageSquarePlus,
   Minus,
   PanelLeft,
   Pencil,
@@ -34,6 +35,7 @@ export type MenuActions = {
   find: (withReplace: boolean) => void;
   wordCount: () => void;
   toggleOutline: () => void;
+  addComment: () => void;
 };
 
 /** The File / Edit / Insert / Format menus under the document title. */
@@ -87,6 +89,13 @@ export function MenuBar({ editor, actions, outlineOpen }: { editor: Editor; acti
           },
           { label: "Link", icon: <Link2 size={16} />, shortcut: `${modKey}K`, onSelect: actions.insertLink },
           { label: "Horizontal line", icon: <Minus size={16} />, onSelect: () => run().setHorizontalRule().run() },
+          "separator",
+          {
+            label: "Comment",
+            icon: <MessageSquarePlus size={16} />,
+            shortcut: `${modKey}Alt+M`,
+            onSelect: actions.addComment,
+          },
         ]}
       />
       <Menu

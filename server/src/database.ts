@@ -40,6 +40,27 @@ export function openDatabase(path: string): Database {
       restored_from INTEGER
     );
     CREATE INDEX IF NOT EXISTS revisions_by_document ON revisions (document_id, ended_at);
+
+    -- A comment thread anchored to a range of the document. The anchor moves with every
+    -- accepted step; when its text is deleted it collapses (anchor_from = anchor_to).
+    CREATE TABLE IF NOT EXISTS comments (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id TEXT    NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      anchor_from INTEGER NOT NULL,
+      anchor_to   INTEGER NOT NULL,
+      quote       TEXT    NOT NULL, -- the commented text when the thread was started
+      resolved    INTEGER NOT NULL DEFAULT 0,
+      created_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS comments_by_document ON comments (document_id);
+
+    -- The first message of a thread is the comment itself; later ones are replies.
+    CREATE TABLE IF NOT EXISTS comment_messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+      body       TEXT    NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `);
   return db;
 }

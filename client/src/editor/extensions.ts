@@ -3,6 +3,7 @@ import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import { UndoRedo } from "@tiptap/extensions";
 import { collab } from "prosemirror-collab";
 import { clampFontSize, defaultFontSizes, parseFontSize, stepFontSize } from "./fonts.ts";
+import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
 import { Search } from "./search.ts";
 
 type EditorExtensionOptions = {
@@ -10,14 +11,25 @@ type EditorExtensionOptions = {
   version: number;
   clientId: string;
   onLinkShortcut: () => void;
+  onCommentShortcut: () => void;
+  comments: CommentAnchor[];
+  onCommentClick: (id: number) => void;
 };
 
 /** The shared document schema plus the editor-only behaviour: undo, step tracking, search and shortcuts. */
-export function editorExtensions({ version, clientId, onLinkShortcut }: EditorExtensionOptions): AnyExtension[] {
+export function editorExtensions({
+  version,
+  clientId,
+  onLinkShortcut,
+  onCommentShortcut,
+  comments,
+  onCommentClick,
+}: EditorExtensionOptions): AnyExtension[] {
   return [
     ...documentExtensions,
     UndoRedo,
     Search,
+    CommentAnchors.configure({ initial: comments, onActivate: onCommentClick }),
     Extension.create({
       name: "collab",
       addProseMirrorPlugins: () => [collab({ version, clientID: clientId })],
@@ -28,6 +40,10 @@ export function editorExtensions({ version, clientId, onLinkShortcut }: EditorEx
         return {
           "Mod-k": () => {
             onLinkShortcut();
+            return true;
+          },
+          "Mod-Alt-m": () => {
+            onCommentShortcut();
             return true;
           },
           "Mod-\\": () => this.editor.chain().unsetAllMarks().setTextAlign("left").run(),

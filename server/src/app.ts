@@ -2,10 +2,19 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import type { DocumentSort, SubmitStepsRequest } from "@docs/shared";
+import type { CreateCommentRequest, DocumentSort, SubmitStepsRequest } from "@docs/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { Database } from "./database.ts";
+import {
+  addReply,
+  CommentVersionConflictError,
+  createComment,
+  deleteComment,
+  getComment,
+  InvalidCommentError,
+  setResolved,
+} from "./comments.ts";
+import { inTransaction, type Database } from "./database.ts";
 import {
   applySteps,
   createDocument,
@@ -37,7 +46,10 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
 
   app.onError((error, c) => {
     if (error instanceof HTTPException) return error.getResponse();
-    if (error instanceof InvalidStepsError) return c.json({ error: error.message }, 400);
+    if (error instanceof InvalidStepsError || error instanceof InvalidCommentError) {
+      return c.json({ error: error.message }, 400);
+    }
+    if (error instanceof CommentVersionConflictError) return c.json({ error: error.message }, 409);
     console.error(error);
     return c.json({ error: "Internal server error" }, 500);
   });
@@ -77,6 +89,36 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
     }
     return c.json({ version: result.version });
   });
+
+  app.post("/api/documents/:id/comments", async (c) => {
+    const id = c.req.param("id");
+    const body = await c.req.json<CreateCommentRequest>();
+    const thread = inTransaction(db, () => {
+      const current = found(getDocumentContent(db, id));
+      return createComment(db, id, current, body);
+    });
+    return c.json(thread, 201);
+  });
+
+  app.post("/api/documents/:id/comments/:commentId/replies", async (c) => {
+    const { body } = await c.req.json<{ body: string }>();
+    return c.json(found(addReply(db, c.req.param("id"), Number(c.req.param("commentId")), body)), 201);
+  });
+
+  app.patch("/api/documents/:id/comments/:commentId", async (c) => {
+    const { resolved } = await c.req.json<{ resolved: boolean }>();
+    if (typeof resolved !== "boolean") throw new HTTPException(400, { message: "resolved must be true or false" });
+    return c.json(found(setResolved(db, c.req.param("id"), Number(c.req.param("commentId")), resolved)));
+  });
+
+  app.delete("/api/documents/:id/comments/:commentId", (c) => {
+    found(deleteComment(db, c.req.param("id"), Number(c.req.param("commentId"))) || null);
+    return c.body(null, 204);
+  });
+
+  app.get("/api/documents/:id/comments/:commentId", (c) =>
+    c.json(found(getComment(db, c.req.param("id"), Number(c.req.param("commentId"))))),
+  );
 
   app.get("/api/documents/:id/revisions", (c) => c.json(listRevisions(db, c.req.param("id"))));
 

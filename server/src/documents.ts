@@ -10,7 +10,8 @@ import {
   type StepsConflictResponse,
 } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
-import { Step, Transform } from "@tiptap/pm/transform";
+import { Mapping, Step, Transform } from "@tiptap/pm/transform";
+import { listComments, mapComments } from "./comments.ts";
 import { inTransaction, type Database } from "./database.ts";
 import { getRevision, recordRevision } from "./revisions.ts";
 
@@ -68,7 +69,12 @@ export function openDocument(db: Database, id: string, now = Date.now()): Opened
   const row = findRow(db, id);
   if (!row) return null;
   db.prepare("UPDATE documents SET last_opened_at = ? WHERE id = ?").run(now, id);
-  return { ...toSummary({ ...row, last_opened_at: now }), version: row.version, content: JSON.parse(row.content) };
+  return {
+    ...toSummary({ ...row, last_opened_at: now }),
+    version: row.version,
+    content: JSON.parse(row.content),
+    comments: listComments(db, id),
+  };
 }
 
 export function renameDocument(db: Database, id: string, title: string, now = Date.now()): DocumentSummary | null {
@@ -81,9 +87,9 @@ export function deleteDocument(db: Database, id: string): boolean {
   return db.prepare("DELETE FROM documents WHERE id = ?").run(id).changes > 0;
 }
 
-export function getDocumentContent(db: Database, id: string): { title: string; doc: Node } | null {
+export function getDocumentContent(db: Database, id: string): { title: string; version: number; doc: Node } | null {
   const row = findRow(db, id);
-  return row ? { title: row.title, doc: Node.fromJSON(documentSchema, JSON.parse(row.content)) } : null;
+  return row ? { title: row.title, version: row.version, doc: Node.fromJSON(documentSchema, JSON.parse(row.content)) } : null;
 }
 
 /**
@@ -110,12 +116,15 @@ export function applySteps(
     let doc = Node.fromJSON(documentSchema, JSON.parse(row.content));
     const insertStep = db.prepare("INSERT INTO steps (document_id, version, step, client_id) VALUES (?, ?, ?, ?)");
     let version = row.version;
+    const mapping = new Mapping();
     for (const json of request.steps) {
       const step = parseStep(json);
       doc = applyStep(step, doc);
+      mapping.appendMap(step.getMap());
       version += 1;
       insertStep.run(id, version, JSON.stringify(step.toJSON()), request.clientId);
     }
+    mapComments(db, id, mapping);
 
     const content = JSON.stringify(doc.toJSON());
     db.prepare("UPDATE documents SET content = ?, plain_text = ?, version = ?, updated_at = ? WHERE id = ?").run(
@@ -130,7 +139,10 @@ export function applySteps(
   });
 }
 
-/** Replaces the document's content with a revision's, as a regular step so the step log stays complete. */
+/**
+ * Replaces the document's content with a revision's, as a regular step so the step log stays complete.
+ * Only the range that differs is replaced, so comments on unchanged text keep their anchors.
+ */
 export function restoreRevision(db: Database, id: string, revisionId: number, now = Date.now()): { version: number } | null {
   const current = findRow(db, id);
   const revision = getRevision(db, id, revisionId);
@@ -138,7 +150,7 @@ export function restoreRevision(db: Database, id: string, revisionId: number, no
 
   const doc = Node.fromJSON(documentSchema, JSON.parse(current.content));
   const target = Node.fromJSON(documentSchema, revision.content);
-  const transform = new Transform(doc).replaceWith(0, doc.content.size, target.content);
+  const transform = replaceDifference(doc, target);
   const result = applySteps(
     db,
     id,
@@ -147,6 +159,21 @@ export function restoreRevision(db: Database, id: string, revisionId: number, no
     revisionId,
   );
   return result?.kind === "applied" ? { version: result.version } : null;
+}
+
+/** A transform that turns `doc` into `target` by replacing only the range where they differ. */
+export function replaceDifference(doc: Node, target: Node): Transform {
+  const transform = new Transform(doc);
+  const start = doc.content.findDiffStart(target.content);
+  if (start === null) return transform;
+  let { a: endA, b: endB } = doc.content.findDiffEnd(target.content)!;
+  // When the differing ranges overlap (for example a repeated character), move both ends past the start.
+  const overlap = start - Math.min(endA, endB);
+  if (overlap > 0) {
+    endA += overlap;
+    endB += overlap;
+  }
+  return transform.replace(start, endA, target.slice(start, endB));
 }
 
 function stepsSince(db: Database, id: string, version: number): { steps: unknown[]; clientIds: string[] } {

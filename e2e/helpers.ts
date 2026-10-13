@@ -1,6 +1,9 @@
 import { expect, type Page } from "@playwright/test";
 
 export const mod = process.platform === "darwin" ? "Meta" : "Control";
+/** Start and end of the line: Home/End scroll the page in Chrome on macOS. */
+export const lineStart = process.platform === "darwin" ? "Meta+ArrowLeft" : "Home";
+export const lineEnd = process.platform === "darwin" ? "Meta+ArrowRight" : "End";
 
 export async function createDocument(page: Page): Promise<void> {
   await page.goto("/");

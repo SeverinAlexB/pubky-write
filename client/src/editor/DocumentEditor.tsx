@@ -1,10 +1,13 @@
-import type { OpenedDocument, Revision, RevisionWithContent } from "@docs/shared";
+import type { CommentThread, OpenedDocument, Revision, RevisionWithContent } from "@docs/shared";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
-import { CloudAlert, CloudCheck, CloudOff, History, LoaderCircle } from "lucide-react";
+import { CloudAlert, CloudCheck, CloudOff, History, LoaderCircle, MessageSquareText } from "lucide-react";
+import { getVersion } from "prosemirror-collab";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { api, stepsTransport } from "../api.ts";
+import { api, ApiError, stepsTransport } from "../api.ts";
 import { PromptDialog } from "../components/PromptDialog.tsx";
+import { getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
+import { CommentsPanel } from "./CommentsPanel.tsx";
 import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
 import { HistoryPanel, RevisionPreview } from "./HistoryPanel.tsx";
@@ -33,11 +36,19 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [find, setFind] = useState<{ replace: boolean; request: number } | null>(null);
   const [wordCountOpen, setWordCountOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(() => localStorage.getItem(OUTLINE_SETTING) !== "false");
+  const [threads, setThreads] = useState<CommentThread[]>(doc.comments);
+  const [commentsOpen, setCommentsOpen] = useState(() => doc.comments.some((thread) => !thread.resolved));
   const sync = useRef<DocumentSync | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   // Editor callbacks are created once, so they reach the latest handlers through this ref.
-  const handlers = useRef({ openLinkDialog: () => {}, insertImages: (_files: File[], _at?: number) => {} });
+  const handlers = useRef({
+    openLinkDialog: () => {},
+    insertImages: (_files: File[], _at?: number) => {},
+    startComment: () => {},
+    selectComment: (_id: number) => {},
+    openHistory: () => {},
+  });
 
   const extensions = useMemo(
     () =>
@@ -45,8 +56,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         version: doc.version,
         clientId: crypto.randomUUID(),
         onLinkShortcut: () => handlers.current.openLinkDialog(),
+        onCommentShortcut: () => handlers.current.startComment(),
+        comments: doc.comments.map(({ id, from, to, resolved }) => ({ id, from, to, resolved })),
+        onCommentClick: (id) => handlers.current.selectComment(id),
       }),
-    [doc.version],
+    // The document is fixed for the life of this component; a reload remounts it.
+    [],
   );
 
   const editor = useEditor({
@@ -116,7 +131,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       if (!(event.metaKey || event.ctrlKey)) return;
       const shortcut = `${event.altKey ? "Alt+" : ""}${event.shiftKey ? "Shift+" : ""}${event.code}`;
       const action = {
-        "Alt+Shift+KeyH": () => setHistoryOpen(true),
+        "Alt+Shift+KeyH": () => handlers.current.openHistory(),
         KeyF: () => openFind(false),
         "Shift+KeyH": () => openFind(true),
         "Shift+KeyC": () => setWordCountOpen(true),
@@ -135,6 +150,80 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   handlers.current.openLinkDialog = () => setLinkDialog({ href: editor.getAttributes("link").href ?? "" });
   handlers.current.insertImages = (files, at) => void insertImages(editor, files, at);
+  handlers.current.startComment = startComment;
+  handlers.current.openHistory = openHistory;
+  handlers.current.selectComment = selectComment;
+
+  function startComment() {
+    const { from, to, empty } = editor.state.selection;
+    if (empty || historyOpen) return;
+    editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: { from, to } }));
+    setCommentsOpen(true);
+  }
+
+  function cancelComment() {
+    editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: null }));
+    editor.commands.focus();
+  }
+
+  /** Saves pending edits first, so the anchor's positions match the server's version of the document. */
+  async function createComment(body: string) {
+    for (let attempt = 0; ; attempt++) {
+      await sync.current?.flushNow();
+      const draft = getCommentAnchors(editor.state).draft;
+      if (!draft || draft.from === draft.to) throw new Error("The text you selected was deleted");
+      if (sync.current?.hasUnsavedChanges) throw new Error("Couldn't save your latest changes. Try again.");
+      try {
+        const thread = await api.createComment(doc.id, { version: getVersion(editor.state), ...draft, body });
+        setThreads((current) => [...current, thread]);
+        // One update per transaction: each update replaces the transaction's previous one.
+        const anchor = getCommentAnchors(editor.state).draft ?? draft;
+        editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: null }));
+        editor.view.dispatch(
+          updateCommentAnchors(editor.state.tr, { type: "upsert", anchor: { id: thread.id, ...anchor, resolved: false } }),
+        );
+        editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: thread.id }));
+        return;
+      } catch (error) {
+        // Another save landed in between; save again and retry once.
+        if (!(error instanceof ApiError && error.status === 409) || attempt > 0) throw error;
+      }
+    }
+  }
+
+  function selectComment(id: number) {
+    setCommentsOpen(true);
+    editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id }));
+    const anchor = getCommentAnchors(editor.state).anchors.find((candidate) => candidate.id === id);
+    if (!anchor || anchor.from === anchor.to) return;
+    const { node } = editor.view.domAtPos(anchor.from);
+    const element = node instanceof HTMLElement ? node : node.parentElement;
+    element?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function replaceThread(updated: CommentThread) {
+    setThreads((current) => current.map((thread) => (thread.id === updated.id ? updated : thread)));
+  }
+
+  async function resolveComment(id: number, resolved: boolean) {
+    const updated = await api.setCommentResolved(doc.id, id, resolved);
+    replaceThread(updated);
+    const anchor = getCommentAnchors(editor.state).anchors.find((candidate) => candidate.id === id);
+    if (anchor) editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "upsert", anchor: { ...anchor, resolved } }));
+    if (resolved) editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: null }));
+  }
+
+  async function deleteComment(id: number) {
+    await api.deleteComment(doc.id, id);
+    setThreads((current) => current.filter((thread) => thread.id !== id));
+    editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "remove", id }));
+  }
+
+  function closeComments() {
+    setCommentsOpen(false);
+    if (getCommentAnchors(editor.state).draft) cancelComment();
+    editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: null }));
+  }
 
   async function commitTitle() {
     const trimmed = title.trim();
@@ -162,6 +251,11 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     await onReload();
   }
 
+  function openHistory() {
+    closeComments();
+    setHistoryOpen(true);
+  }
+
   function closeHistory() {
     setHistoryOpen(false);
     setPreview(null);
@@ -175,7 +269,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       await sync.current?.flushNow();
       window.location.assign(api.exportUrl(doc.id, format));
     },
-    openHistory: () => setHistoryOpen(true),
+    openHistory,
     print: () => window.print(),
     deleteDocument: async () => {
       if (!confirm(`Delete "${savedTitle}"? This can't be undone.`)) return;
@@ -188,7 +282,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     find: openFind,
     wordCount: () => setWordCountOpen(true),
     toggleOutline: () => setOutlineOpen((open) => !open),
+    addComment: startComment,
   };
+
+  const openCommentCount = threads.filter((thread) => !thread.resolved).length;
 
   return (
     <div className="editor-app">
@@ -220,10 +317,21 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         </div>
         <button
           type="button"
+          className={`comments-button${commentsOpen ? " is-active" : ""}`}
+          aria-label={`Show all comments (${openCommentCount} open)`}
+          title="Show all comments"
+          aria-pressed={commentsOpen}
+          onClick={() => (commentsOpen ? closeComments() : setCommentsOpen(true))}
+        >
+          <MessageSquareText size={20} />
+          {openCommentCount > 0 && <span className="comments-count">{openCommentCount}</span>}
+        </button>
+        <button
+          type="button"
           className="icon-button history-button"
           aria-label="Version history"
           title="Version history"
-          onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
+          onClick={() => (historyOpen ? closeHistory() : openHistory())}
         >
           <History size={22} />
         </button>
@@ -236,6 +344,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           onZoomChange={setZoom}
           onLink={() => handlers.current.openLinkDialog()}
           onImage={() => imageInput.current?.click()}
+          onComment={startComment}
           onPrint={() => window.print()}
         />
       )}
@@ -255,6 +364,19 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             </div>
           )}
         </div>
+        {commentsOpen && !historyOpen && (
+          <CommentsPanel
+            editor={editor}
+            threads={threads}
+            onCreate={createComment}
+            onCancelDraft={cancelComment}
+            onSelect={selectComment}
+            onReply={async (id, body) => replaceThread(await api.replyToComment(doc.id, id, body))}
+            onResolve={resolveComment}
+            onDelete={deleteComment}
+            onClose={closeComments}
+          />
+        )}
         {historyOpen && (
           <HistoryPanel
             documentId={doc.id}

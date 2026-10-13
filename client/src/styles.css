@@ -471,6 +471,33 @@ button:disabled {
   align-self: center;
 }
 
+.comments-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 20px;
+  background: none;
+  color: var(--text-muted);
+}
+
+.comments-button:hover {
+  background: var(--hover);
+}
+
+.comments-button.is-active {
+  background: var(--active);
+  color: #0b57d0;
+}
+
+.comments-count {
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -848,6 +875,187 @@ button:disabled {
   background: #ff9632;
 }
 
+/* Comments */
+
+.page-content .comment-highlight {
+  background: rgb(255 212 0 / 28%);
+  border-bottom: 2px solid rgb(255 212 0 / 70%);
+  cursor: pointer;
+}
+
+.page-content .comment-highlight.is-active {
+  background: rgb(255 212 0 / 55%);
+}
+
+.comments-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 340px;
+  border-left: 1px solid var(--border);
+  background: #fff;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 8px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.comments-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.comment-list {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+  padding: 12px 16px 24px;
+}
+
+.comments-empty {
+  font-size: 14px;
+}
+
+.comment-thread {
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(60 64 67 / 30%), 0 1px 3px 1px rgb(60 64 67 / 15%);
+  cursor: pointer;
+}
+
+.comment-thread.is-active {
+  box-shadow: 0 1px 3px rgb(60 64 67 / 30%), 0 4px 8px 3px rgb(60 64 67 / 15%);
+  cursor: default;
+}
+
+.comment-thread.is-resolved {
+  opacity: 0.75;
+}
+
+.comment-thread-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.comment-quote {
+  flex: 1;
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0 0 8px;
+  padding-left: 8px;
+  border-left: 3px solid rgb(255 212 0);
+  color: var(--text-muted);
+  font-size: 13px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.comment-quote.is-deleted {
+  border-left-color: var(--border);
+}
+
+.comment-quote.is-deleted span {
+  display: block;
+  font-style: italic;
+}
+
+.comment-actions {
+  display: flex;
+  margin: -6px -6px 0 0;
+}
+
+.comment-message + .comment-message {
+  margin-top: 12px;
+}
+
+.comment-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.comment-author {
+  font-weight: 500;
+}
+
+.comment-meta time {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.comment-body {
+  margin: 4px 0 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-resolved-note {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.comment-input {
+  margin-top: 10px;
+}
+
+.comment-thread[aria-label="New comment"] .comment-input {
+  margin-top: 0;
+}
+
+.comment-input textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  font: inherit;
+  font-size: 14px;
+  resize: none;
+}
+
+.comment-input textarea:focus {
+  border-color: var(--blue);
+  outline: 0;
+}
+
+.comment-input-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.button-primary.small {
+  padding: 4px 14px;
+  font-size: 13px;
+}
+
+.button-primary:disabled {
+  background: var(--border);
+  color: var(--text-muted);
+}
+
 /* Outline */
 
 .outline-panel {
@@ -1008,10 +1216,16 @@ button:disabled {
 }
 
 @media print {
+  .page-content .comment-highlight {
+    border: 0;
+    background: none;
+  }
+
   .editor-header,
   .toolbar,
   .history-panel,
   .outline-panel,
+  .comments-panel,
   .find-bar {
     display: none !important;
   }

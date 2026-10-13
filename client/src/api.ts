@@ -1,4 +1,6 @@
 import type {
+  CommentThread,
+  CreateCommentRequest,
   DocumentSort,
   DocumentSummary,
   OpenedDocument,
@@ -54,6 +56,20 @@ export const api = {
     return request<UploadResponse>("/api/uploads", { method: "POST", body: form });
   },
   exportUrl: (id: string, format: "md" | "docx") => `/api/documents/${id}/export/${format}`,
+  createComment: (id: string, comment: CreateCommentRequest) =>
+    request<CommentThread>(`/api/documents/${id}/comments`, { method: "POST", body: JSON.stringify(comment) }),
+  replyToComment: (id: string, commentId: number, body: string) =>
+    request<CommentThread>(`/api/documents/${id}/comments/${commentId}/replies`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+  setCommentResolved: (id: string, commentId: number, resolved: boolean) =>
+    request<CommentThread>(`/api/documents/${id}/comments/${commentId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ resolved }),
+    }),
+  deleteComment: (id: string, commentId: number) =>
+    request<void>(`/api/documents/${id}/comments/${commentId}`, { method: "DELETE" }),
 };
 
 /** Sends step batches to the server. Network failures and 5xx responses are retried by the sync. */
