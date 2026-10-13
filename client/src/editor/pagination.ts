@@ -205,10 +205,22 @@ class PaginationView {
     const current = currentSpacers(view.state);
     if (sameSpacers(rendered, current) && rendered.every((spacer, i) => spacer.height === current[i]!.height)) return;
 
+    // A redraw writes the editor's selection back to the DOM. Read a caret move the browser has
+    // just made (arrow keys, clicks) first, or the redraw would put the caret back.
+    flushPendingSelection(view);
     const tr = view.state.tr.setMeta(paginationKey, { spacers: rendered } satisfies PaginationMeta).setMeta("addToHistory", false);
     if (state.scroll && view.hasFocus()) tr.scrollIntoView();
     view.dispatch(tr);
   }
+}
+
+/**
+ * ProseMirror reads browser selection changes asynchronously; its DOM observer's flush applies
+ * any pending one now. The observer is not part of the public API, so this is a no-op if it changes.
+ */
+function flushPendingSelection(view: EditorView): void {
+  const observer = (view as unknown as { domObserver?: { flush?: () => void } }).domObserver;
+  observer?.flush?.();
 }
 
 /**
