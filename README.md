@@ -66,10 +66,22 @@ npm start          # http://localhost:3001
   "cafe" finds "café"); Replace all is one undo step.
 - **Word count** (⌘⇧C) shows pages, words and characters for the document or
   the selection, and can show a live count at the bottom left of the editor
-  area. There is also a **document outline** of all headings.
-- **Comments:** select text and add a comment (⌘⌥M), reply, resolve, reopen or
-  delete. Comments stay attached to their text while you edit; if the text is
-  deleted, the thread remains and shows the original text as deleted.
+  area.
+- **Tabs and outline:** a sidebar (the list button at the top left, or View >
+  Expand tabs and outlines sidebar) shows the document's tab with its number of
+  open comments, and an outline of the Title and Heading 1–6 paragraphs, indented
+  by level, with the heading at the cursor highlighted. Clicking a heading
+  scrolls it to the top. Whether the sidebar is open is remembered.
+- **Comments:** select text and choose Add comment on the floating pill, the
+  toolbar, Insert > Comment or ⌘⌥M. Threads are cards in a margin right of the
+  pages, level with their text and stacked 8px apart; the active card sits
+  exactly beside its text. Reply, edit or delete messages and replies, resolve,
+  copy a link that opens the document with the thread active (`?comment=<id>`),
+  and delete threads. Comments stay attached to their text while you edit; if
+  the text is deleted, the thread remains and shows the original text as
+  deleted. View > Comments > Show all comments (⌘⌥⇧A, or the header button)
+  lists all, open or resolved threads, where resolved ones can be reopened;
+  Hide comments (⌘⌥⇧J) hides the margin and highlights and is remembered.
 - **Autosave:** edits are sent about 300 ms after you stop typing. The header
   shows whether changes are saving, saved, or waiting for the connection to come
   back.
@@ -135,6 +147,16 @@ tables and other atomic blocks move to the next page whole; one taller than a
 page overflows. Printing hides the spacers and lets the browser break pages with
 the same page size and margins.
 
+## How the comment margin works
+
+The pages and the comment margin sit side by side in one centred column
+(`client/src/editor/CommentMargin.tsx`), so cards scroll with the text. After
+every editor transaction, resize or zoom change the margin reads the top of each
+anchor's line from the editor (`coordsAtPos`, which already includes page spacers
+and zoom) and the height of each card, then `commentLayout.ts` stacks the cards in
+document order: the active card stays at its line and the others move out of its
+way with an 8px gap.
+
 ## Project layout
 
 | Path      | Contents                                                       |
@@ -164,6 +186,8 @@ the same page size and margins.
 | `POST /api/documents/:id/comments/:commentId/replies` | Reply to a thread                      |
 | `PATCH /api/documents/:id/comments/:commentId`       | Resolve or reopen a thread              |
 | `DELETE /api/documents/:id/comments/:commentId`      | Delete a thread                         |
+| `PATCH /api/documents/:id/comments/:commentId/messages/:messageId` | Edit a message's text     |
+| `DELETE /api/documents/:id/comments/:commentId/messages/:messageId` | Delete a reply (not the first message) |
 | `POST /api/uploads`                                  | Upload an image (PNG, JPEG, GIF, WebP)  |
 
 ## Tests
@@ -180,6 +204,6 @@ npm run typecheck
 - Tables are not split across pages, and printed page breaks can differ
   slightly from the screen because the browser paginates the printout.
 - No headers, footers or page numbers.
-- Comments are listed in a side panel rather than aligned next to their text,
-  and they are not included in exports.
+- Comments are not included in exports. The author is always "You"; emoji
+  reactions and renaming the tab are not available yet.
 - No suggestion mode or real-time collaboration yet.

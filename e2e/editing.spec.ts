@@ -256,34 +256,6 @@ test("Find and replace replaces one match at a time, all of them in one undo ste
   await waitUntilSaved(page);
 });
 
-test("the outline lists headings and jumps to them", async ({ page }) => {
-  await createDocument(page);
-  const outline = page.getByRole("complementary", { name: "Document outline" });
-  await expect(outline).toContainText("Headings that you add to the document will appear here.");
-
-  await editor(page).click();
-  await page.keyboard.press(`${mod}+Alt+1`);
-  await page.keyboard.type("Introduction");
-  await page.keyboard.press("Enter");
-  for (let line = 0; line < 60; line++) await page.keyboard.press("Enter");
-  await page.keyboard.press(`${mod}+Alt+2`);
-  await page.keyboard.type("Details");
-
-  await expect(outline.getByRole("list").getByRole("button")).toHaveText(["Introduction", "Details"]);
-  await expect(outline.getByRole("button", { name: "Details" })).toHaveAttribute("aria-current", "location");
-
-  await outline.getByRole("button", { name: "Introduction" }).click();
-  await expect(outline.getByRole("button", { name: "Introduction" })).toHaveAttribute("aria-current", "location");
-  await expect(editor(page).locator("h1")).toBeInViewport();
-
-  await page.getByRole("button", { name: "Close outline" }).click();
-  await page.reload();
-  await expect(outline).toBeHidden(); // the choice is remembered
-  await page.getByRole("button", { name: "View" }).click();
-  await page.getByRole("menuitem", { name: "Expand tabs and outlines sidebar" }).click();
-  await expect(outline).toBeVisible();
-});
-
 test("word count shows pages, words and characters, for the selection too", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();

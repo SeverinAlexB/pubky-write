@@ -43,6 +43,9 @@ function useTrackedLayout(elements: (Element | null)[]): number {
     for (const element of elements) if (element) observer.observe(element);
     const scroller = elements.find(Boolean)?.closest(".editor-scroll");
     if (scroller) observer.observe(scroller);
+    // The comment margin moves the pages sideways without resizing them.
+    const column = scroller?.querySelector(".page-column");
+    if (column) observer.observe(column);
     scroller?.addEventListener("scroll", update, { passive: true });
     window.addEventListener("resize", update);
     return () => {

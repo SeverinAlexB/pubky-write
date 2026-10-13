@@ -1906,7 +1906,7 @@ button:disabled {
   background: #87d392;
 }
 
-/* Comments */
+/* Comments (docs/spec/06-comments.md) */
 
 .page-content .comment-highlight {
   background: #fcf2d1;
@@ -1917,216 +1917,464 @@ button:disabled {
   background: #f2bf42;
 }
 
-.comments-panel {
+/* The pages and the comment margin, centred together in the editor area. */
+/* With too little room the margin narrows first, down to 272px. */
+.page-column {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.page-column[hidden] {
+  display: none;
+}
+
+.page-column > .page-stack {
+  flex: none;
+  margin: 0;
+}
+
+.comment-margin {
+  position: relative;
+  flex: 0 1 auto;
+  width: 401px;
+  min-width: 272px;
+}
+
+.comment-card {
+  position: absolute;
+  z-index: 1;
+  left: 12px;
+  width: calc(100% - 12px);
+  padding: 12px;
+  border-radius: 12px;
+  background: #f1f4f8;
+  font-size: 14px;
+  cursor: pointer;
+  transition: top 0.15s ease;
+}
+
+.comment-card.is-active {
+  z-index: 2;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+  cursor: default;
+}
+
+.comment-author-row,
+.comment-message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.comment-author-row {
+  margin-bottom: 12px;
+}
+
+.comment-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.comment-meta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.comment-author {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.comment-meta time {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.comment-header-actions {
+  display: flex;
+  margin: -4px -6px 0 0;
+}
+
+.icon-button.comment-action {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.comment-resolve {
+  color: var(--primary);
+}
+
+.comment-menu {
+  min-width: 220px;
+}
+
+/* A reply's ⋮ shows on hover, and while its menu is open. */
+.comment-reply-actions {
+  margin-right: -6px;
+  opacity: 0;
+}
+
+.comment-message:hover .comment-reply-actions,
+.comment-reply-actions:focus-within,
+.comment-reply-actions:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+
+.comment-message.is-reply {
+  margin-top: 16px;
+}
+
+.comment-body {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-deleted {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.comment-deleted span {
+  display: block;
+  font-style: italic;
+}
+
+.comment-resolved-note {
+  margin: 8px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.comment-field {
+  margin-top: 12px;
+}
+
+.comment-author-row + .comment-field {
+  margin-top: 0;
+}
+
+.comment-field textarea {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 1px solid var(--outline);
+  border-radius: 20px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  resize: none;
+}
+
+.comment-field textarea:focus {
+  border-color: var(--primary);
+  outline: 1px solid var(--primary);
+}
+
+.comment-field-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.comment-field-actions button {
+  height: 36px;
+  padding: 0 16px;
+}
+
+.button-primary:disabled {
+  background: rgb(31 31 31 / 12%);
+  color: rgb(31 31 31 / 38%);
+  opacity: 1;
+}
+
+/* The floating pill by the end of a text selection. */
+.comment-pill {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+}
+
+.comment-pill .icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+}
+
+/* The find bar sits left of the comment margin. */
+.editor-area.has-comment-margin .find-bar {
+  right: max(28px, calc((100% - var(--column-width)) / 2 + var(--comment-margin-width) + 8px));
+}
+
+/* All comments */
+
+.all-comments-panel {
   display: flex;
   flex: none;
   flex-direction: column;
-  width: 340px;
-  border-left: 1px solid var(--border);
-  background: #fff;
+  width: 360px;
+  background: var(--surface);
 }
 
-.panel-header {
+.all-comments-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 8px 8px 20px;
-  border-bottom: 1px solid var(--border);
+  padding: 8px 8px 0 24px;
 }
 
-.panel-header h2 {
+.all-comments-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 400;
 }
 
-.comments-filter {
-  display: flex;
+.all-comments-filter {
+  padding: 4px 16px 8px;
+}
+
+.all-comments-filter-button {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 20px 0;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.comment-list {
-  display: grid;
-  flex: 1;
-  align-content: start;
-  gap: 12px;
-  overflow: auto;
-  padding: 12px 16px 24px;
-}
-
-.comments-empty {
+  gap: 4px;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: none;
   font-size: 14px;
 }
 
-.comment-thread {
+.all-comments-filter-button:hover {
+  background: var(--hover);
+}
+
+.all-comments-list {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 8px;
+  overflow: auto;
+  padding: 4px 16px 24px;
+}
+
+.all-comments-empty {
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.all-comments-card {
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #fff;
-  box-shadow: 0 1px 2px rgb(60 64 67 / 30%), 0 1px 3px 1px rgb(60 64 67 / 15%);
+  font-size: 14px;
   cursor: pointer;
 }
 
-.comment-thread.is-active {
-  box-shadow: 0 1px 3px rgb(60 64 67 / 30%), 0 4px 8px 3px rgb(60 64 67 / 15%);
-  cursor: default;
+.all-comments-card:hover {
+  box-shadow: 0 1px 2px rgb(60 64 67 / 30%), 0 1px 3px 1px rgb(60 64 67 / 15%);
 }
 
-.comment-thread.is-resolved {
-  opacity: 0.75;
+.all-comments-card.is-active {
+  outline: 2px solid var(--primary);
 }
 
-.comment-thread-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.comment-quote {
-  flex: 1;
+.all-comments-quote {
   display: -webkit-box;
   overflow: hidden;
   margin: 0 0 8px;
   padding-left: 8px;
-  border-left: 3px solid rgb(255 212 0);
-  color: var(--text-muted);
-  font-size: 13px;
+  border-left: 3px solid #f2bf42;
+  color: var(--text-secondary);
+  font-size: 14px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.comment-quote.is-deleted {
-  border-left-color: var(--border);
+.all-comments-quote.is-deleted {
+  border-left-color: var(--divider);
 }
 
-.comment-quote.is-deleted span {
-  display: block;
-  font-style: italic;
-}
-
-.comment-actions {
-  display: flex;
-  margin: -6px -6px 0 0;
-}
-
-.comment-message + .comment-message {
-  margin-top: 12px;
-}
-
-.comment-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.comment-author {
+.all-comments-replies {
+  margin: 8px 0 0;
+  color: var(--primary);
+  font-size: 12px;
   font-weight: 500;
 }
 
-.comment-meta time {
-  color: var(--text-muted);
-  font-size: 12px;
+.all-comments-reopen {
+  height: 32px;
 }
 
-.comment-body {
-  margin: 4px 0 0;
+/* A short message at the bottom left, such as "Link copied to clipboard". */
+.snackbar {
+  position: fixed;
+  z-index: 50;
+  bottom: 24px;
+  left: 24px;
+  padding: 14px 16px;
+  border-radius: 4px;
+  background: #303030;
+  color: #f2f2f2;
   font-size: 14px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  box-shadow: var(--menu-shadow);
 }
 
-.comment-resolved-note {
-  margin: 8px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-style: italic;
+/* Tabs and outline sidebar (docs/spec/07-outline.md) */
+
+.outline-toggle {
+  position: absolute;
+  z-index: 10;
+  top: 18px;
+  left: 16px;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-secondary);
 }
 
-.comment-input {
-  margin-top: 10px;
+.outline-toggle:hover {
+  background: #e9eef6;
 }
-
-.comment-thread[aria-label="New comment"] .comment-input {
-  margin-top: 0;
-}
-
-.comment-input textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  font: inherit;
-  font-size: 14px;
-  resize: none;
-}
-
-.comment-input textarea:focus {
-  border-color: var(--blue);
-  outline: 0;
-}
-
-.comment-input-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.button-primary.small {
-  padding: 4px 14px;
-  font-size: 13px;
-}
-
-.button-primary:disabled {
-  background: var(--border);
-  color: var(--text-muted);
-}
-
-/* Outline */
 
 .outline-panel {
   flex: none;
-  width: 240px;
+  width: 280px;
   overflow: auto;
-  padding: 12px 8px 12px 16px;
+  padding: 10px 16px 16px;
+  background: var(--surface);
 }
 
-.outline-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.outline-back {
+  color: var(--text-secondary);
 }
 
-.outline-header h2 {
-  margin: 0;
+.outline-heading {
+  margin: 12px 0 8px;
   font-size: 14px;
   font-weight: 500;
 }
 
-.outline-empty {
-  color: var(--text-muted);
-  font-size: 13px;
+.outline-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 4px 0 12px;
+  border-radius: 20px;
 }
 
+.outline-tab.is-current {
+  background: var(--primary-container);
+}
+
+.outline-tab .icon {
+  color: var(--primary);
+}
+
+.outline-tab-name {
+  flex: 1;
+  overflow: hidden;
+  color: #041e49;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-tab-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.icon-button.outline-tab-menu {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.outline-empty {
+  margin: 12px 0 0 12px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* The outline under the tab, with a guide line along its left. */
 .outline-list {
-  margin: 8px 0 0;
+  margin: 8px 0 0 12px;
   padding: 0;
+  border-left: 1px solid var(--divider);
   list-style: none;
+}
+
+.outline-list li {
+  position: relative;
+}
+
+.outline-list li.is-current::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: -1px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--primary);
+  content: "";
 }
 
 .outline-item {
   display: block;
   width: 100%;
+  height: 36px;
   overflow: hidden;
-  padding: 6px 8px;
+  padding: 0 8px 0 16px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 0 18px 18px 0;
   background: none;
-  font-size: 13px;
+  font-size: 14px;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2136,17 +2384,9 @@ button:disabled {
   background: var(--hover);
 }
 
-.outline-item.is-current {
-  color: var(--blue);
+.outline-list li.is-current .outline-item {
+  color: var(--primary);
   font-weight: 500;
-}
-
-.outline-level-2 {
-  padding-left: 20px;
-}
-
-.outline-level-3 {
-  padding-left: 32px;
 }
 
 /* Word count */
@@ -2300,7 +2540,11 @@ button:disabled {
   .tooltip,
   .history-panel,
   .outline-panel,
-  .comments-panel,
+  .outline-toggle,
+  .comment-margin,
+  .comment-pill,
+  .all-comments-panel,
+  .snackbar,
   .find-bar,
   .live-word-count {
     display: none !important;
@@ -2309,7 +2553,8 @@ button:disabled {
   .editor-app,
   .editor-workspace,
   .editor-area,
-  .editor-scroll {
+  .editor-scroll,
+  .page-column {
     display: block;
     height: auto;
     overflow: visible;
@@ -2318,6 +2563,7 @@ button:disabled {
     background: #fff;
   }
 
+  .page-column,
   .page-stack,
   .page-stack > div {
     width: auto;

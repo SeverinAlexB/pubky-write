@@ -10,6 +10,8 @@ import {
   CommentVersionConflictError,
   createComment,
   deleteComment,
+  deleteReply,
+  editMessage,
   getComment,
   InvalidCommentError,
   setResolved,
@@ -117,6 +119,17 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
   app.delete("/api/documents/:id/comments/:commentId", (c) => {
     found(deleteComment(db, c.req.param("id"), Number(c.req.param("commentId"))) || null);
     return c.body(null, 204);
+  });
+
+  app.patch("/api/documents/:id/comments/:commentId/messages/:messageId", async (c) => {
+    const { body } = await c.req.json<{ body: string }>();
+    const { id, commentId, messageId } = c.req.param();
+    return c.json(found(editMessage(db, id, Number(commentId), Number(messageId), body)));
+  });
+
+  app.delete("/api/documents/:id/comments/:commentId/messages/:messageId", (c) => {
+    const { id, commentId, messageId } = c.req.param();
+    return c.json(found(deleteReply(db, id, Number(commentId), Number(messageId))));
   });
 
   app.get("/api/documents/:id/comments/:commentId", (c) =>

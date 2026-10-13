@@ -15,7 +15,8 @@ type EditorExtensionOptions = {
   onLinkShortcut: () => void;
   onCommentShortcut: () => void;
   comments: CommentAnchor[];
-  onCommentClick: (id: number) => void;
+  commentsHidden: boolean;
+  onCommentClick: (id: number | null) => void;
 };
 
 /** The shared document schema plus the editor-only behaviour: undo, step tracking, search, pages and shortcuts. */
@@ -25,6 +26,7 @@ export function editorExtensions({
   onLinkShortcut,
   onCommentShortcut,
   comments,
+  commentsHidden,
   onCommentClick,
 }: EditorExtensionOptions): AnyExtension[] {
   return [
@@ -32,7 +34,7 @@ export function editorExtensions({
     UndoRedo,
     Search,
     Pagination,
-    CommentAnchors.configure({ initial: comments, onActivate: onCommentClick }),
+    CommentAnchors.configure({ initial: comments, initiallyHidden: commentsHidden, onActivate: onCommentClick }),
     Extension.create({
       name: "collab",
       addProseMirrorPlugins: () => [collab({ version, clientID: clientId })],

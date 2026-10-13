@@ -1,5 +1,6 @@
 import { documentSchema } from "@docs/shared";
 import { EditorState } from "@tiptap/pm/state";
+import type { DecorationSet } from "@tiptap/pm/view";
 import { describe, expect, it } from "vitest";
 import { commentAt, CommentAnchors, getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
 
@@ -49,5 +50,16 @@ describe("comment anchors in the editor", () => {
     expect(commentAt(anchors, 7)).toBe(1);
     expect(commentAt(anchors, 13)).toBeNull(); // resolved
     expect(commentAt(anchors, 5)).toBeNull(); // edge
+  });
+
+  it("hide every highlight while comments are hidden, and deactivate the thread", () => {
+    let state = createState();
+    state = state.apply(updateCommentAnchors(state.tr, { type: "activate", id: 1 }));
+    const plugin = state.plugins[0]!;
+    const decorations = () => (plugin.props.decorations!.call(plugin, state) as DecorationSet).find();
+    expect(decorations()).toHaveLength(1);
+    state = state.apply(updateCommentAnchors(state.tr, { type: "hide", hidden: true }));
+    expect(getCommentAnchors(state)).toMatchObject({ hidden: true, activeId: null });
+    expect(decorations()).toHaveLength(0);
   });
 });

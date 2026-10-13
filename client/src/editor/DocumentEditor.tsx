@@ -13,7 +13,7 @@ import {
 } from "@docs/shared";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { getVersion } from "prosemirror-collab";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, ApiError, stepsTransport } from "../api.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -22,7 +22,9 @@ import { shortcut } from "../components/shortcuts.ts";
 import type { EditorActions } from "./actions.ts";
 import { capitaliseSelection } from "./capitalisation.ts";
 import { getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
-import { CommentsPanel } from "./CommentsPanel.tsx";
+import { AllCommentsPanel } from "./AllCommentsPanel.tsx";
+import { COMMENT_MARGIN_WIDTH, CommentMargin, useCommentAnchors } from "./CommentMargin.tsx";
+import { CommentPill } from "./CommentPill.tsx";
 import { CustomSpacingDialog } from "./CustomSpacingDialog.tsx";
 import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
@@ -30,7 +32,7 @@ import { FindReplaceDialog } from "./FindReplaceDialog.tsx";
 import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
 import { HistoryPanel, RevisionPreview } from "./HistoryPanel.tsx";
 import { MenuBar } from "./MenuBar.tsx";
-import { OutlinePanel } from "./OutlinePanel.tsx";
+import { OutlinePanel, OutlineToggle } from "./OutlinePanel.tsx";
 import { PageSetupDialog } from "./PageSetupDialog.tsx";
 import { resetPagination, setGeometry } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
@@ -42,6 +44,7 @@ import { LiveWordCount, useLiveCountSetting, WordCountDialog } from "./WordCount
 const OUTLINE_SETTING = "docs.outlineOpen";
 const RULER_SETTING = "docs.rulerVisible";
 const PRINT_LAYOUT_SETTING = "docs.printLayout";
+const COMMENTS_HIDDEN_SETTING = "docs.commentsHidden";
 
 type DocumentEditorProps = {
   document: OpenedDocument;
@@ -68,9 +71,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [wordCountOpen, setWordCountOpen] = useState(false);
   const [liveCount, setLiveCount] = useLiveCountSetting();
   const [customSpacing, setCustomSpacing] = useState<ParagraphSpacingState | null>(null);
-  const [outlineOpen, setOutlineOpen] = useState(() => localStorage.getItem(OUTLINE_SETTING) !== "false");
+  const [outlineOpen, setOutlineOpen] = useState(() => localStorage.getItem(OUTLINE_SETTING) === "true");
   const [threads, setThreads] = useState<CommentThread[]>(doc.comments);
-  const [commentsOpen, setCommentsOpen] = useState(() => doc.comments.some((thread) => !thread.resolved));
+  const [allCommentsOpen, setAllCommentsOpen] = useState(false);
+  const [commentsHidden, setCommentsHidden] = useState(() => localStorage.getItem(COMMENTS_HIDDEN_SETTING) === "true");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [column, setColumn] = useState<HTMLDivElement | null>(null);
   const sync = useRef<DocumentSync | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -80,7 +86,9 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     insertImages: (_files: File[], _at?: number) => {},
     startComment: () => {},
     selectComment: (_id: number) => {},
+    activateComment: (_id: number | null) => {},
     openHistory: () => {},
+    toggleCommentsHidden: () => {},
   });
 
   const extensions = useMemo(
@@ -91,7 +99,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         onLinkShortcut: () => handlers.current.openLinkDialog(),
         onCommentShortcut: () => handlers.current.startComment(),
         comments: doc.comments.map(({ id, from, to, resolved }) => ({ id, from, to, resolved })),
-        onCommentClick: (id) => handlers.current.selectComment(id),
+        commentsHidden,
+        onCommentClick: (id) => handlers.current.activateComment(id),
       }),
     // The document is fixed for the life of this component; a reload remounts it.
     [],
@@ -163,6 +172,28 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   }, [rulerVisible]);
 
   useEffect(() => {
+    localStorage.setItem(COMMENTS_HIDDEN_SETTING, String(commentsHidden));
+    if (getCommentAnchors(editor.state).hidden !== commentsHidden) {
+      editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "hide", hidden: commentsHidden }));
+    }
+  }, [editor, commentsHidden]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // A link to a comment (?comment=<id>) opens the document with that thread active.
+  useEffect(() => {
+    const id = Number(new URLSearchParams(window.location.search).get("comment"));
+    if (!doc.comments.some((thread) => thread.id === id)) return;
+    // After the first layout, so the text it scrolls to is on its page.
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => handlers.current.selectComment(id)));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(PRINT_LAYOUT_SETTING, String(printLayout));
   }, [printLayout]);
 
@@ -186,6 +217,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         "Shift+KeyH": () => openFind("dialog"),
         "Shift+KeyC": () => setWordCountOpen(true),
         "Shift+KeyF": () => setMenusHidden((hidden) => !hidden),
+        "Alt+Shift+KeyA": () => setAllCommentsOpen(true),
+        "Alt+Shift+KeyJ": () => handlers.current.toggleCommentsHidden(),
         KeyO: () => navigate("/"),
       }[pressed];
       if (!action) return;
@@ -211,12 +244,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   handlers.current.startComment = startComment;
   handlers.current.openHistory = openHistory;
   handlers.current.selectComment = selectComment;
+  handlers.current.activateComment = activateComment;
+  handlers.current.toggleCommentsHidden = () => setCommentsHidden((hidden) => !hidden);
 
   function startComment() {
     const { from, to, empty } = editor.state.selection;
-    if (empty || historyOpen) return;
+    if (empty || historyOpen || !editor.state.doc.textBetween(from, to, " ", " ").trim()) return;
+    setCommentsHidden(false);
     editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: { from, to } }));
-    setCommentsOpen(true);
   }
 
   function cancelComment() {
@@ -249,14 +284,24 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     }
   }
 
+  /** Activates a thread in the margin and scrolls the document to its text (All comments, links). */
   function selectComment(id: number) {
-    setCommentsOpen(true);
-    editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id }));
+    setCommentsHidden(false);
+    if (getCommentAnchors(editor.state).hidden) {
+      editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "hide", hidden: false }));
+    }
+    activateComment(id);
     const anchor = getCommentAnchors(editor.state).anchors.find((candidate) => candidate.id === id);
-    if (!anchor || anchor.from === anchor.to) return;
+    if (!anchor) return;
     const { node } = editor.view.domAtPos(anchor.from);
     const element = node instanceof HTMLElement ? node : node.parentElement;
-    element?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    element?.scrollIntoView({ block: "center" });
+  }
+
+  /** A click on commented text, on a card or elsewhere (null). */
+  function activateComment(id: number | null) {
+    if (getCommentAnchors(editor.state).activeId === id) return;
+    editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id }));
   }
 
   function replaceThread(updated: CommentThread) {
@@ -277,10 +322,22 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "remove", id }));
   }
 
+  async function copyCommentLink(id: number) {
+    const url = new URL(`/d/${doc.id}`, window.location.origin);
+    url.searchParams.set("comment", String(id));
+    try {
+      await navigator.clipboard.writeText(url.href);
+      setNotice("Link copied to clipboard");
+    } catch {
+      setNotice(`Couldn't copy the link: ${url.href}`);
+    }
+  }
+
+  /** Leaves comments for version history: no draft, no active thread, no All comments panel. */
   function closeComments() {
-    setCommentsOpen(false);
+    setAllCommentsOpen(false);
     if (getCommentAnchors(editor.state).draft) cancelComment();
-    editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: null }));
+    activateComment(null);
   }
 
   async function commitTitle() {
@@ -371,7 +428,11 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     paste: () => void pasteFromClipboard(editor, true),
     pasteWithoutFormatting: () => void pasteFromClipboard(editor, false),
     findAndReplace: () => openFind("dialog"),
-    showAllComments: () => setCommentsOpen(true),
+    hideComments: () => {
+      if (!commentsHidden && getCommentAnchors(editor.state).draft) cancelComment();
+      setCommentsHidden((hidden) => !hidden);
+    },
+    showAllComments: () => setAllCommentsOpen(true),
     toggleOutline: () => setOutlineOpen((open) => !open),
     togglePrintLayout: () => setPrintLayout((on) => !on),
     toggleRuler: () => setRulerVisible((visible) => !visible),
@@ -399,7 +460,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   };
 
   const openCommentCount = threads.filter((thread) => !thread.resolved).length;
-  const fitZoom = useFitZoom(geometry.width);
+  const commentState = useCommentAnchors(editor);
+  const activeThread = threads.find((thread) => thread.id === commentState.activeId);
+  // The margin is there while there is something to show in it.
+  const marginShown =
+    !commentsHidden && !historyOpen && (openCommentCount > 0 || commentState.draft !== null || activeThread !== undefined);
+  const marginWidth = marginShown ? COMMENT_MARGIN_WIDTH : 0;
+  const fitZoom = useFitZoom(geometry.width, marginWidth);
   const effectiveZoom = zoom === "fit" ? fitZoom.value : zoom;
 
   // Zoom, the print layout setting and showing the page again all change the layout from outside the editor.
@@ -437,7 +504,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             <MenuBar
               editor={editor}
               actions={actions}
-              view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false }}
+              view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden }}
             />
           </div>
           <div className="header-actions">
@@ -453,11 +520,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             </button>
             <button
               type="button"
-              className={`header-action${commentsOpen ? " is-active" : ""}`}
+              className={`header-action${allCommentsOpen ? " is-active" : ""}`}
               aria-label={`Show all comments (${openCommentCount} open)`}
-              data-tooltip="Show all comments"
-              aria-pressed={commentsOpen}
-              onClick={() => (commentsOpen ? closeComments() : setCommentsOpen(true))}
+              data-tooltip={`Show all comments (${shortcut("⌘+Option+Shift+A")})`}
+              aria-pressed={allCommentsOpen}
+              onClick={() => {
+                if (historyOpen) closeHistory();
+                setAllCommentsOpen((open) => historyOpen || !open);
+              }}
             >
               <Icon name="comment" size={24} />
             </button>
@@ -483,9 +553,20 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
       <div className="editor-workspace">
         {rulerVisible && printLayout && <VerticalRuler stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />}
-        {outlineOpen && !historyOpen && <OutlinePanel editor={editor} onClose={() => setOutlineOpen(false)} />}
+        {outlineOpen && !historyOpen && (
+          <OutlinePanel editor={editor} openComments={openCommentCount} onClose={() => setOutlineOpen(false)} />
+        )}
         {/* The editor area: the find bar and the live word count float over it, left of the comment margin. */}
-        <div className="editor-area">
+        <div
+          className={`editor-area${marginShown ? " has-comment-margin" : ""}`}
+          style={
+            {
+              "--column-width": `${geometry.width * effectiveZoom + marginWidth}px`,
+              "--comment-margin-width": `${marginWidth}px`,
+            } as CSSProperties
+          }
+        >
+          {!outlineOpen && !historyOpen && <OutlineToggle onOpen={() => setOutlineOpen(true)} />}
           {find?.mode === "bar" && !historyOpen && (
             <FindBar
               editor={editor}
@@ -496,15 +577,35 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           )}
           {liveCount.visible && !historyOpen && <LiveWordCount editor={editor} setting={liveCount} onChange={setLiveCount} />}
           <div className="editor-scroll" ref={fitZoom.ref}>
-            <div
-              ref={setStack}
-              className={`page-stack${printLayout ? "" : " is-pageless"}`}
-              style={{ zoom: effectiveZoom }}
-              hidden={preview !== null}
-            >
-              {/* One sheet per page, drawn by the pagination plugin. */}
-              <div className="page-sheets" aria-hidden />
-              <EditorContent editor={editor} />
+            {/* The pages and, right of them, the comment margin, centred together. */}
+            <div ref={setColumn} className="page-column" hidden={preview !== null}>
+              <div
+                ref={setStack}
+                className={`page-stack${printLayout ? "" : " is-pageless"}`}
+                style={{ zoom: effectiveZoom }}
+              >
+                {/* One sheet per page, drawn by the pagination plugin. */}
+                <div className="page-sheets" aria-hidden />
+                <EditorContent editor={editor} />
+              </div>
+              {marginShown && (
+                <CommentMargin
+                  editor={editor}
+                  threads={threads}
+                  onCreate={createComment}
+                  onCancelDraft={cancelComment}
+                  onActivate={activateComment}
+                  onReply={async (id, body) => replaceThread(await api.replyToComment(doc.id, id, body))}
+                  onResolve={resolveComment}
+                  onDelete={deleteComment}
+                  onEditMessage={async (id, messageId, body) =>
+                    replaceThread(await api.editCommentMessage(doc.id, id, messageId, body))
+                  }
+                  onDeleteReply={async (id, messageId) => replaceThread(await api.deleteCommentReply(doc.id, id, messageId))}
+                  onCopyLink={(id) => void copyCommentLink(id)}
+                />
+              )}
+              {!historyOpen && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
             </div>
             {preview && (
               <div
@@ -519,17 +620,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             )}
           </div>
         </div>
-        {commentsOpen && !historyOpen && (
-          <CommentsPanel
+        {allCommentsOpen && !historyOpen && (
+          <AllCommentsPanel
             editor={editor}
             threads={threads}
-            onCreate={createComment}
-            onCancelDraft={cancelComment}
             onSelect={selectComment}
-            onReply={async (id, body) => replaceThread(await api.replyToComment(doc.id, id, body))}
-            onResolve={resolveComment}
-            onDelete={deleteComment}
-            onClose={closeComments}
+            onReopen={(id) => void resolveComment(id, false)}
+            onClose={() => setAllCommentsOpen(false)}
           />
         )}
         {historyOpen && (
@@ -613,6 +710,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         />
       )}
 
+      {notice && (
+        <div className="snackbar" role="status" aria-live="polite">
+          {notice}
+        </div>
+      )}
+
       {linkDialog && (
         <PromptDialog
           title={linkDialog.href ? "Edit link" : "Insert link"}
@@ -650,7 +753,7 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
 const FIT_MARGIN = 16;
 
 /** The zoom at which a page `pageWidth` pixels wide (borders included) is as wide as the editor area. */
-function useFitZoom(pageWidth: number) {
+function useFitZoom(pageWidth: number, reserved: number) {
   const [areaWidth, setAreaWidth] = useState<number | null>(null);
   const [element, ref] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -659,7 +762,7 @@ function useFitZoom(pageWidth: number) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [element]);
-  return { value: areaWidth === null ? 1 : (areaWidth - 2 * FIT_MARGIN) / pageWidth, ref };
+  return { value: areaWidth === null ? 1 : (areaWidth - reserved - 2 * FIT_MARGIN) / pageWidth, ref };
 }
 
 /** Printing uses the document's paper size and margins. */

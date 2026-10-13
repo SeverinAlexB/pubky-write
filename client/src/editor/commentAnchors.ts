@@ -12,18 +12,21 @@ export type CommentAnchorState = {
   activeId: number | null;
   /** The selection being commented on while a new comment is written. */
   draft: Anchor | null;
+  /** View > Comments > Hide comments: no highlights, and clicks on commented text do nothing. */
+  hidden: boolean;
 };
 
 type CommentAnchorMeta =
   | { type: "upsert"; anchor: CommentAnchor }
   | { type: "remove"; id: number }
   | { type: "activate"; id: number | null }
-  | { type: "draft"; anchor: Anchor | null };
+  | { type: "draft"; anchor: Anchor | null }
+  | { type: "hide"; hidden: boolean };
 
 export const commentAnchorsKey = new PluginKey<CommentAnchorState>("commentAnchors");
 
 export function getCommentAnchors(state: EditorState): CommentAnchorState {
-  return commentAnchorsKey.getState(state) ?? { anchors: [], activeId: null, draft: null };
+  return commentAnchorsKey.getState(state) ?? { anchors: [], activeId: null, draft: null, hidden: false };
 }
 
 export function updateCommentAnchors(tr: Transaction, meta: CommentAnchorMeta): Transaction {
@@ -53,28 +56,32 @@ function applyMeta(state: CommentAnchorState, meta: CommentAnchorMeta): CommentA
       return { ...state, activeId: meta.id };
     case "draft":
       return { ...state, draft: meta.anchor };
+    case "hide":
+      return { ...state, hidden: meta.hidden, activeId: meta.hidden ? null : state.activeId };
   }
 }
 
 type CommentAnchorOptions = {
   initial: CommentAnchor[];
-  onActivate: (id: number) => void;
+  initiallyHidden: boolean;
+  /** A click in the document: on commented text (its thread's id) or elsewhere (null). */
+  onActivate: (id: number | null) => void;
 };
 
 export const CommentAnchors = Extension.create<CommentAnchorOptions>({
   name: "commentAnchors",
 
   addOptions() {
-    return { initial: [], onActivate: () => {} };
+    return { initial: [], initiallyHidden: false, onActivate: () => {} };
   },
 
   addProseMirrorPlugins() {
-    const { initial, onActivate } = this.options;
+    const { initial, initiallyHidden, onActivate } = this.options;
     return [
       new Plugin<CommentAnchorState>({
         key: commentAnchorsKey,
         state: {
-          init: () => ({ anchors: initial, activeId: null, draft: null }),
+          init: () => ({ anchors: initial, activeId: null, draft: null, hidden: initiallyHidden }),
           apply(tr, value) {
             let next = value;
             if (tr.docChanged) {
@@ -90,7 +97,8 @@ export const CommentAnchors = Extension.create<CommentAnchorOptions>({
         },
         props: {
           decorations(state) {
-            const { anchors, activeId, draft } = getCommentAnchors(state);
+            const { anchors, activeId, draft, hidden } = getCommentAnchors(state);
+            if (hidden) return DecorationSet.empty;
             const decorations = anchors
               .filter((anchor) => !anchor.resolved && !isCollapsed(anchor))
               .map((anchor) =>
@@ -105,8 +113,8 @@ export const CommentAnchors = Extension.create<CommentAnchorOptions>({
             return DecorationSet.create(state.doc, decorations);
           },
           handleClick(view, pos) {
-            const id = commentAt(getCommentAnchors(view.state), pos);
-            if (id !== null) onActivate(id);
+            const state = getCommentAnchors(view.state);
+            onActivate(state.hidden ? null : commentAt(state, pos));
             return false; // keep normal cursor placement
           },
         },

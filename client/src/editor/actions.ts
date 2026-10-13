@@ -90,4 +90,5 @@ export type ViewSettings = {
   printLayout: boolean;
   rulerVisible: boolean;
   nonPrintingCharacters: boolean;
+  commentsHidden: boolean;
 };

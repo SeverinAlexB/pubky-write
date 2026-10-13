@@ -155,7 +155,12 @@ function viewMenu(actions: EditorActions, view: ViewSettings): MenuEntry[] {
       label: "Comments",
       icon: "comment",
       submenu: [
-        { label: "Hide comments", shortcut: shortcut("⌘+Option+Shift+J"), onSelect: actions.hideComments },
+        {
+          label: "Hide comments",
+          shortcut: shortcut("⌘+Option+Shift+J"),
+          checked: view.commentsHidden,
+          onSelect: actions.hideComments,
+        },
         { label: "Show all comments", shortcut: shortcut("⌘+Option+Shift+A"), onSelect: actions.showAllComments },
       ],
     },

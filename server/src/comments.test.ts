@@ -7,10 +7,16 @@ import {
   CommentVersionConflictError,
   createComment,
   deleteComment,
+  deleteReply,
+  editMessage,
   InvalidCommentError,
   listComments,
   setResolved,
 } from "./comments.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createApp } from "./app.ts";
 import { openDatabase, type Database } from "./database.ts";
 import { applySteps, createDocument, getDocumentContent, replaceDifference, restoreRevision } from "./documents.ts";
 import { listRevisions, SESSION_GAP_MS } from "./revisions.ts";
@@ -107,6 +113,81 @@ describe("threads", () => {
     const other = createDocument(db).id;
     expect(addReply(db, other, id, "Hi")).toBeNull();
     expect(deleteComment(db, other, id)).toBe(false);
+  });
+});
+
+describe("editing and deleting messages", () => {
+  it("edits the first message and replies, trimming the text", () => {
+    const { id, messages } = comment(QUICK.from, QUICK.to, "First");
+    const withReply = addReply(db, documentId, id, "Second")!;
+    expect(editMessage(db, documentId, id, messages[0]!.id, " First, edited ")!.messages.map((m) => m.body)).toEqual([
+      "First, edited",
+      "Second",
+    ]);
+    expect(editMessage(db, documentId, id, withReply.messages[1]!.id, "Second, edited")!.messages[1]!.body).toBe(
+      "Second, edited",
+    );
+  });
+
+  it("rejects empty text", () => {
+    const { id, messages } = comment(QUICK.from, QUICK.to, "First");
+    expect(() => editMessage(db, documentId, id, messages[0]!.id, "  ")).toThrow(InvalidCommentError);
+  });
+
+  it("deletes replies but not the first message", () => {
+    const { id, messages } = comment(QUICK.from, QUICK.to, "First");
+    const reply = addReply(db, documentId, id, "Second")!.messages[1]!;
+    expect(deleteReply(db, documentId, id, reply.id)!.messages.map((m) => m.body)).toEqual(["First"]);
+    expect(() => deleteReply(db, documentId, id, messages[0]!.id)).toThrow(InvalidCommentError);
+  });
+
+  it("only finds messages through their own thread and document", () => {
+    const first = comment(QUICK.from, QUICK.to, "First");
+    const second = comment(11, 16, "Other");
+    const other = createDocument(db).id;
+    const messageId = first.messages[0]!.id;
+    expect(editMessage(db, other, first.id, messageId, "x")).toBeNull();
+    expect(editMessage(db, documentId, second.id, messageId, "x")).toBeNull();
+    expect(deleteReply(db, other, first.id, messageId)).toBeNull();
+    expect(listComments(db, documentId)[0]!.messages[0]!.body).toBe("First");
+  });
+});
+
+describe("message endpoints", () => {
+  const app = () => createApp({ db, uploadsDir: mkdtempSync(join(tmpdir(), "docs-uploads-")) });
+  const send = (method: string, path: string, body?: unknown) =>
+    app().request(path, {
+      method,
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  it("PATCH edits a message and returns the thread", async () => {
+    const { id, messages } = comment(QUICK.from, QUICK.to, "First");
+    const response = await send("PATCH", `/api/documents/${documentId}/comments/${id}/messages/${messages[0]!.id}`, {
+      body: "Edited",
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).messages[0].body).toBe("Edited");
+    expect(listComments(db, documentId)[0]!.messages[0]!.body).toBe("Edited");
+  });
+
+  it("PATCH answers 400 for an empty body and 404 for another document", async () => {
+    const { id, messages } = comment(QUICK.from, QUICK.to, "First");
+    const path = (doc: string) => `/api/documents/${doc}/comments/${id}/messages/${messages[0]!.id}`;
+    expect((await send("PATCH", path(documentId), { body: "" })).status).toBe(400);
+    expect((await send("PATCH", path(createDocument(db).id), { body: "x" })).status).toBe(404);
+  });
+
+  it("DELETE removes a reply, refuses the first message and answers 404 for unknown messages", async () => {
+    const { id, messages } = comment(QUICK.from, QUICK.to, "First");
+    const reply = addReply(db, documentId, id, "Second")!.messages[1]!;
+    const path = (messageId: number) => `/api/documents/${documentId}/comments/${id}/messages/${messageId}`;
+    const response = await send("DELETE", path(reply.id));
+    expect(response.status).toBe(200);
+    expect((await response.json()).messages).toHaveLength(1);
+    expect((await send("DELETE", path(messages[0]!.id))).status).toBe(400);
+    expect((await send("DELETE", path(reply.id))).status).toBe(404);
   });
 });
 

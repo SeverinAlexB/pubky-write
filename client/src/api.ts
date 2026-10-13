@@ -77,6 +77,13 @@ export const api = {
     }),
   deleteComment: (id: string, commentId: number) =>
     request<void>(`/api/documents/${id}/comments/${commentId}`, { method: "DELETE" }),
+  editCommentMessage: (id: string, commentId: number, messageId: number, body: string) =>
+    request<CommentThread>(`/api/documents/${id}/comments/${commentId}/messages/${messageId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    }),
+  deleteCommentReply: (id: string, commentId: number, messageId: number) =>
+    request<CommentThread>(`/api/documents/${id}/comments/${commentId}/messages/${messageId}`, { method: "DELETE" }),
 };
 
 /** Sends step batches to the server. Network failures and 5xx responses are retried by the sync. */

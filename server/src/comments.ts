@@ -83,6 +83,32 @@ export function setResolved(db: Database, documentId: string, commentId: number,
   return getComment(db, documentId, commentId);
 }
 
+/** Changes the text of one message of a thread in the document. Returns null if either is not found. */
+export function editMessage(db: Database, documentId: string, commentId: number, messageId: number, body: string) {
+  if (!findMessage(db, documentId, commentId, messageId)) return null;
+  db.prepare("UPDATE comment_messages SET body = ? WHERE id = ?").run(validateBody(body), messageId);
+  return getComment(db, documentId, commentId);
+}
+
+/**
+ * Deletes a reply. The first message is the comment itself and goes only with its thread.
+ * Returns null if the thread or the message is not found.
+ */
+export function deleteReply(db: Database, documentId: string, commentId: number, messageId: number) {
+  const message = findMessage(db, documentId, commentId, messageId);
+  if (!message) return null;
+  if (message.isFirst) throw new InvalidCommentError("The first message can only be deleted with its thread");
+  db.prepare("DELETE FROM comment_messages WHERE id = ?").run(messageId);
+  return getComment(db, documentId, commentId);
+}
+
+/** A message of a thread, looked up through its document so other documents' messages are never touched. */
+function findMessage(db: Database, documentId: string, commentId: number, messageId: number) {
+  const thread = getComment(db, documentId, commentId);
+  const index = thread?.messages.findIndex((message) => message.id === messageId) ?? -1;
+  return index < 0 ? null : { isFirst: index === 0 };
+}
+
 export function deleteComment(db: Database, documentId: string, commentId: number): boolean {
   return db.prepare("DELETE FROM comments WHERE document_id = ? AND id = ?").run(documentId, commentId).changes > 0;
 }

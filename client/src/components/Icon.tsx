@@ -1,6 +1,8 @@
 // Material Symbols (outlined, weight 400, Apache 2.0), inlined as SVG so only the icons used are bundled.
 import addSvg from "@material-symbols/svg-400/outlined/add.svg?raw";
 import addCommentSvg from "@material-symbols/svg-400/outlined/add_comment.svg?raw";
+import addReactionSvg from "@material-symbols/svg-400/outlined/add_reaction.svg?raw";
+import arrowBackSvg from "@material-symbols/svg-400/outlined/arrow_back.svg?raw";
 import arrowDropDownSvg from "@material-symbols/svg-400/outlined/arrow_drop_down.svg?raw";
 import arrowRightSvg from "@material-symbols/svg-400/outlined/arrow_right.svg?raw";
 import articleSvg from "@material-symbols/svg-400/outlined/article.svg?raw";
@@ -50,6 +52,7 @@ import insertPageBreakSvg from "@material-symbols/svg-400/outlined/insert_page_b
 import keyboardArrowDownSvg from "@material-symbols/svg-400/outlined/keyboard_arrow_down.svg?raw";
 import keyboardArrowUpSvg from "@material-symbols/svg-400/outlined/keyboard_arrow_up.svg?raw";
 import linkSvg from "@material-symbols/svg-400/outlined/link.svg?raw";
+import listSvg from "@material-symbols/svg-400/outlined/list.svg?raw";
 import markdownSvg from "@material-symbols/svg-400/outlined/markdown.svg?raw";
 import moreVertSvg from "@material-symbols/svg-400/outlined/more_vert.svg?raw";
 import openInNewSvg from "@material-symbols/svg-400/outlined/open_in_new.svg?raw";
@@ -76,6 +79,8 @@ import uploadSvg from "@material-symbols/svg-400/outlined/upload.svg?raw";
 const symbols = {
   add: addSvg,
   add_comment: addCommentSvg,
+  add_reaction: addReactionSvg,
+  arrow_back: arrowBackSvg,
   arrow_drop_down: arrowDropDownSvg,
   arrow_right: arrowRightSvg,
   article: articleSvg,
@@ -125,6 +130,7 @@ const symbols = {
   keyboard_arrow_down: keyboardArrowDownSvg,
   keyboard_arrow_up: keyboardArrowUpSvg,
   link: linkSvg,
+  list: listSvg,
   markdown: markdownSvg,
   more_vert: moreVertSvg,
   open_in_new: openInNewSvg,
