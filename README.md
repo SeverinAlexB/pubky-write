@@ -59,8 +59,14 @@ npm start          # http://localhost:3001
   centimetres, or inches in the United States) show the margins and the current
   paragraph's indents. View > Show ruler and View > Show print layout (off for
   one continuous sheet) are remembered in the browser.
-- **Find and replace** (⌘F, ⌘⇧H) with match case, **word count** (⌘⇧C) for the
-  document or the selection, and a **document outline** of all headings.
+- **Find** (⌘F): a card at the top right of the editor area highlights every
+  match as you type, Enter and Shift+Enter move between them. **Find and
+  replace** (⌘⇧H) adds match case, JavaScript regular expressions (`$1` in the
+  replacement inserts a group) and ignoring diacritics (on by default, so
+  "cafe" finds "café"); Replace all is one undo step.
+- **Word count** (⌘⇧C) shows pages, words and characters for the document or
+  the selection, and can show a live count at the bottom left of the editor
+  area. There is also a **document outline** of all headings.
 - **Comments:** select text and add a comment (⌘⌥M), reply, resolve, reopen or
   delete. Comments stay attached to their text while you edit; if the text is
   deleted, the thread remains and shows the original text as deleted.

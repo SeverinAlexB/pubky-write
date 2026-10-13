@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createDocument, editor, mod, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, lineEnd, lineStart, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 test("font, font size, line spacing and indent are kept", async ({ page }) => {
   await createDocument(page);
@@ -42,30 +42,217 @@ test("Tab nests list items instead of indenting the paragraph", async ({ page })
   await expect(editor(page).locator("ul ul li")).toHaveText("Child");
 });
 
-test("find and replace highlights matches and replaces them", async ({ page }) => {
+test("the find bar counts matches, moves between them with wrapping and keeps the current match selected", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await createDocument(page);
   await editor(page).click();
-  await page.keyboard.type("red fish, blue fish, Red fish");
+  await page.keyboard.type("An item, another item, a third item and a last item.");
+  await page.keyboard.press(`${mod}+ArrowUp`); // the cursor at the start
+  await selectionSynced(page);
 
   await page.keyboard.press(`${mod}+f`);
   const find = page.getByRole("search", { name: "Find in document" });
-  await find.getByLabel("Find in document").fill("red");
-  await expect(find.getByText("1 of 2")).toBeVisible();
-  await expect(editor(page).locator(".search-match")).toHaveCount(2);
+  await expect(find).toBeVisible();
+  const field = find.getByRole("textbox", { name: "Find in document" });
+  await expect(field).toBeFocused();
+  for (const name of ["Previous", "Next", "More options", "Close"]) {
+    await expect(find.getByRole("button", { name, exact: true })).toBeVisible();
+  }
+  // A 408 × 72 card at the top right of the editor area.
+  const card = (await find.boundingBox())!;
+  const area = (await page.locator(".editor-area").boundingBox())!;
+  expect(card.width).toBe(408);
+  expect(card.height).toBe(72);
+  expect(Math.round(area.x + area.width - (card.x + card.width))).toBe(28);
+  expect(Math.round(card.y - area.y)).toBe(0);
 
-  await find.getByLabel("Match case").check();
-  await expect(find.getByText("1 of 1")).toBeVisible();
-  await find.getByLabel("Match case").uncheck();
+  await field.fill("item");
+  await expect(find.getByText("1 of 4")).toBeVisible();
+  const matches = editor(page).locator(".search-match");
+  await expect(matches).toHaveCount(4);
+  await expect(matches.nth(1)).toHaveCSS("background-color", "rgb(204, 237, 210)");
+  await expect(editor(page).locator(".search-match-current")).toHaveCSS("background-color", "rgb(135, 211, 146)");
 
-  await page.keyboard.press(`${mod}+Shift+h`);
-  await find.getByLabel("Replace with").fill("green");
-  await find.getByRole("button", { name: "Replace all" }).click();
-  await expect(editor(page)).toHaveText("green fish, blue fish, green fish");
-  await expect(find.getByText("0 of 0")).toBeVisible();
+  await field.press("Enter");
+  await expect(find.getByText("2 of 4")).toBeVisible();
+  await expect(matches.nth(1)).toHaveClass(/search-match-current/);
+  await field.press("Shift+Enter");
+  await field.press("Shift+Enter");
+  await expect(find.getByText("4 of 4")).toBeVisible(); // wrapped to the last
+  await field.press("Enter");
+  await expect(find.getByText("1 of 4")).toBeVisible(); // and back to the first
+  await find.getByRole("button", { name: "Next", exact: true }).click();
+  await find.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(find.getByText("3 of 4")).toBeVisible();
 
-  await find.getByLabel("Find in document").press("Escape");
+  await field.press("Escape");
+  await expect(find).toBeHidden();
+  await expect(matches).toHaveCount(0);
+  await expect(editor(page)).toBeFocused();
+  // The third match is selected: typing replaces it.
+  await page.keyboard.type("ITEM");
+  await expect(editor(page)).toHaveText("An item, another item, a third ITEM and a last item.");
+});
+
+test("the find bar starts at the cursor, takes the selection as its query and closes with the Close button", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("one two one two one");
+  await page.keyboard.press(lineStart);
+  for (let step = 0; step < 4; step++) await page.keyboard.press("ArrowRight");
+  await selectionSynced(page);
+
+  await page.keyboard.press(`${mod}+f`);
+  const find = page.getByRole("search", { name: "Find in document" });
+  await find.getByRole("textbox", { name: "Find in document" }).fill("one");
+  await expect(find.getByText("2 of 3")).toBeVisible(); // the first match at or after the cursor
+  await find.getByRole("button", { name: "Close" }).click();
   await expect(find).toBeHidden();
   await expect(editor(page).locator(".search-match")).toHaveCount(0);
+  await expect(editor(page)).toBeFocused();
+
+  await page.keyboard.press(lineStart);
+  await page.keyboard.press("Shift+ArrowRight");
+  await page.keyboard.press("Shift+ArrowRight");
+  await page.keyboard.press("Shift+ArrowRight");
+  await selectionSynced(page);
+  await page.keyboard.press(`${mod}+f`);
+  await expect(find.getByRole("textbox", { name: "Find in document" })).toHaveValue("one");
+  await expect(find.getByText("1 of 3")).toBeVisible();
+
+  // More options opens the dialog with the same query.
+  await find.getByRole("button", { name: "More options" }).click();
+  const dialog = page.getByRole("dialog", { name: "Find and replace" });
+  await expect(dialog).toBeVisible();
+  await expect(find).toBeHidden();
+  await expect(dialog.getByRole("textbox", { name: "Find", exact: true })).toHaveValue("one");
+  await expect(dialog.getByText("1 of 3")).toBeVisible();
+});
+
+test("the find bar scrolls the current match into view on a later page", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("First page");
+  for (let line = 0; line < 120; line++) await page.keyboard.press("Enter");
+  await page.keyboard.type("needle in a haystack");
+  await expect(page.locator(".page-stack")).toHaveAttribute("data-page-count", "3");
+  await page.locator(".editor-scroll").evaluate((element) => element.scrollTo(0, 0));
+  await editor(page).getByText("First page").click();
+  await selectionSynced(page);
+
+  await page.keyboard.press(`${mod}+f`);
+  await page.getByRole("textbox", { name: "Find in document" }).fill("needle");
+  await expect(page.getByRole("search").getByText("1 of 1")).toBeVisible();
+  await expect(editor(page).locator(".search-match-current")).toBeInViewport();
+});
+
+test("the Find and replace dialog has its controls in order and ignores diacritics by default", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("Un café, a cafe and a CAFÉ.");
+
+  await page.keyboard.press(`${mod}+Shift+h`);
+  const dialog = page.getByRole("dialog", { name: "Find and replace" });
+  await expect(dialog).toBeVisible();
+  const box = (await dialog.boundingBox())!;
+  expect(box.width).toBe(396);
+  await expect(dialog).toHaveCSS("border-radius", "28px");
+  const controls = await dialog.locator("input, button").evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("aria-label") ?? (element.closest("label") ?? element).textContent!.trim()),
+  );
+  expect(controls).toEqual([
+    "Close",
+    "Find",
+    "Replace with",
+    "Match case",
+    "Use regular expressions (e.g. \\n for newline, \\t for tab)",
+    "Help",
+    "Ignore diacritics (e.g. ä = a, E = É)",
+    "Replace",
+    "Replace all",
+    "Previous",
+    "Next",
+  ]);
+  await expect(dialog.getByRole("checkbox", { name: /Ignore diacritics/ })).toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: "Match case" })).not.toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: /Use regular expressions/ })).not.toBeChecked();
+
+  const findField = dialog.getByRole("textbox", { name: "Find", exact: true });
+  await findField.fill("cafe");
+  await expect(dialog.getByText("1 of 3")).toBeVisible();
+  // The matches stay highlighted in the document behind the scrim.
+  await expect(editor(page).locator(".search-match")).toHaveCount(3);
+  await expect(editor(page).locator(".search-match-current")).toHaveText("café");
+
+  await dialog.getByRole("checkbox", { name: "Match case" }).check();
+  await expect(dialog.getByText("1 of 2")).toBeVisible();
+  await dialog.getByRole("checkbox", { name: /Ignore diacritics/ }).uncheck();
+  await expect(dialog.getByText("1 of 1")).toBeVisible();
+  await expect(editor(page).locator(".search-match-current")).toHaveText("cafe");
+  await dialog.getByRole("checkbox", { name: "Match case" }).uncheck();
+  await dialog.getByRole("checkbox", { name: /Ignore diacritics/ }).check();
+
+  await dialog.getByRole("button", { name: "Help" }).click();
+  await expect(dialog.getByRole("note")).toContainText("regular expression");
+
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(editor(page).locator(".search-match")).toHaveCount(0);
+
+  // Edit > Find and replace opens the same dialog.
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("menuitem", { name: "Find and replace" }).click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
+test("Find and replace replaces one match at a time, all of them in one undo step, and with regular expressions", async ({
+  page,
+}) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("red fish, blue fish, Red fish, red fish");
+  await page.keyboard.press(`${mod}+ArrowUp`);
+  await selectionSynced(page);
+
+  await page.keyboard.press(`${mod}+Shift+h`);
+  const dialog = page.getByRole("dialog", { name: "Find and replace" });
+  await dialog.getByRole("textbox", { name: "Find", exact: true }).fill("red");
+  await dialog.getByRole("textbox", { name: "Replace with" }).fill("green");
+  await expect(dialog.getByText("1 of 3")).toBeVisible();
+  await dialog.getByRole("button", { name: "Next" }).click();
+  await expect(dialog.getByText("2 of 3")).toBeVisible();
+  await dialog.getByRole("button", { name: "Previous" }).click();
+  await expect(dialog.getByText("1 of 3")).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Replace", exact: true }).click();
+  await expect(editor(page)).toHaveText("green fish, blue fish, Red fish, red fish");
+  await expect(dialog.getByText("1 of 2")).toBeVisible();
+  await expect(editor(page).locator(".search-match-current")).toHaveText("Red");
+
+  await dialog.getByRole("button", { name: "Replace all" }).click();
+  await expect(editor(page)).toHaveText("green fish, blue fish, green fish, green fish");
+  await expect(dialog.getByText("0 of 0")).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(editor(page)).toBeFocused();
+  await page.keyboard.press(`${mod}+z`); // Replace all is one step
+  await expect(editor(page)).toHaveText("green fish, blue fish, Red fish, red fish");
+  await waitUntilSaved(page);
+
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("Mail ann@x, bob@y and cy@x.");
+  await page.keyboard.press(`${mod}+Shift+h`);
+  await dialog.getByRole("checkbox", { name: /Use regular expressions/ }).check();
+  const findField = dialog.getByRole("textbox", { name: "Find", exact: true });
+  await findField.fill("(\\w+");
+  await expect(dialog.getByText("0 of 0")).toBeVisible(); // not a valid expression
+  await findField.fill("(\\w+)@x");
+  await expect(dialog.getByText("1 of 2")).toBeVisible();
+  await dialog.getByRole("textbox", { name: "Replace with" }).fill("$1");
+  await dialog.getByRole("button", { name: "Replace all" }).click();
+  await expect(editor(page)).toHaveText("Mail ann, bob@y and cy.");
   await waitUntilSaved(page);
 });
 
@@ -97,22 +284,94 @@ test("the outline lists headings and jumps to them", async ({ page }) => {
   await expect(outline).toBeVisible();
 });
 
-test("word count shows totals and the selection", async ({ page }) => {
+test("word count shows pages, words and characters, for the selection too", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();
   await page.keyboard.type("One two three four");
 
   await page.keyboard.press(`${mod}+Shift+c`);
   const dialog = page.getByRole("dialog", { name: "Word count" });
-  await expect(dialog.getByRole("row", { name: /Words/ })).toContainText("4");
+  expect((await dialog.boundingBox())!.width).toBe(349);
+  await expect(dialog.getByRole("row")).toHaveText([
+    /^Pages\s*1 of 1$/,
+    /^Words\s*4$/,
+    /^Characters\s*18$/,
+    /^Characters excluding spaces\s*15$/,
+  ]);
+  await expect(dialog.getByRole("checkbox", { name: "Display word count while typing" })).not.toBeChecked();
   await dialog.getByRole("button", { name: "OK" }).click();
   await expect(editor(page)).toBeFocused();
 
-  await page.keyboard.press("Shift+ArrowLeft");
-  await page.keyboard.press("Shift+ArrowLeft");
-  await page.keyboard.press("Shift+ArrowLeft");
-  await page.keyboard.press("Shift+ArrowLeft");
+  for (let step = 0; step < 4; step++) await page.keyboard.press("Shift+ArrowLeft");
   await page.getByRole("button", { name: "Tools" }).click();
   await page.getByRole("menuitem", { name: "Word count" }).click();
   await expect(dialog.getByRole("row", { name: /^Words/ })).toContainText("1 of 4");
+  await expect(dialog.getByRole("row", { name: /^Characters excluding/ })).toContainText("4 of 15");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(editor(page)).toBeFocused();
+
+  // Pages shows the page of the cursor.
+  await page.keyboard.press(lineEnd);
+  await page.keyboard.press(`${mod}+Enter`);
+  await page.keyboard.press(`${mod}+Enter`);
+  await page.keyboard.type("Last page");
+  await expect(page.locator(".page-stack")).toHaveAttribute("data-page-count", "3");
+  await page.keyboard.press(`${mod}+Shift+c`);
+  await expect(dialog.getByRole("row", { name: /^Pages/ })).toContainText("3 of 3");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(editor(page)).toBeFocused();
+  await editor(page).getByText("One two").click();
+  await selectionSynced(page);
+  await page.keyboard.press(`${mod}+Shift+c`);
+  await expect(dialog.getByRole("row", { name: /^Pages/ })).toContainText("1 of 3");
+});
+
+test("the live word count appears after enabling it, updates while typing and is remembered", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("One two three four");
+  const chip = page.locator(".live-word-count").getByRole("button");
+  await expect(chip).toBeHidden();
+
+  await page.keyboard.press(`${mod}+Shift+c`);
+  const dialog = page.getByRole("dialog", { name: "Word count" });
+  await dialog.getByRole("checkbox", { name: "Display word count while typing" }).check();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(chip).toBeHidden(); // Cancel discards the change
+
+  await page.keyboard.press(`${mod}+Shift+c`);
+  await dialog.getByRole("checkbox", { name: "Display word count while typing" }).check();
+  await dialog.getByRole("button", { name: "OK" }).click();
+  await expect(chip).toHaveText("4 words");
+  // At the bottom left of the editor area.
+  const area = (await page.locator(".editor-area").boundingBox())!;
+  const box = (await chip.boundingBox())!;
+  expect(box.x - area.x).toBeLessThan(40);
+  expect(area.y + area.height - (box.y + box.height)).toBeLessThan(40);
+
+  await page.keyboard.type(" five");
+  await expect(chip).toHaveText("5 words");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(chip).toHaveText("1 of 5 words");
+
+  await chip.click();
+  await page.getByRole("menuitemcheckbox", { name: "Characters", exact: true }).click();
+  await expect(chip).toHaveText("4 of 23 characters");
+  await chip.click();
+  await page.getByRole("menuitemcheckbox", { name: "Characters excluding spaces" }).click();
+  await expect(chip).toHaveText("4 of 19 characters excluding spaces");
+  await waitUntilSaved(page);
+
+  await page.reload();
+  await expect(chip).toHaveText("19 characters excluding spaces");
+  await chip.click();
+  await page.getByRole("menuitem", { name: "Hide word count" }).click();
+  await expect(chip).toBeHidden();
+  await page.reload();
+  await expect(editor(page)).toBeVisible();
+  await expect(chip).toBeHidden();
 });

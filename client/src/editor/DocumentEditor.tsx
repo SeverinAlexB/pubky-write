@@ -26,6 +26,7 @@ import { CommentsPanel } from "./CommentsPanel.tsx";
 import { CustomSpacingDialog } from "./CustomSpacingDialog.tsx";
 import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
+import { FindReplaceDialog } from "./FindReplaceDialog.tsx";
 import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
 import { HistoryPanel, RevisionPreview } from "./HistoryPanel.tsx";
 import { MenuBar } from "./MenuBar.tsx";
@@ -36,7 +37,7 @@ import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
 import { DocumentSync, type SaveStatus } from "./sync.ts";
 import { Toolbar } from "./toolbar/Toolbar.tsx";
 import type { Zoom } from "./toolbar/ZoomControl.tsx";
-import { WordCountDialog } from "./WordCountDialog.tsx";
+import { LiveWordCount, useLiveCountSetting, WordCountDialog } from "./WordCountDialog.tsx";
 
 const OUTLINE_SETTING = "docs.outlineOpen";
 const RULER_SETTING = "docs.rulerVisible";
@@ -62,8 +63,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [imageUrlDialog, setImageUrlDialog] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [preview, setPreview] = useState<RevisionWithContent | null>(null);
-  const [find, setFind] = useState<{ replace: boolean; request: number } | null>(null);
+  // The find bar (⌘F) or the Find and replace dialog (⌘⇧H); `request` counts ⌘F presses.
+  const [find, setFind] = useState<{ mode: "bar" | "dialog"; request: number } | null>(null);
   const [wordCountOpen, setWordCountOpen] = useState(false);
+  const [liveCount, setLiveCount] = useLiveCountSetting();
   const [customSpacing, setCustomSpacing] = useState<ParagraphSpacingState | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(() => localStorage.getItem(OUTLINE_SETTING) !== "false");
   const [threads, setThreads] = useState<CommentThread[]>(doc.comments);
@@ -179,8 +182,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       const pressed = `${event.altKey ? "Alt+" : ""}${event.shiftKey ? "Shift+" : ""}${event.code}`;
       const action = {
         "Alt+Shift+KeyH": () => handlers.current.openHistory(),
-        KeyF: () => openFind(false),
-        "Shift+KeyH": () => openFind(true),
+        KeyF: () => openFind("bar"),
+        "Shift+KeyH": () => openFind("dialog"),
         "Shift+KeyC": () => setWordCountOpen(true),
         "Shift+KeyF": () => setMenusHidden((hidden) => !hidden),
         KeyO: () => navigate("/"),
@@ -193,8 +196,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  function openFind(replace: boolean) {
-    setFind((previous) => ({ replace: replace || (previous?.replace ?? false), request: (previous?.request ?? 0) + 1 }));
+  function openFind(mode: "bar" | "dialog") {
+    // ⌘F does nothing while the dialog is open: the dialog has its own Find field.
+    setFind((previous) => (previous?.mode === "dialog" ? previous : { mode, request: (previous?.request ?? 0) + 1 }));
+  }
+
+  function closeFind() {
+    setFind(null);
+    editor.commands.focus();
   }
 
   handlers.current.openLinkDialog = () => setLinkDialog({ href: editor.getAttributes("link").href ?? "" });
@@ -361,7 +370,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     },
     paste: () => void pasteFromClipboard(editor, true),
     pasteWithoutFormatting: () => void pasteFromClipboard(editor, false),
-    findAndReplace: () => openFind(true),
+    findAndReplace: () => openFind("dialog"),
     showAllComments: () => setCommentsOpen(true),
     toggleOutline: () => setOutlineOpen((open) => !open),
     togglePrintLayout: () => setPrintLayout((on) => !on),
@@ -475,31 +484,40 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       <div className="editor-workspace">
         {rulerVisible && printLayout && <VerticalRuler stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />}
         {outlineOpen && !historyOpen && <OutlinePanel editor={editor} onClose={() => setOutlineOpen(false)} />}
-        {find && !historyOpen && (
-          <FindBar editor={editor} showReplace={find.replace} focusRequest={find.request} onClose={() => setFind(null)} />
-        )}
-        <div className="editor-scroll" ref={fitZoom.ref}>
-          <div
-            ref={setStack}
-            className={`page-stack${printLayout ? "" : " is-pageless"}`}
-            style={{ zoom: effectiveZoom }}
-            hidden={preview !== null}
-          >
-            {/* One sheet per page, drawn by the pagination plugin. */}
-            <div className="page-sheets" aria-hidden />
-            <EditorContent editor={editor} />
-          </div>
-          {preview && (
-            <div
-              className="page-preview"
-              style={{ zoom: effectiveZoom }}
-              ref={(element) => {
-                if (element) setGeometry(element, pageGeometry(pageSetupOf(editor.schema.nodeFromJSON(preview.content))));
-              }}
-            >
-              <RevisionPreview revision={preview} />
-            </div>
+        {/* The editor area: the find bar and the live word count float over it, left of the comment margin. */}
+        <div className="editor-area">
+          {find?.mode === "bar" && !historyOpen && (
+            <FindBar
+              editor={editor}
+              focusRequest={find.request}
+              onMoreOptions={() => setFind({ mode: "dialog", request: find.request })}
+              onClose={closeFind}
+            />
           )}
+          {liveCount.visible && !historyOpen && <LiveWordCount editor={editor} setting={liveCount} onChange={setLiveCount} />}
+          <div className="editor-scroll" ref={fitZoom.ref}>
+            <div
+              ref={setStack}
+              className={`page-stack${printLayout ? "" : " is-pageless"}`}
+              style={{ zoom: effectiveZoom }}
+              hidden={preview !== null}
+            >
+              {/* One sheet per page, drawn by the pagination plugin. */}
+              <div className="page-sheets" aria-hidden />
+              <EditorContent editor={editor} />
+            </div>
+            {preview && (
+              <div
+                className="page-preview"
+                style={{ zoom: effectiveZoom }}
+                ref={(element) => {
+                  if (element) setGeometry(element, pageGeometry(pageSetupOf(editor.schema.nodeFromJSON(preview.content))));
+                }}
+              >
+                <RevisionPreview revision={preview} />
+              </div>
+            )}
+          </div>
         </div>
         {commentsOpen && !historyOpen && (
           <CommentsPanel
@@ -537,10 +555,18 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         }}
       />
 
+      {find?.mode === "dialog" && !historyOpen && <FindReplaceDialog editor={editor} onClose={closeFind} />}
+
       {wordCountOpen && (
         <WordCountDialog
           editor={editor}
-          onClose={() => {
+          liveCountVisible={liveCount.visible}
+          onConfirm={(visible) => {
+            setLiveCount({ ...liveCount, visible });
+            setWordCountOpen(false);
+            editor.commands.focus();
+          }}
+          onCancel={() => {
             setWordCountOpen(false);
             editor.commands.focus();
           }}

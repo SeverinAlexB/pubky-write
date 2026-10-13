@@ -32,3 +32,25 @@ export async function chooseDownload(page: Page, format: string): Promise<void> 
   await page.getByRole("menuitem", { name: "Download" }).hover();
   await page.getByRole("menuitem", { name: format }).click();
 }
+
+/**
+ * Waits until the editor has read the browser's selection. The editor picks up selection changes
+ * made by the browser (clicks, arrow keys) asynchronously, so a shortcut pressed right after could
+ * still see the old selection.
+ */
+export async function selectionSynced(page: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        type View = {
+          state: { selection: { head: number } };
+          posAtDOM: (node: globalThis.Node, offset: number) => number;
+        };
+        const view = (document.querySelector(".ProseMirror") as unknown as { editor: { view: View } }).editor.view;
+        const selection = getSelection();
+        if (!selection?.focusNode) return true;
+        return view.posAtDOM(selection.focusNode, selection.focusOffset) === view.state.selection.head;
+      }),
+    )
+    .toBe(true);
+}

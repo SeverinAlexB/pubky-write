@@ -359,3 +359,17 @@ function setPageCount(stack: HTMLElement, count: number): void {
   }
   while (sheets.childElementCount > count) sheets.lastElementChild!.remove();
 }
+
+/** The page the cursor is on (1-based) and the number of pages, from the current layout. */
+export function cursorPage(view: EditorView): { page: number; count: number } {
+  const stack = view.dom.closest<HTMLElement>(".page-stack");
+  const count = Number(stack?.dataset.pageCount) || 1;
+  if (!stack || count === 1) return { page: 1, count };
+  const geometry = pageGeometry(pageSetupOf(view.state.doc));
+  const stackRect = stack.getBoundingClientRect();
+  if (stackRect.width === 0) return { page: 1, count };
+  const scale = stackRect.width / geometry.width;
+  const y = (view.coordsAtPos(view.state.selection.head).top - stackRect.top) / scale;
+  const page = Math.floor(y / (geometry.height + PAGE_GAP)) + 1;
+  return { page: Math.min(Math.max(page, 1), count), count };
+}

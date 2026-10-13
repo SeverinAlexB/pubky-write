@@ -2,45 +2,59 @@ import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.tsx";
-import { getSearchState, goToMatch, replaceAll, replaceCurrent, setSearch } from "./search.ts";
+import { getSearchState, goToMatch, selectCurrentMatch, setSearch } from "./search.ts";
 
 type FindBarProps = {
   editor: Editor;
-  showReplace: boolean;
-  /** Changes each time ⌘F or ⌘⇧H is pressed, to refocus the search field. */
+  /** Changes each time ⌘F is pressed, to take the selection as the query and refocus the field. */
   focusRequest: number;
+  /** Closes the bar and opens the Find and replace dialog with the same query. */
+  onMoreOptions: () => void;
   onClose: () => void;
 };
 
-/** Find (⌘F) and find-and-replace (⌘⇧H), shown at the top right of the page. */
-export function FindBar({ editor, showReplace: initialShowReplace, focusRequest, onClose }: FindBarProps) {
-  const [query, setQuery] = useState(() => {
-    const { from, to } = editor.state.selection;
-    const selected = editor.state.doc.textBetween(from, to, " ");
-    return selected.length > 0 && selected.length < 100 ? selected : getSearchState(editor.state).query;
-  });
-  const [replacement, setReplacement] = useState("");
-  const [showReplace, setShowReplace] = useState(initialShowReplace);
-  const findInput = useRef<HTMLInputElement>(null);
-  const search = useEditorState({
+/** The selected text, as a find query: short selections within one paragraph only. */
+export function selectionQuery(editor: Editor): string | null {
+  const { from, to, empty } = editor.state.selection;
+  if (empty) return null;
+  const selected = editor.state.doc.textBetween(from, to, "\n");
+  return selected.length < 100 && !selected.includes("\n") ? selected : null;
+}
+
+/** "N of M" for the find field, once there is a query. */
+export function useMatchCount(editor: Editor): string | null {
+  return useEditorState({
     editor,
-    selector: ({ editor }) => {
-      const { matches, current, caseSensitive } = getSearchState(editor.state);
-      return { count: matches.length, current, caseSensitive };
+    selector: ({ editor: current }) => {
+      const { query, matches, current: index } = getSearchState(current.state);
+      if (!query) return null;
+      return `${matches.length === 0 ? 0 : index + 1} of ${matches.length}`;
     },
+  });
+}
+
+/** Find (⌘F): a card at the top right of the editor area that highlights matches as you type. */
+export function FindBar({ editor, focusRequest, onMoreOptions, onClose }: FindBarProps) {
+  const [query, setQuery] = useState(() => getSearchState(editor.state).query);
+  const field = useRef<HTMLInputElement>(null);
+  const count = useMatchCount(editor);
+  const hasMatches = useEditorState({
+    editor,
+    selector: ({ editor: current }) => getSearchState(current.state).matches.length > 0,
   });
 
   useEffect(() => {
-    if (initialShowReplace) setShowReplace(true);
-    findInput.current?.focus();
-    findInput.current?.select();
-  }, [focusRequest, initialShowReplace]);
+    const selected = selectionQuery(editor);
+    if (selected) setQuery(selected);
+    field.current?.focus();
+    field.current?.select();
+  }, [editor, focusRequest]);
 
   useEffect(() => {
     editor.view.dispatch(setSearch(editor.state.tr, { query }));
   }, [editor, query]);
 
-  // Clear the highlights when the bar closes.
+  // Remove the highlights when the bar goes away.
   useEffect(
     () => () => {
       if (!editor.isDestroyed) editor.view.dispatch(setSearch(editor.state.tr, { query: "" }));
@@ -52,81 +66,74 @@ export function FindBar({ editor, showReplace: initialShowReplace, focusRequest,
     const tr = goToMatch(editor.state, direction);
     if (tr) editor.view.dispatch(tr);
   };
-  const apply = (build: typeof replaceCurrent) => {
-    const tr = build(editor.state, replacement);
-    if (tr) editor.view.dispatch(tr);
-  };
   const close = () => {
+    const select = selectCurrentMatch(editor.state);
+    if (select) editor.view.dispatch(select);
     onClose();
     editor.commands.focus();
   };
 
   return (
     <div className="find-bar" role="search" aria-label="Find in document">
-      <div className="find-row">
+      <label className="text-field find-field">
         <input
-          ref={findInput}
-          className="find-input"
+          ref={field}
+          placeholder=" "
           aria-label="Find in document"
-          placeholder="Find in document"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") go(event.shiftKey ? -1 : 1);
-            if (event.key === "Escape") close();
+            if (event.key === "Enter") {
+              event.preventDefault();
+              go(event.shiftKey ? -1 : 1);
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              close();
+            }
           }}
         />
-        <span className="find-count" aria-live="polite">
-          {query ? `${search.count === 0 ? 0 : search.current + 1} of ${search.count}` : ""}
+        <span className="text-field-label" aria-hidden>
+          Find in document
         </span>
-        <button type="button" className="icon-button small" aria-label="Previous match" disabled={search.count === 0} onClick={() => go(-1)}>
-          <Icon name="keyboard_arrow_up" />
-        </button>
-        <button type="button" className="icon-button small" aria-label="Next match" disabled={search.count === 0} onClick={() => go(1)}>
-          <Icon name="keyboard_arrow_down" />
-        </button>
-        <button type="button" className="icon-button small" aria-label="Close find" onClick={close}>
-          <Icon name="close" />
-        </button>
-      </div>
-      <div className="find-options">
-        <label>
-          <input
-            type="checkbox"
-            checked={search.caseSensitive}
-            onChange={(event) =>
-              editor.view.dispatch(setSearch(editor.state.tr, { caseSensitive: event.target.checked }))
-            }
-          />
-          Match case
-        </label>
-        {!showReplace && (
-          <button type="button" className="link-button" onClick={() => setShowReplace(true)}>
-            Replace…
-          </button>
+        {count && (
+          <span className="find-count" aria-live="polite">
+            {count}
+          </span>
         )}
-      </div>
-      {showReplace && (
-        <div className="find-row">
-          <input
-            className="find-input"
-            aria-label="Replace with"
-            placeholder="Replace with"
-            value={replacement}
-            onChange={(event) => setReplacement(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") apply(replaceCurrent);
-              if (event.key === "Escape") close();
-            }}
-          />
-          <button type="button" className="button-secondary small" disabled={search.count === 0} onClick={() => apply(replaceCurrent)}>
-            Replace
-          </button>
-          <button type="button" className="button-secondary small" disabled={search.count === 0} onClick={() => apply(replaceAll)}>
-            Replace all
-          </button>
-        </div>
-      )}
+      </label>
+      <button
+        type="button"
+        className="icon-button find-button"
+        aria-label="Previous"
+        data-tooltip="Previous"
+        disabled={!hasMatches}
+        onClick={() => go(-1)}
+      >
+        <Icon name="keyboard_arrow_up" />
+      </button>
+      <button
+        type="button"
+        className="icon-button find-button"
+        aria-label="Next"
+        data-tooltip="Next"
+        disabled={!hasMatches}
+        onClick={() => go(1)}
+      >
+        <Icon name="keyboard_arrow_down" />
+      </button>
+      <button
+        type="button"
+        className="icon-button find-button"
+        aria-label="More options"
+        data-tooltip="More options"
+        onClick={onMoreOptions}
+      >
+        <Icon name="more_vert" />
+      </button>
+      <button type="button" className="icon-button find-button" aria-label="Close" data-tooltip="Close" onClick={close}>
+        <Icon name="close" />
+      </button>
     </div>
   );
 }
