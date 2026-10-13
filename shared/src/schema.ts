@@ -7,12 +7,17 @@ import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table
 import TextAlign from "@tiptap/extension-text-align";
 import { Color, FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Strike from "@tiptap/extension-strike";
+import Subscript from "@tiptap/extension-subscript";
+import Superscript from "@tiptap/extension-superscript";
 import StarterKit from "@tiptap/starter-kit";
+import { checklistExtensions, ListPreset } from "./lists.ts";
+import { PageBreak } from "./pageBreak.ts";
 import { ParagraphFormat } from "./paragraphFormat.ts";
+import { headingLevels, ParagraphStyle } from "./paragraphStyles.ts";
 
 export const documentExtensions: AnyExtension[] = [
   StarterKit.configure({
-    heading: { levels: [1, 2, 3] },
+    heading: { levels: [...headingLevels] },
     link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
     // Undo history is configured by the editor so it can be left out on the server.
     undoRedo: false,
@@ -24,6 +29,9 @@ export const documentExtensions: AnyExtension[] = [
       return { "Mod-Shift-x": () => this.editor.commands.toggleStrike() };
     },
   }),
+  // Superscript (⌘.) and subscript (⌘,) exclude each other.
+  Superscript.extend({ excludes: "subscript" }),
+  Subscript.extend({ excludes: "superscript" }),
   TextStyle,
   Color,
   FontFamily,
@@ -31,6 +39,10 @@ export const documentExtensions: AnyExtension[] = [
   Highlight.configure({ multicolor: true }),
   TextAlign.configure({ types: ["heading", "paragraph"] }),
   ParagraphFormat,
+  ParagraphStyle,
+  ListPreset,
+  ...checklistExtensions,
+  PageBreak,
   Image.configure({ inline: false, allowBase64: false }),
   Table.configure({ resizable: false }),
   TableRow,

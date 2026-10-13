@@ -1,4 +1,3 @@
-import { DEFAULT_LINE_SPACING } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import type { ReactNode } from "react";
@@ -8,6 +7,7 @@ import { usePopover } from "../../components/usePopover.ts";
 import { withShortcut } from "../../components/shortcuts.ts";
 import type { EditorActions } from "../actions.ts";
 import { clearFormatting, selectedFontFamily, selectedFontSize } from "../extensions.ts";
+import { paragraphSpacingAt } from "../formatMenus.ts";
 import { currentParagraphStyle } from "../paragraphStyles.ts";
 import { ColorPicker } from "./ColorPicker.tsx";
 import { AlignControl, LineSpacingControl, ListControl, type Alignment } from "./ParagraphControls.tsx";
@@ -31,7 +31,6 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
   const state = useEditorState({
     editor,
     selector: ({ editor }) => {
-      const blockType = editor.isActive("heading") ? "heading" : "paragraph";
       return {
         canUndo: editor.can().undo(),
         canRedo: editor.can().redo(),
@@ -46,9 +45,9 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
         align: (["center", "right", "justify"] as const).find((align) => editor.isActive({ textAlign: align })) ?? "left",
         bulletList: editor.isActive("bulletList"),
         orderedList: editor.isActive("orderedList"),
+        checklist: editor.isActive("taskList"),
         hasSelection: !editor.state.selection.empty,
-        lineSpacing:
-          (editor.getAttributes(blockType).lineSpacing as number | null | undefined) ?? DEFAULT_LINE_SPACING,
+        spacing: paragraphSpacingAt(editor),
       };
     },
   });
@@ -155,13 +154,13 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     />,
     <Divider key="divider-insert" />,
     <AlignControl key="align" editor={editor} current={state.align as Alignment} />,
-    <LineSpacingControl key="line-spacing" editor={editor} actions={actions} current={state.lineSpacing} />,
+    <LineSpacingControl key="line-spacing" editor={editor} actions={actions} current={state.spacing} />,
     <ListControl
       key="checklist"
       kind="checklist"
       label={withShortcut("Checklist", "⌘+Shift+9")}
       icon="checklist"
-      active={false}
+      active={state.checklist}
       onToggle={actions.toggleChecklist}
       onPickPreset={actions.applyListPreset}
     />,

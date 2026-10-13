@@ -8,10 +8,13 @@ import { Icon } from "../components/Icon.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { shortcut } from "../components/shortcuts.ts";
 import type { EditorActions } from "./actions.ts";
+import { capitaliseSelection } from "./capitalisation.ts";
 import { getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
 import { CommentsPanel } from "./CommentsPanel.tsx";
+import { CustomSpacingDialog } from "./CustomSpacingDialog.tsx";
 import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
+import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
 import { HistoryPanel, RevisionPreview } from "./HistoryPanel.tsx";
 import { MenuBar } from "./MenuBar.tsx";
 import { OutlinePanel } from "./OutlinePanel.tsx";
@@ -41,6 +44,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [preview, setPreview] = useState<RevisionWithContent | null>(null);
   const [find, setFind] = useState<{ replace: boolean; request: number } | null>(null);
   const [wordCountOpen, setWordCountOpen] = useState(false);
+  const [customSpacing, setCustomSpacing] = useState<ParagraphSpacingState | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(() => localStorage.getItem(OUTLINE_SETTING) !== "false");
   const [threads, setThreads] = useState<CommentThread[]>(doc.comments);
   const [commentsOpen, setCommentsOpen] = useState(() => doc.comments.some((thread) => !thread.resolved));
@@ -314,7 +318,20 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     uploadImage: () => imageInput.current?.click(),
     insertImageByUrl: () => setImageUrlDialog(true),
     insertLink: () => handlers.current.openLinkDialog(),
+    insertPageBreak: () => editor.chain().focus().insertPageBreak().run(),
     addComment: startComment,
+    toggleSuperscript: () => editor.chain().focus().toggleSuperscript().run(),
+    toggleSubscript: () => editor.chain().focus().toggleSubscript().run(),
+    setCapitalisation: (capitalisation) => {
+      const transaction = capitaliseSelection(editor.state, capitalisation);
+      if (transaction) editor.view.dispatch(transaction);
+      editor.commands.focus();
+    },
+    toggleSpaceBefore: () => editor.chain().focus().toggleParagraphSpace("spaceBefore").run(),
+    toggleSpaceAfter: () => editor.chain().focus().toggleParagraphSpace("spaceAfter").run(),
+    customSpacing: () => setCustomSpacing(paragraphSpacingAt(editor)),
+    toggleChecklist: () => editor.chain().focus().toggleTaskList().run(),
+    applyListPreset: (kind, preset) => editor.chain().focus().applyListPreset(kind, preset).run(),
     wordCount: () => setWordCountOpen(true),
   };
 
@@ -448,6 +465,20 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           editor={editor}
           onClose={() => {
             setWordCountOpen(false);
+            editor.commands.focus();
+          }}
+        />
+      )}
+
+      {customSpacing && (
+        <CustomSpacingDialog
+          initial={customSpacing}
+          onApply={(spacing) => {
+            setCustomSpacing(null);
+            editor.chain().focus().setParagraphSpacing(spacing).run();
+          }}
+          onCancel={() => {
+            setCustomSpacing(null);
             editor.commands.focus();
           }}
         />

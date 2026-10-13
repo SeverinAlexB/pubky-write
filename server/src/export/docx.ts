@@ -8,6 +8,7 @@ import {
   ImageRun,
   LevelFormat,
   Packer,
+  PageBreak,
   Paragraph,
   ShadingType,
   Table,
@@ -15,21 +16,35 @@ import {
   TableRow,
   TextRun,
   WidthType,
+  type INumberingOptions,
   type IParagraphOptions,
+  type IStylesOptions,
   type ParagraphChild,
 } from "docx";
 import { imageSize } from "image-size";
 import type { Mark, Node } from "@tiptap/pm/model";
+import {
+  bulletPresets,
+  DEFAULT_LINE_SPACING,
+  numberedPresets,
+  paragraphStyleDefinitions,
+  type NumberFormat,
+  type ParagraphStyleDefinition,
+} from "@docs/shared";
 
 export type ImageReader = (src: string) => Promise<Buffer | null>;
 
 type Block = Paragraph | Table;
-type ListContext = { kind: "bullet" | "ordered"; level: number; instance: number };
+type ListKind = "bullet" | "ordered" | "task";
+/** Nested lists of the same kind use the preset and numbering instance of their outermost list. */
+type ListContext = { kind: ListKind; level: number; instance: number; preset: number };
 
 const MAX_IMAGE_WIDTH_PX = 600;
 /** Half an inch, matching the editor's indent step. */
 const TWIPS_PER_INDENT = 720;
-const ORDERED_LIST = "ordered-list";
+const TWIPS_PER_POINT = 20;
+const LIST_LEVELS = 9;
+const SUBTITLE_STYLE = "Subtitle";
 
 const alignments = {
   left: AlignmentType.LEFT,
@@ -38,34 +53,104 @@ const alignments = {
   justify: AlignmentType.JUSTIFIED,
 } as const;
 
-const headings = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3] as const;
+const headings = [
+  HeadingLevel.HEADING_1,
+  HeadingLevel.HEADING_2,
+  HeadingLevel.HEADING_3,
+  HeadingLevel.HEADING_4,
+  HeadingLevel.HEADING_5,
+  HeadingLevel.HEADING_6,
+] as const;
+
+const numberFormats: Record<NumberFormat, (typeof LevelFormat)[keyof typeof LevelFormat]> = {
+  decimal: LevelFormat.DECIMAL,
+  "lower-alpha": LevelFormat.LOWER_LETTER,
+  "upper-alpha": LevelFormat.UPPER_LETTER,
+  "lower-roman": LevelFormat.LOWER_ROMAN,
+};
 
 export async function toDocx(doc: Node, title: string, readImage: ImageReader): Promise<Buffer> {
   const converter = new DocxConverter(readImage);
   const children = await converter.blocks(doc);
-  const file = new Document({
-    title,
-    numbering: {
-      config: [
-        {
-          reference: ORDERED_LIST,
-          levels: Array.from({ length: 9 }, (_, level) => ({
-            level,
-            format: [LevelFormat.DECIMAL, LevelFormat.LOWER_LETTER, LevelFormat.LOWER_ROMAN][level % 3]!,
-            text: `%${level + 1}.`,
-            alignment: AlignmentType.START,
-            style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
-          })),
-        },
-      ],
-    },
-    sections: [{ children }],
-  });
+  const file = new Document({ title, styles, numbering, sections: [{ children }] });
   return Packer.toBuffer(file);
 }
 
+/** Word's paragraph style for one of the editor's styles. */
+function wordStyle(style: ParagraphStyleDefinition, id: string, name: string) {
+  return {
+    id,
+    name,
+    basedOn: "Normal",
+    next: "Normal",
+    quickFormat: true,
+    run: {
+      font: "Arial",
+      size: style.fontSize * 2,
+      color: style.color.slice(1).toUpperCase(),
+      italics: style.italic,
+      bold: false,
+    },
+    paragraph: {
+      spacing: { before: style.spaceBefore * TWIPS_PER_POINT, after: style.spaceAfter * TWIPS_PER_POINT },
+      keepNext: true,
+    },
+  };
+}
+
+const styles: IStylesOptions = {
+  default: {
+    document: {
+      run: { font: "Arial", size: paragraphStyleDefinitions.normal.fontSize * 2 },
+      paragraph: { spacing: { line: Math.round(240 * DEFAULT_LINE_SPACING), before: 0, after: 0 } },
+    },
+    title: wordStyle(paragraphStyleDefinitions.title, "Title", "Title"),
+    heading1: wordStyle(paragraphStyleDefinitions.h1, "Heading1", "Heading 1"),
+    heading2: wordStyle(paragraphStyleDefinitions.h2, "Heading2", "Heading 2"),
+    heading3: wordStyle(paragraphStyleDefinitions.h3, "Heading3", "Heading 3"),
+    heading4: wordStyle(paragraphStyleDefinitions.h4, "Heading4", "Heading 4"),
+    heading5: wordStyle(paragraphStyleDefinitions.h5, "Heading5", "Heading 5"),
+    heading6: wordStyle(paragraphStyleDefinitions.h6, "Heading6", "Heading 6"),
+  },
+  paragraphStyles: [wordStyle(paragraphStyleDefinitions.subtitle, SUBTITLE_STYLE, "Subtitle")],
+};
+
+/** Hanging indent of list level `level`: text at 0.5 in per level, the glyph 0.25 in before it. */
+const listIndent = (level: number) => ({ paragraph: { indent: { left: TWIPS_PER_INDENT * (level + 1), hanging: 360 } } });
+
+const bulletReference = (preset: number) => `bullet-${preset}`;
+const orderedReference = (preset: number) => `ordered-${preset}`;
+
+/** One Word numbering definition per bulleted and numbered preset. */
+const numbering: INumberingOptions = {
+  config: [
+    ...bulletPresets.map((glyphs, preset) => ({
+      reference: bulletReference(preset),
+      levels: Array.from({ length: LIST_LEVELS }, (_, level) => ({
+        level,
+        format: LevelFormat.BULLET,
+        text: glyphs[level % glyphs.length]!,
+        alignment: AlignmentType.START,
+        style: listIndent(level),
+      })),
+    })),
+    ...numberedPresets.map(({ formats, suffix, nested }, preset) => ({
+      reference: orderedReference(preset),
+      levels: Array.from({ length: LIST_LEVELS }, (_, level) => ({
+        level,
+        format: numberFormats[formats[level % formats.length]!],
+        text: nested
+          ? `${Array.from({ length: level + 1 }, (_, parent) => `%${parent + 1}`).join(".")}${suffix}`
+          : `%${level + 1}${suffix}`,
+        alignment: AlignmentType.START,
+        style: listIndent(level),
+      })),
+    })),
+  ],
+};
+
 class DocxConverter {
-  private orderedListCount = 0;
+  private listCount = 0;
 
   constructor(private readonly readImage: ImageReader) {}
 
@@ -78,7 +163,7 @@ class DocxConverter {
   private async block(node: Node, list: ListContext | undefined, quoted: boolean): Promise<Block[]> {
     const base: IParagraphOptions = {
       alignment: alignments[node.attrs.textAlign as keyof typeof alignments],
-      ...(node.attrs.lineSpacing && { spacing: { line: Math.round(240 * node.attrs.lineSpacing) } }),
+      ...(spacing(node) && { spacing: spacing(node) }),
       ...(node.attrs.indent && { indent: { left: TWIPS_PER_INDENT * node.attrs.indent } }),
       ...(quoted && { indent: { left: 720 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: "CCCCCC", space: 12 } } }),
       ...listOptions(list),
@@ -86,17 +171,30 @@ class DocxConverter {
 
     switch (node.type.name) {
       case "paragraph":
-        return [new Paragraph({ ...base, children: await this.inline(node) })];
+        return [
+          new Paragraph({
+            ...base,
+            ...(node.attrs.paragraphStyle === "title" && { heading: HeadingLevel.TITLE }),
+            ...(node.attrs.paragraphStyle === "subtitle" && { style: SUBTITLE_STYLE }),
+            children: await this.inline(node),
+          }),
+        ];
       case "heading":
         return [new Paragraph({ ...base, heading: headings[node.attrs.level - 1], children: await this.inline(node) })];
       case "blockquote":
         return this.blocks(node, list, true);
       case "bulletList":
-        return this.blocks(node, { kind: "bullet", level: nextLevel(list), instance: 0 }, quoted);
+        return this.blocks(node, this.nestedList(node, "bullet", list), quoted);
       case "orderedList":
-        return this.blocks(node, { kind: "ordered", level: nextLevel(list), instance: ++this.orderedListCount }, quoted);
+        return this.blocks(node, this.nestedList(node, "ordered", list), quoted);
+      case "taskList":
+        return this.blocks(node, this.nestedList(node, "task", list), quoted);
       case "listItem":
         return this.listItem(node, list, quoted);
+      case "taskItem":
+        return this.taskItem(node, list, quoted);
+      case "pageBreak":
+        return [new Paragraph({ children: [new PageBreak()] })];
       case "codeBlock":
         return [
           new Paragraph({
@@ -118,12 +216,41 @@ class DocxConverter {
     }
   }
 
+  private nestedList(node: Node, kind: ListKind, parent: ListContext | undefined): ListContext {
+    const level = parent ? Math.min(parent.level + 1, LIST_LEVELS - 1) : 0;
+    if (parent?.kind === kind) return { ...parent, level };
+    return { kind, level, instance: ++this.listCount, preset: node.attrs.listPreset ?? 0 };
+  }
+
   /** Only the first paragraph of an item carries the bullet or number; nested lists need the context for their level. */
   private async listItem(item: Node, list: ListContext | undefined, quoted: boolean): Promise<Block[]> {
     const blocks: Block[] = [];
     for (const [index, child] of children(item).entries()) {
-      const isNestedList = child.type.name === "bulletList" || child.type.name === "orderedList";
+      const isNestedList = ["bulletList", "orderedList", "taskList"].includes(child.type.name);
       blocks.push(...(await this.block(child, index === 0 || isNestedList ? list : undefined, quoted)));
+    }
+    return blocks;
+  }
+
+  /** Word has no checkboxes in plain paragraphs, so checklist items start with ☐ or ☑. */
+  private async taskItem(item: Node, list: ListContext | undefined, quoted: boolean): Promise<Block[]> {
+    const checked = item.attrs.checked === true;
+    const strike = checked && list?.preset === 1;
+    const indent = { left: TWIPS_PER_INDENT * ((list?.level ?? 0) + 1), hanging: 360 };
+    const blocks: Block[] = [];
+    for (const [index, child] of children(item).entries()) {
+      if (index === 0 && child.type.name === "paragraph") {
+        const runs = await this.inline(child, strike);
+        blocks.push(
+          new Paragraph({
+            alignment: alignments[child.attrs.textAlign as keyof typeof alignments],
+            indent,
+            children: [new TextRun({ text: `${checked ? "☑" : "☐"} `, strike: strike || undefined }), ...runs],
+          }),
+        );
+      } else {
+        blocks.push(...(await this.block(child, child.type.name === "taskList" ? list : undefined, quoted)));
+      }
     }
     return blocks;
   }
@@ -162,7 +289,7 @@ class DocxConverter {
     });
   }
 
-  private async inline(parent: Node): Promise<ParagraphChild[]> {
+  private async inline(parent: Node, strike = false): Promise<ParagraphChild[]> {
     const runs: ParagraphChild[] = [];
     for (const node of children(parent)) {
       if (node.type.name === "hardBreak") {
@@ -170,7 +297,7 @@ class DocxConverter {
       } else if (node.type.name === "image") {
         runs.push(await this.image(node));
       } else if (node.isText) {
-        const run = textRun(node.text ?? "", node.marks);
+        const run = textRun(node.text ?? "", node.marks, strike);
         const link = node.marks.find((mark) => mark.type.name === "link");
         runs.push(link ? new ExternalHyperlink({ link: link.attrs.href, children: [run] }) : run);
       }
@@ -179,7 +306,7 @@ class DocxConverter {
   }
 }
 
-function textRun(text: string, marks: readonly Mark[]): TextRun {
+function textRun(text: string, marks: readonly Mark[], strike = false): TextRun {
   const has = (name: string) => marks.some((mark) => mark.type.name === name);
   const attr = (name: string, key: string) => marks.find((mark) => mark.type.name === name)?.attrs[key];
   const color = hexColor(attr("textStyle", "color"));
@@ -188,9 +315,12 @@ function textRun(text: string, marks: readonly Mark[]): TextRun {
   const highlight = hexColor(attr("highlight", "color") ?? (has("highlight") ? "#FFFF00" : undefined));
   return new TextRun({
     text,
-    bold: has("bold"),
-    italics: has("italic"),
-    strike: has("strike"),
+    // Unset rather than false, so the paragraph style (such as Heading 6's italics) applies.
+    bold: has("bold") || undefined,
+    italics: has("italic") || undefined,
+    strike: strike || has("strike") || undefined,
+    superScript: has("superscript") || undefined,
+    subScript: has("subscript") || undefined,
     underline: has("underline") || has("link") ? {} : undefined,
     font: has("code") ? "Courier New" : fontFamily?.split(",")[0]?.replace(/["']/g, "").trim(),
     size: fontSize,
@@ -200,14 +330,20 @@ function textRun(text: string, marks: readonly Mark[]): TextRun {
 }
 
 function listOptions(list: ListContext | undefined): Partial<IParagraphOptions> {
-  if (!list) return {};
-  return list.kind === "bullet"
-    ? { bullet: { level: list.level } }
-    : { numbering: { reference: ORDERED_LIST, level: list.level, instance: list.instance } };
+  if (!list || list.kind === "task") return {};
+  const reference = list.kind === "bullet" ? bulletReference(list.preset) : orderedReference(list.preset);
+  return { numbering: { reference, level: list.level, instance: list.instance } };
 }
 
-function nextLevel(list: ListContext | undefined): number {
-  return list ? Math.min(list.level + 1, 8) : 0;
+/** Line spacing and the block's own space before and after; the rest comes from its Word style. */
+function spacing(node: Node): IParagraphOptions["spacing"] | undefined {
+  const { lineSpacing, spaceBefore, spaceAfter } = node.attrs;
+  const result = {
+    ...(lineSpacing && { line: Math.round(240 * lineSpacing) }),
+    ...(typeof spaceBefore === "number" && { before: Math.round(spaceBefore * TWIPS_PER_POINT) }),
+    ...(typeof spaceAfter === "number" && { after: Math.round(spaceAfter * TWIPS_PER_POINT) }),
+  };
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function children(node: Node): Node[] {

@@ -1,4 +1,3 @@
-import { DEFAULT_LINE_SPACING } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import { useCallback, useRef, useState } from "react";
@@ -7,7 +6,7 @@ import { shortcut } from "../components/shortcuts.ts";
 import { useDismiss } from "../components/useDismiss.ts";
 import type { EditorActions, ListKind, ViewSettings } from "./actions.ts";
 import { changeFontSize, clearFormatting } from "./extensions.ts";
-import { lineSpacingEntries } from "./formatMenus.ts";
+import { lineSpacingEntries, paragraphSpacingAt } from "./formatMenus.ts";
 import { ListPresetGrid } from "./ListPresets.tsx";
 import { currentParagraphStyle, paragraphStyles } from "./paragraphStyles.ts";
 import { TableSizePicker } from "./TableSizePicker.tsx";
@@ -18,14 +17,13 @@ type MenuBarProps = { editor: Editor; actions: EditorActions; view: ViewSettings
 type MenuState = ReturnType<typeof selectMenuState>;
 
 function selectMenuState({ editor }: { editor: Editor }) {
-  const blockType = editor.isActive("heading") ? "heading" : "paragraph";
   return {
     canUndo: editor.can().undo(),
     canRedo: editor.can().redo(),
     hasSelection: !editor.state.selection.empty,
     inTable: editor.isActive("table"),
     style: currentParagraphStyle(editor),
-    lineSpacing: (editor.getAttributes(blockType).lineSpacing as number | null | undefined) ?? DEFAULT_LINE_SPACING,
+    spacing: paragraphSpacingAt(editor),
   };
 }
 
@@ -310,7 +308,7 @@ function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): M
     {
       label: "Line & paragraph spacing",
       icon: "format_line_spacing",
-      submenu: lineSpacingEntries(editor, actions, state.lineSpacing),
+      submenu: lineSpacingEntries(editor, actions, state.spacing),
     },
     {
       label: "Bullets and numbering",

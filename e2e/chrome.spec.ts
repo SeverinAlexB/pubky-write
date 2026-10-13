@@ -148,7 +148,14 @@ test("styles and fonts are listed in their own look and applied", async ({ page 
   await editor(page).click();
   await page.getByRole("button", { name: "Styles" }).click();
   const styles = menu(page, "Styles");
-  await expect(styles.getByRole("menuitemcheckbox")).toHaveText(["Normal text", "Heading 1", "Heading 2", "Heading 3"]);
+  await expect(styles.getByRole("menuitemcheckbox")).toHaveText([
+    "Normal text",
+    "Title",
+    "Subtitle",
+    "Heading 1",
+    "Heading 2",
+    "Heading 3",
+  ]);
   await expect(styles.getByRole("menuitemcheckbox", { name: "Normal text" })).toHaveAttribute("aria-checked", "true");
   await styles.getByRole("menuitemcheckbox", { name: "Heading 1" }).hover();
   await expect(menu(page, "Heading 1").getByRole("menuitem", { name: "Apply 'Heading 1'" })).toBeVisible();

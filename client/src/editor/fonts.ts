@@ -39,9 +39,6 @@ export const fontSizes = [8, 9, 10, 11, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96];
 export const MIN_FONT_SIZE = 1;
 export const MAX_FONT_SIZE = 400;
 
-/** Point size of each block type when no explicit size is set (matches styles.css). */
-export const defaultFontSizes: Record<string, number> = { paragraph: 11, h1: 20, h2: 16, h3: 14 };
-
 /** Reads a stored size such as "11pt" (or "16px" from pasted content) as points. */
 export function parseFontSize(value: unknown): number | null {
   if (typeof value !== "string") return null;

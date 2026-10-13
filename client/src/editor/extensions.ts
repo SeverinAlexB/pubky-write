@@ -1,9 +1,9 @@
-import { documentExtensions } from "@docs/shared";
+import { documentExtensions, paragraphStyleDefinitions, paragraphStyleOf } from "@docs/shared";
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import type { Mark, Node } from "@tiptap/pm/model";
 import { UndoRedo } from "@tiptap/extensions";
 import { collab } from "prosemirror-collab";
-import { clampFontSize, DEFAULT_FONT, defaultFontSizes, parseFontSize, stepFontSize } from "./fonts.ts";
+import { clampFontSize, DEFAULT_FONT, parseFontSize, stepFontSize } from "./fonts.ts";
 import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
 import { Search } from "./search.ts";
 
@@ -62,32 +62,39 @@ export function editorExtensions({
       addKeyboardShortcuts() {
         return {
           // Like Docs, Tab never moves focus out of the document.
-          Tab: () => this.editor.commands.changeIndent(1) || true,
-          "Shift-Tab": () => this.editor.commands.changeIndent(-1) || true,
+          // In a list Tab only changes the list level, so a list item that cannot move stays put.
+          Tab: () => inList(this.editor) || this.editor.commands.changeIndent(1) || true,
+          "Shift-Tab": () => inList(this.editor) || this.editor.commands.changeIndent(-1) || true,
         };
       },
     }),
   ];
 }
 
+function inList(editor: Editor): boolean {
+  return editor.isActive("listItem") || editor.isActive("taskItem");
+}
+
 export function clearFormatting(editor: Editor): boolean {
   return editor.chain().focus().unsetAllMarks().setTextAlign("left").run();
 }
 
-/** The font size at the cursor in points, falling back to the block's default size. */
+/** The size of text without an explicit size: its paragraph style's size. */
+function styleFontSize(block: Node): number {
+  return paragraphStyleDefinitions[paragraphStyleOf(block)].fontSize;
+}
+
+/** The font size at the cursor in points, falling back to the paragraph style's size. */
 export function currentFontSize(editor: Editor): number {
   const explicit = parseFontSize(editor.getAttributes("textStyle").fontSize);
-  if (explicit) return explicit;
-  const level = editor.getAttributes("heading").level as number | undefined;
-  return defaultFontSizes[editor.isActive("heading") && level ? `h${level}` : "paragraph"]!;
+  return explicit ?? styleFontSize(editor.state.selection.$from.parent);
 }
 
 /** The font size of all selected text, or null when it differs (the toolbar then shows no value). */
 export function selectedFontSize(editor: Editor): number | null {
   return uniformTextValue(editor, (marks, block) => {
     const explicit = parseFontSize(marks.find((mark) => mark.type.name === "textStyle")?.attrs.fontSize);
-    const blockType = block.type.name === "heading" ? `h${block.attrs.level}` : "paragraph";
-    return explicit ?? defaultFontSizes[blockType] ?? defaultFontSizes.paragraph!;
+    return explicit ?? styleFontSize(block);
   });
 }
 

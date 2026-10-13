@@ -1,3 +1,5 @@
+import type { ListKind } from "@docs/shared";
+
 // Everything the menu bar and toolbar can do beyond plain editor commands.
 //
 // Optional actions belong to features that are not built yet. Menu items and toolbar
@@ -5,7 +7,7 @@
 // DocumentEditor enables them.
 
 export type DownloadFormat = "docx" | "pdf" | "txt" | "md";
-export type ListKind = "bullet" | "numbered" | "checklist";
+export type { ListKind };
 export type Capitalisation = "lowercase" | "uppercase" | "titleCase";
 
 export type EditorActions = {

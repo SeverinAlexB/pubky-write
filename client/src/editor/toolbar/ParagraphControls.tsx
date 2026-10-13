@@ -4,7 +4,7 @@ import { Menu } from "../../components/Menu.tsx";
 import { usePopover } from "../../components/usePopover.ts";
 import { withShortcut } from "../../components/shortcuts.ts";
 import type { EditorActions, ListKind } from "../actions.ts";
-import { lineSpacingEntries } from "../formatMenus.ts";
+import { lineSpacingEntries, type ParagraphSpacingState } from "../formatMenus.ts";
 import { ListPresetGrid } from "../ListPresets.tsx";
 import { ToolButton } from "./ToolButton.tsx";
 
@@ -65,7 +65,7 @@ export function LineSpacingControl({
 }: {
   editor: Editor;
   actions: EditorActions;
-  current: number | null;
+  current: ParagraphSpacingState;
 }) {
   return (
     <Menu

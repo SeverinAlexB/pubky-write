@@ -358,6 +358,26 @@ button:disabled {
   color: var(--primary);
 }
 
+.custom-spacing-dialog {
+  width: min(360px, 90vw);
+}
+
+.spacing-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.spacing-fields legend {
+  margin-bottom: 16px;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -1169,50 +1189,277 @@ button:disabled {
   cursor: copy;
 }
 
-.page-content > * + * {
-  margin-top: 0;
+/* Paragraph styles. Space before and after is padding, so it adds up between paragraphs
+   as in Word; the sizes and spacing match paragraphStyleDefinitions in shared/. */
+
+.page-content p,
+.page-content h1,
+.page-content h2,
+.page-content h3,
+.page-content h4,
+.page-content h5,
+.page-content h6 {
+  margin: 0;
+  line-height: 1.15;
 }
 
 .page-content p {
-  margin: 0;
   min-height: 1.15em;
 }
 
 .page-content h1,
 .page-content h2,
-.page-content h3 {
+.page-content h3,
+.page-content h4,
+.page-content h5,
+.page-content h6 {
   font-weight: 400;
-  line-height: 1.15;
+}
+
+.page-content p[data-paragraph-style="title"] {
+  padding-bottom: 3pt;
+  font-size: 26pt;
+}
+
+.page-content p[data-paragraph-style="subtitle"] {
+  padding-bottom: 16pt;
+  font-size: 15pt;
+  color: #666666;
 }
 
 .page-content h1 {
-  margin: 26px 0 8px;
-  font-size: 26.667px; /* 20pt */
+  padding: 20pt 0 6pt;
+  font-size: 20pt;
 }
 
 .page-content h2 {
-  margin: 24px 0 8px;
-  font-size: 21.333px; /* 16pt */
+  padding: 18pt 0 6pt;
+  font-size: 16pt;
 }
 
 .page-content h3 {
-  margin: 21px 0 5px;
-  font-size: 18.667px; /* 14pt */
+  padding: 16pt 0 4pt;
+  font-size: 14pt;
   color: #434343;
 }
 
+.page-content h4 {
+  padding: 14pt 0 4pt;
+  font-size: 12pt;
+  color: #666666;
+}
+
+.page-content h5 {
+  padding: 12pt 0 4pt;
+  font-size: 11pt;
+  color: #666666;
+}
+
+.page-content h6 {
+  padding: 12pt 0 4pt;
+  font-size: 11pt;
+  font-style: italic;
+  color: #666666;
+}
+
+/* Space before is not applied at the top of the document, even when set on the paragraph. */
 .page-content > :first-child {
   margin-top: 0;
+  padding-top: 0 !important;
+}
+
+.page-content sup,
+.page-content sub {
+  line-height: 0;
+}
+
+/* Lists: the glyph sits 28px and the text 48px right of the list's edge; each level adds 48px.
+   Glyphs come from the outermost list's preset (custom properties set on it and inherited),
+   and repeat every three levels. */
+
+.page-content {
+  --bullet-1: "●";
+  --bullet-2: "○";
+  --bullet-3: "■";
+  --number-1: counter(list-item, decimal) ".";
+  --number-2: counter(list-item, lower-alpha) ".";
+  --number-3: counter(list-item, lower-roman) ".";
+}
+
+.page-content ul[data-list-preset="1"]:not(li *) {
+  --bullet-1: "❖";
+  --bullet-2: "➢";
+  --bullet-3: "■";
+}
+
+.page-content ul[data-list-preset="2"]:not(li *) {
+  --bullet-1: "→";
+  --bullet-2: "◆";
+  --bullet-3: "●";
+}
+
+.page-content ul[data-list-preset="3"]:not(li *) {
+  --bullet-1: "★";
+  --bullet-2: "○";
+  --bullet-3: "■";
+}
+
+.page-content ol[data-list-preset="1"]:not(li *) {
+  --number-1: counter(list-item, upper-alpha) ".";
+}
+
+.page-content ol[data-list-preset="2"]:not(li *) {
+  --number-1: counter(list-item, decimal) ")";
+  --number-2: counter(list-item, lower-alpha) ")";
+  --number-3: counter(list-item, lower-roman) ")";
+}
+
+.page-content ol[data-list-preset="3"]:not(li *) {
+  --number-1: counters(list-item, ".") ".";
+  --number-2: counters(list-item, ".") ".";
+  --number-3: counters(list-item, ".") ".";
 }
 
 .page-content ul,
 .page-content ol {
   margin: 0;
   padding-left: 48px;
+  list-style: none;
+}
+
+.page-content li {
+  position: relative;
+}
+
+.page-content li::before {
+  position: absolute;
+  top: 0;
+  left: -20px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+/* Numbers start at the same place as bullets, but longer ones (10., 1.1.) grow to the left. */
+.page-content ol > li::before {
+  right: 100%;
+  left: auto;
+  min-width: 14px;
+  padding-right: 6px;
+}
+
+.page-content ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-1);
+}
+
+.page-content li ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-2);
+}
+
+.page-content li li ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-3);
+}
+
+.page-content li li li ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-1);
+}
+
+.page-content li li li li ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-2);
+}
+
+.page-content li li li li li ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-3);
+}
+
+.page-content li li li li li li ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-1);
+}
+
+.page-content li li li li li li li ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-2);
+}
+
+.page-content li li li li li li li li ul:not([data-type="taskList"]) > li::before {
+  content: var(--bullet-3);
+}
+
+.page-content ol > li::before {
+  content: var(--number-1);
+}
+
+.page-content li ol > li::before {
+  content: var(--number-2);
+}
+
+.page-content li li ol > li::before {
+  content: var(--number-3);
+}
+
+.page-content li li li ol > li::before {
+  content: var(--number-1);
+}
+
+.page-content li li li li ol > li::before {
+  content: var(--number-2);
+}
+
+.page-content li li li li li ol > li::before {
+  content: var(--number-3);
+}
+
+.page-content li li li li li li ol > li::before {
+  content: var(--number-1);
+}
+
+.page-content li li li li li li li ol > li::before {
+  content: var(--number-2);
+}
+
+.page-content li li li li li li li li ol > li::before {
+  content: var(--number-3);
+}
+
+/* Checklists */
+
+.page-content ul[data-type="taskList"] > li > label {
+  position: absolute;
+  top: 0;
+  left: -20px;
+  display: flex;
+  align-items: center;
+  height: 1.15em;
+  user-select: none;
+}
+
+.page-content ul[data-type="taskList"] > li > label input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.page-content ul[data-type="taskList"][data-list-preset="1"]:not(li *) li[data-checked="true"] > div > p {
+  color: #80868b;
+  text-decoration: line-through;
 }
 
 .page-content li > p {
   margin: 0;
+}
+
+/* Page breaks: a dashed line on screen, a new page in print. */
+
+.page-content .page-break {
+  height: 0;
+  margin: 12px 0;
+  border-top: 1px dashed #9aa0a6;
+}
+
+.page-content .page-break.ProseMirror-selectednode {
+  border-top-color: var(--blue);
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 
 .page-content a {
@@ -1736,5 +1983,12 @@ button:disabled {
 
   .page-content {
     min-height: 0;
+  }
+
+  .page-content .page-break {
+    margin: 0;
+    border: 0;
+    outline: 0;
+    break-after: page;
   }
 }

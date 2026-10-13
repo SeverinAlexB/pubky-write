@@ -1,5 +1,9 @@
 // Converts a document to GitHub-flavoured Markdown. Formatting Markdown cannot express
-// (underline, highlight, alignment, colour) uses inline HTML or is dropped.
+// (underline, highlight, superscript, subscript, alignment, colour) uses inline HTML or is dropped.
+//
+// Title becomes a level 1 heading and Subtitle a plain paragraph, so the Markdown outline
+// keeps one top-level heading per title. A page break becomes an HTML comment, which keeps
+// it in the file without drawing anything.
 import { documentSchema } from "./schema.ts";
 import { defaultMarkdownSerializer, MarkdownSerializer, type MarkdownSerializerState } from "prosemirror-markdown";
 import type { Node } from "@tiptap/pm/model";
@@ -8,10 +12,17 @@ const defaults = defaultMarkdownSerializer.nodes;
 
 const serializer: MarkdownSerializer = new MarkdownSerializer(
   {
-    paragraph: defaults.paragraph!,
+    paragraph(state, node, parent, index) {
+      if (node.attrs.paragraphStyle === "title") state.write("# ");
+      defaults.paragraph!(state, node, parent, index);
+    },
     heading: defaults.heading!,
     blockquote: defaults.blockquote!,
     horizontalRule: defaults.horizontal_rule!,
+    pageBreak(state, node) {
+      state.write("<!-- page break -->");
+      state.closeBlock(node);
+    },
     // Images are blocks in this schema; the default serializer treats them as inline.
     image(state, node, parent, index) {
       defaults.image!(state, node, parent, index);
@@ -23,6 +34,10 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
     bulletList(state, node) {
       state.renderList(node, "  ", () => "- ");
     },
+    taskList(state, node) {
+      state.renderList(node, "  ", (index) => (node.child(index).attrs.checked ? "- [x] " : "- [ ] "));
+    },
+    taskItem: defaults.list_item!,
     orderedList(state, node) {
       const start: number = node.attrs.start ?? 1;
       const width = String(start + node.childCount - 1).length;
@@ -47,6 +62,8 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
     link: defaultMarkdownSerializer.marks.link!,
     strike: { open: "~~", close: "~~", mixable: true, expelEnclosingWhitespace: true },
     underline: { open: "<u>", close: "</u>", mixable: true, expelEnclosingWhitespace: true },
+    superscript: { open: "<sup>", close: "</sup>", mixable: true, expelEnclosingWhitespace: true },
+    subscript: { open: "<sub>", close: "</sub>", mixable: true, expelEnclosingWhitespace: true },
     highlight: { open: "<mark>", close: "</mark>", mixable: true, expelEnclosingWhitespace: true },
     textStyle: { open: "", close: "", mixable: true },
   },

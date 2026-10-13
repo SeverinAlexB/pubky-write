@@ -8,7 +8,7 @@ import { shortcut, withShortcut } from "../../components/shortcuts.ts";
 import type { EditorActions } from "../actions.ts";
 import { changeFontSize, setFontSize } from "../extensions.ts";
 import { DEFAULT_FONT, fontFamilies, fontSizes, recentFonts, rememberRecentFont } from "../fonts.ts";
-import { paragraphStyles, type ParagraphStyle } from "../paragraphStyles.ts";
+import { applyParagraphStyle, paragraphStyles, type ParagraphStyle } from "../paragraphStyles.ts";
 import { ToolButton } from "./ToolButton.tsx";
 
 function DropdownLabel({ value }: { value: string }) {
@@ -48,7 +48,7 @@ export function StylesControl({
 
 /** A paragraph style as a menu entry, used by the Styles dropdown and Format > Paragraph styles. */
 export function styleEntry(editor: Editor, style: ParagraphStyle, current: ParagraphStyle | null): MenuEntry {
-  const apply = () => style.apply(editor);
+  const apply = () => applyParagraphStyle(editor, style);
   return {
     label: style.label,
     content: (

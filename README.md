@@ -37,12 +37,15 @@ npm start          # http://localhost:3001
 
 - **Document list:** create, open, rename, delete, search titles and contents,
   sort by last opened, last modified or title.
-- **Editor:** paragraph styles (normal text, headings 1–3), fonts and font
-  sizes, bold, italic, underline, strikethrough (Format > Text, ⌘⇧X), text and
-  highlight colour, paint format, links, images (upload, by URL, paste or drag
-  and drop), tables (Insert > Table size grid), bulleted and numbered lists,
-  alignment, line spacing, indentation (Tab, Shift+Tab, ⌘] and ⌘[), quotes,
-  code blocks, horizontal lines, undo and redo, zoom (presets, typed or Fit).
+- **Editor:** paragraph styles (Normal text, Title, Subtitle, Heading 1–6,
+  ⌘⌥0–6), fonts and font sizes, bold, italic, underline, strikethrough (⌘⇧X),
+  superscript (⌘.), subscript (⌘,), capitalisation (lowercase, UPPERCASE,
+  Title Case), text and highlight colour, paint format, links, images (upload,
+  by URL, paste or drag and drop), tables (Insert > Table size grid), bulleted
+  and numbered lists with glyph and numbering presets, checklists (⌘⇧9),
+  alignment, line spacing, space before and after paragraphs (Custom spacing),
+  indentation (Tab, Shift+Tab, ⌘] and ⌘[), page breaks (⌘↵), quotes, code
+  blocks, horizontal lines, undo and redo, zoom (presets, typed or Fit).
 - **Menus and toolbar:** a File / Edit / View / Insert / Format / Tools menu
   bar with submenus and keyboard navigation, and a toolbar whose controls move
   into a "More" row when the window is narrow. Menu items for features that
@@ -60,8 +63,12 @@ npm start          # http://localhost:3001
   of inactivity. Select a version to preview it, then restore it. Restoring
   replaces only the text that differs, so comments on unchanged text survive.
 - **Export:** File > Download as Microsoft Word (.docx), plain text (.txt) or
-  Markdown (.md). PDF uses the browser's print dialog with print styles that
-  output only the page. Edit > Copy as Markdown copies the selection.
+  Markdown (.md). Word files use Word's Title, Subtitle and Heading 1–6 styles.
+  In Markdown, Title becomes a level 1 heading, Subtitle a plain paragraph,
+  checklists `- [ ]` / `- [x]`, superscript and subscript `<sup>` / `<sub>`,
+  and a page break the comment `<!-- page break -->`. PDF uses the browser's
+  print dialog with print styles that output only the page. Edit > Copy as
+  Markdown copies the selection.
 - **Make a copy:** File > Make a copy creates "Copy of <title>" without the
   comments.
 
@@ -138,7 +145,8 @@ npm run typecheck
 ## Limitations
 
 - One user, no accounts or sharing.
-- The page is one continuous sheet; page breaks appear only when printing.
+- The page is one continuous sheet; page breaks show as a dashed line and
+  start a new page only when printing.
 - Comments are listed in a side panel rather than aligned next to their text,
   and they are not included in exports.
 - No suggestion mode or real-time collaboration yet.
