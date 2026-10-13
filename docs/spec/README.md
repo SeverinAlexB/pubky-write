@@ -43,3 +43,18 @@ editor's user interface on 2026-10-13 (window 1440 × 900, en-GB locale).
 
 Each document ends with acceptance criteria. A feature is done when its
 criteria pass in an end-to-end test and the existing tests still pass.
+
+## Revisions
+
+### Round 1 (after comparing the first implementation with the reference)
+
+- 02: Format > Paragraph styles shows plain text items, not previews.
+- 03/04: Six bullet presets and six numbering presets in 3 × 2 grids; the
+  bulleted list menu ends with a "Checklist menu ▸" item; preset tile layout.
+- 05: Find and replace has no scrim, focuses the Find field, and ⌘+Shift+H must
+  not change formatting (it currently toggles a highlight on the selection).
+  Word count rows are 52px with 14px text and a 24px title.
+- 07: The tab's comment badge is a white circle with dark text.
+- 08: The version history panel runs the full window height on `#f1f4f8`, has
+  a full-width outlined "All versions" box, and shows the selected version as
+  a white card.

@@ -67,17 +67,26 @@ outside the list they step by 1. Allowed range 1–400.
 
 - First-level list items: the glyph sits about 28px and the text 48px right
   of the paragraph's left edge. Each nested level adds 48px.
-- Bulleted list presets (2 × 2 grid, each preview showing three levels):
+- Preset grids show each preset as a small bordered tile (about 60 × 75px,
+  1px `#c4c7c5` border, radius 2px) previewing five lines: level 1, level 2,
+  level 2, level 3, level 1, each glyph or number followed by a grey bar. The
+  current preset tile has a primary-colour border.
+- Bulleted list presets (3 columns × 2 rows, in this order):
   1. ● ○ ■ (default)
   2. ❖ ➢ ■
-  3. → ◆ ●
-  4. ★ ○ ■
+  3. ❏ ❏ ❏ (a square with a drop shadow at every level)
+  4. ➔ ◆ ●
+  5. ★ ○ ■
+  6. ➢ ○ ■
   The glyph for a level repeats cyclically for deeper levels.
-- Numbered list presets (P2 for anything beyond the first two):
+- Numbered list presets (3 columns × 2 rows, in this order):
   1. 1. a. i. (default)
-  2. A. a. i.
-  3. 1) a) i)
-  4. 1. 1.1. 1.1.1.
+  2. 1) a) i)
+  3. 1. 1.1. 1.1.1. (outline numbering; the preview's third line reads
+     "1.2.", its fourth "1.2.1.")
+  4. A. a. i.
+  5. I. A. 1.
+  6. 01. a. i. (two-digit, zero-padded first level)
 - Checklist (⌘+Shift+9): each item has a checkbox. Two presets: plain, and
   "strike through checked items" (checked items are struck through and grey).
   Clicking a checkbox toggles it; the state is saved with the document.

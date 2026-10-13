@@ -19,7 +19,10 @@ full width.
 - The single tab as a pill row (height 40px, radius 20px, primary container
   background `#d3e3fd` when it is the current tab): a document icon, the name
   "Tab 1" in primary text colour, a small round badge with the number of open
-  comments (only if > 0), and a ⋮ button (P2: Rename).
+  comments (only if > 0; a 20px white circle with the number in 12px dark
+  text, not a filled colour), and a ⋮ button (P2: Rename).
+- A "+" button at the right of the "Document tabs" header is out of scope (one
+  tab only); leave the space empty.
 - Under the tab, the outline: every heading (Title, Heading 1–6) in document
   order. A 1px vertical guide line runs along the left of the list.
   Indentation: 12px per heading level below the highest level used.

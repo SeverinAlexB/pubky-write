@@ -21,9 +21,13 @@
 
 ## Find and replace dialog (⌘+Shift+H)
 
-- A modal dialog centred over the editor, 396px wide, radius 28px, 24px
-  padding. The document stays visible and matches stay highlighted behind the
-  scrim.
+- A dialog centred over the editor, 396px wide, radius 28px, 24px padding,
+  with the card shadow and **no scrim**: the document stays fully visible
+  (not dimmed) with its matches highlighted. Keyboard focus stays in the
+  dialog while it is open.
+- When the dialog opens, focus is in the "Find" field with its text selected.
+- ⌘+Shift+H only opens this dialog; it must not change the document or the
+  formatting of the selection.
 - Title "Find and replace" with a "Close" (×) button at the top right.
 - "Find" outlined field (floating label) with "N of M" inside on the right.
 - "Replace with" outlined field.
@@ -45,12 +49,15 @@
 
 ## Word count (⌘+Shift+C)
 
-- A modal dialog, 349px wide, radius 28px, title "Word count".
-- A table of four rows separated by 1px dividers, label left and value right:
+- A modal dialog (with scrim), 349px wide, radius 28px, 24px padding, title
+  "Word count" in 24px regular weight.
+- A table of four rows, each 52px tall, separated by 1px dividers, 14px text
+  with 16px horizontal padding, label left and value right:
   "Pages", "Words", "Characters", "Characters excluding spaces". With a
   selection, values read "X of Y" (selection of total); Pages shows the page of
   the cursor "1 of 3".
-- Below: a checkbox "Display word count while typing".
+- Below: a checkbox (18px box) with the 16px label "Display word count while
+  typing".
 - Buttons "Cancel" (text) and "OK" (filled), right-aligned.
 - When "Display word count while typing" is on (persisted per user), a small
   floating chip at the bottom left of the editor area shows "N words" (or

@@ -97,8 +97,9 @@ be shown. "—" is a separator.
   Decrease font size ⌘+Shift+,); Capitalisation ▸ (lowercase, UPPERCASE,
   Title Case)
 - Paragraph styles ▸ — Normal text, Title, Subtitle, Heading 1 … Heading 6,
-  each with a submenu "Apply '<style>'". Each entry is rendered in its own
-  style (scaled down, see 03 Styles).
+  then a separator and "Options ▸" (P2). Entries here are **plain menu text in
+  the normal menu font, not previews** (previews are only in the toolbar's
+  Styles dropdown, see 03). Each entry has a submenu "Apply '<style>'".
 - Align and indent ▸ — Left ⌘+Shift+L; Centre ⌘+Shift+E; Right ⌘+Shift+R;
   Justified ⌘+Shift+J; — ; Increase indent ⌘+]; Decrease indent ⌘+[;
   Indentation options (P2 dialog)

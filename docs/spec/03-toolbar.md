@@ -36,8 +36,8 @@ with 1px × 20px vertical dividers where marked "|". Every control has a tooltip
 | 21 | Align and indent | an align icon showing the current alignment with ▾; opens a horizontal row of four icon buttons (Left, Centre, Right, Justified) with the current one selected | 39 |
 | 22 | Line & paragraph spacing | icon; opens the same menu as Format > Line & paragraph spacing | 32 |
 | 23 | Checklist | "Checklist (⌘+Shift+9)" toggles a checklist; a narrow ▾ beside it ("Checklist menu") opens two presets: checkbox only, and checkbox with strike-through of checked items | 30 + 12 |
-| 24 | Bulleted list | "Bulleted list (⌘+Shift+8)"; ▾ "Bulleted list menu" opens a 2 × 2 grid of glyph presets (see 04) | 30 + 12 |
-| 25 | Numbered list | "Numbered list (⌘+Shift+7)"; ▾ "Numbered list menu" opens a grid of numbering presets (see 04) | 30 + 12 |
+| 24 | Bulleted list | "Bulleted list (⌘+Shift+8)"; ▾ "Bulleted list menu" opens a 3 × 2 grid of the six glyph presets (see 04), then a separator and a "Checklist menu ▸" item (checklist icon) whose submenu shows the two checklist presets | 30 + 12 |
+| 25 | Numbered list | "Numbered list (⌘+Shift+7)"; ▾ "Numbered list menu" opens a 3 × 2 grid of the six numbering presets (see 04) | 30 + 12 |
 | 26 | Decrease indent | "Decrease indent (⌘+[)" | 30 |
 | 27 | Increase indent | "Increase indent (⌘+])" | 30 |
 | 28 | Clear formatting | "Clear formatting (⌘+\)" | 30 |
