@@ -177,6 +177,42 @@ test("styles and fonts are listed in their own look and applied", async ({ page 
   await expect(fonts.getByRole("menuitemcheckbox", { name: "Verdana" })).toHaveCount(2);
 });
 
+test("Format > Paragraph styles lists the styles as plain menu text; only the Styles dropdown previews them", async ({
+  page,
+}) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.getByRole("button", { name: "Format", exact: true }).click();
+  await menu(page, "Format").getByRole("menuitem", { name: "Paragraph styles" }).hover();
+  const styles = menu(page, "Paragraph styles");
+  await expect(styles.locator(":scope > li > button")).toHaveText([
+    "Normal text",
+    "Title",
+    "Subtitle",
+    "Heading 1",
+    "Heading 2",
+    "Heading 3",
+    "Heading 4",
+    "Heading 5",
+    "Heading 6",
+    "Options",
+  ]);
+  await expect(styles.locator(":scope > .menu-separator")).toHaveCount(1);
+  await expect(styles.locator(".style-preview")).toHaveCount(0);
+  // Every entry uses the normal menu font.
+  const fonts = await styles
+    .locator(".menu-item-label")
+    .evaluateAll((labels) => labels.map((label) => `${getComputedStyle(label).fontSize} ${getComputedStyle(label).fontWeight}`));
+  expect(new Set(fonts)).toEqual(new Set(["14px 400"]));
+  await styles.getByRole("menuitemcheckbox", { name: "Heading 4" }).hover();
+  await menu(page, "Heading 4").getByRole("menuitem", { name: "Apply 'Heading 4'" }).click();
+  await expect(editor(page).locator("h4")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Styles" }).click();
+  await expect(menu(page, "Styles").locator(".style-preview")).toHaveCount(6);
+});
+
 test("menus switch on hover, open submenus with hover and →, and close with Escape", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();

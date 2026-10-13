@@ -37,7 +37,8 @@ export const documentExtensions: AnyExtension[] = [
   Color,
   FontFamily,
   FontSize,
-  Highlight.configure({ multicolor: true }),
+  // ⌘+Shift+H opens Find and replace, so the highlight has no shortcut of its own.
+  Highlight.extend({ addKeyboardShortcuts: () => ({}) }).configure({ multicolor: true }),
   TextAlign.configure({ types: ["heading", "paragraph"] }),
   ParagraphFormat,
   ParagraphStyle,

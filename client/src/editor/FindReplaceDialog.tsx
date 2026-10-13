@@ -1,13 +1,17 @@
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Icon } from "../components/Icon.tsx";
 import { selectionQuery, useMatchCount } from "./FindBar.tsx";
 import { getSearchState, goToMatch, replaceAll, replaceCurrent, selectCurrentMatch, setSearch } from "./search.ts";
 
-/** Edit > Find and replace (⌘⇧H). The matches stay highlighted in the document behind the scrim. */
+/**
+ * Edit > Find and replace (⌘⇧H). A modal dialog without a scrim, so the document and its
+ * highlighted matches stay fully visible; focus starts in Find and stays in the dialog.
+ */
 export function FindReplaceDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const findField = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(() => selectionQuery(editor) ?? getSearchState(editor.state).query);
   const [replacement, setReplacement] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
@@ -20,7 +24,11 @@ export function FindReplaceDialog({ editor, onClose }: { editor: Editor; onClose
     },
   });
 
-  useEffect(() => dialog.current?.showModal(), []);
+  useEffect(() => {
+    dialog.current?.showModal();
+    findField.current?.focus();
+    findField.current?.select();
+  }, []);
 
   useEffect(() => {
     editor.view.dispatch(setSearch(editor.state.tr, { query }));
@@ -54,6 +62,9 @@ export function FindReplaceDialog({ editor, onClose }: { editor: Editor; onClose
         event.preventDefault();
         close();
       }}
+      onKeyDown={(event) => {
+        if (event.key === "Tab") keepFocusInside(event.currentTarget, event);
+      }}
     >
       <div className="dialog-title-row">
         <h2 id="find-replace-title">Find and replace</h2>
@@ -63,7 +74,7 @@ export function FindReplaceDialog({ editor, onClose }: { editor: Editor; onClose
       </div>
       <label className="text-field find-field">
         <input
-          autoFocus
+          ref={findField}
           placeholder=" "
           aria-label="Find"
           value={query}
@@ -163,4 +174,19 @@ export function FindReplaceDialog({ editor, onClose }: { editor: Editor; onClose
       </div>
     </dialog>
   );
+}
+
+/** Tab from the last control goes to the first one and Shift+Tab from the first to the last. */
+function keepFocusInside(dialog: HTMLElement, event: KeyboardEvent) {
+  const focusable = [...dialog.querySelectorAll<HTMLElement>("input, button")].filter(
+    (element) => !element.matches(":disabled") && element.offsetParent !== null,
+  );
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!first || !last) return;
+  const target = event.shiftKey ? last : first;
+  const edge = event.shiftKey ? first : last;
+  if (document.activeElement !== edge && dialog.contains(document.activeElement)) return;
+  event.preventDefault();
+  target.focus();
 }

@@ -87,6 +87,56 @@ test("version history mode replaces the header and toolbar with a top bar and li
   await expect(panel(page)).toBeVisible();
 });
 
+test("the version history panel runs the full window height with an outlined filter box and the selected version as a white card", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await createThreeVersions(page);
+  await openHistory(page);
+
+  const panelBox = (await panel(page).boundingBox())!;
+  expect(panelBox).toEqual({ x: 1440 - 320, y: 0, width: 320, height: 900 });
+  await expect(panel(page)).toHaveCSS("background-color", "rgb(241, 244, 248)");
+  await expect(panel(page)).toHaveCSS("padding", "16px");
+  // The top bar spans the window width minus the panel.
+  const topBar = (await page.locator(".history-top-bar").boundingBox())!;
+  expect(topBar.x).toBe(0);
+  expect(topBar.width).toBe(1440 - 320);
+
+  // Header row at the very top: "Version history" (14px, medium) and a ⋮ button.
+  const heading = panel(page).getByRole("heading", { name: "Version history" });
+  await expect(heading).toHaveCSS("font-size", "14px");
+  await expect(heading).toHaveCSS("font-weight", "500");
+  expect((await heading.boundingBox())!.y).toBeLessThan(30);
+  const menuButton = panel(page).getByRole("button", { name: "Version history options" });
+  await expect(menuButton).toBeVisible();
+  expect((await menuButton.boundingBox())!.x).toBeGreaterThan(1440 - 60);
+
+  // A full-width outlined box for All versions / Named versions.
+  const filter = panel(page).getByRole("button", { name: "Show versions" });
+  const filterBox = (await filter.boundingBox())!;
+  expect(filterBox.width).toBe(320 - 32);
+  expect(filterBox.height).toBe(40);
+  await expect(filter).toHaveCSS("border", "1px solid rgb(116, 119, 117)");
+  await expect(filter).toHaveCSS("border-radius", "4px");
+  await expect(filter).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await filter.click();
+  await expect(page.getByRole("menuitemcheckbox")).toHaveText(["All versions", "Named versions"]);
+  await page.keyboard.press("Escape");
+
+  // Entries sit on the panel background; the selected one is a white card.
+  const card = (index: number) => versions(page).nth(index).locator(".version-select");
+  await expect(card(0)).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(card(0)).toHaveCSS("border-radius", "8px");
+  await expect(card(0)).toHaveCSS("padding-left", "12px");
+  await expect(card(0)).toHaveCSS("padding-top", "12px");
+  await expect(card(0)).toHaveCSS("box-shadow", "none");
+  await expect(card(1)).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await selectVersion(page, 1);
+  await expect(card(1)).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(card(0)).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+});
+
 test("an older version shows its additions highlighted and the number of edits", async ({ page }) => {
   await createThreeVersions(page);
   await openHistory(page);

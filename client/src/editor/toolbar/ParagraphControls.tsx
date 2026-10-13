@@ -5,7 +5,7 @@ import { usePopover } from "../../components/usePopover.ts";
 import { withShortcut } from "../../components/shortcuts.ts";
 import type { EditorActions, ListKind } from "../actions.ts";
 import { lineSpacingEntries, type ParagraphSpacingState } from "../formatMenus.ts";
-import { ListPresetGrid } from "../ListPresets.tsx";
+import { ListPresetMenu } from "../ListPresets.tsx";
 import { ToolButton } from "./ToolButton.tsx";
 
 export type Alignment = "left" | "center" | "right" | "justify";
@@ -83,12 +83,14 @@ type ListControlProps = {
   label: string;
   icon: IconName;
   active: boolean;
+  /** The preset of each kind of list at the cursor. */
+  presets: Record<ListKind, number | null>;
   onToggle?: () => void;
   onPickPreset?: (kind: ListKind, preset: number) => void;
 };
 
 /** A list toggle with a narrow ▾ beside it that opens the list's presets. */
-export function ListControl({ kind, label, icon, active, onToggle, onPickPreset }: ListControlProps) {
+export function ListControl({ kind, label, icon, active, presets, onToggle, onPickPreset }: ListControlProps) {
   const { open, setOpen, close, root } = usePopover();
   const name = label.replace(/ \(.*\)$/, "");
 
@@ -111,12 +113,13 @@ export function ListControl({ kind, label, icon, active, onToggle, onPickPreset 
         <Icon name="arrow_drop_down" size={16} />
       </button>
       {open && onPickPreset && (
-        <div className="toolbar-popover">
-          <ListPresetGrid
+        <div className="toolbar-popover list-popover">
+          <ListPresetMenu
             kind={kind}
-            onPick={(preset) => {
+            current={presets}
+            onPick={(pickedKind, preset) => {
               close();
-              onPickPreset(kind, preset);
+              onPickPreset(pickedKind, preset);
             }}
           />
         </div>

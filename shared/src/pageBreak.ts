@@ -48,6 +48,10 @@ export const PageBreak = Node.create({
   },
 
   addKeyboardShortcuts() {
-    return { "Mod-Enter": () => this.editor.commands.insertPageBreak() };
+    // Where a page break cannot go (a code block), leave the block instead; ⌘+Enter never falls
+    // through to the hard break extension's line break.
+    return {
+      "Mod-Enter": () => this.editor.commands.insertPageBreak() || this.editor.commands.exitCode() || true,
+    };
   },
 });

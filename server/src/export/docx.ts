@@ -27,6 +27,7 @@ import type { Mark, Node } from "@tiptap/pm/model";
 import {
   bulletPresets,
   DEFAULT_LINE_SPACING,
+  listPresetIndex,
   numberedPresets,
   pageSetupOf,
   paperSizes,
@@ -67,9 +68,11 @@ const headings = [
 
 const numberFormats: Record<NumberFormat, (typeof LevelFormat)[keyof typeof LevelFormat]> = {
   decimal: LevelFormat.DECIMAL,
+  "decimal-leading-zero": LevelFormat.DECIMAL_ZERO,
   "lower-alpha": LevelFormat.LOWER_LETTER,
   "upper-alpha": LevelFormat.UPPER_LETTER,
   "lower-roman": LevelFormat.LOWER_ROMAN,
+  "upper-roman": LevelFormat.UPPER_ROMAN,
 };
 
 export async function toDocx(doc: Node, title: string, readImage: ImageReader): Promise<Buffer> {
@@ -152,7 +155,7 @@ const orderedReference = (preset: number) => `ordered-${preset}`;
 /** One Word numbering definition per bulleted and numbered preset. */
 const numbering: INumberingOptions = {
   config: [
-    ...bulletPresets.map((glyphs, preset) => ({
+    ...bulletPresets.map(({ glyphs }, preset) => ({
       reference: bulletReference(preset),
       levels: Array.from({ length: LIST_LEVELS }, (_, level) => ({
         level,
@@ -247,7 +250,7 @@ class DocxConverter {
   private nestedList(node: Node, kind: ListKind, parent: ListContext | undefined): ListContext {
     const level = parent ? Math.min(parent.level + 1, LIST_LEVELS - 1) : 0;
     if (parent?.kind === kind) return { ...parent, level };
-    return { kind, level, instance: ++this.listCount, preset: node.attrs.listPreset ?? 0 };
+    return { kind, level, instance: ++this.listCount, preset: listPresetIndex(node.type.name, node.attrs.listPreset) };
   }
 
   /** Only the first paragraph of an item carries the bullet or number; nested lists need the context for their level. */

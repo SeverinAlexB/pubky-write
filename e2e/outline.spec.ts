@@ -187,6 +187,16 @@ test("the tab shows the number of open comments", async ({ page }) => {
   }
   await expect(badge).toHaveText("2");
   await expect(badge).toHaveAccessibleName("2 open comments");
+  // A 20px white circle with the number in 12px dark text.
+  await expect(badge).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(badge).toHaveCSS("color", "rgb(31, 31, 31)");
+  await expect(badge).toHaveCSS("font-size", "12px");
+  await expect(badge).toHaveCSS("border-radius", "10px");
+  const badgeBox = (await badge.boundingBox())!;
+  expect(badgeBox.width).toBe(20);
+  expect(badgeBox.height).toBe(20);
+  // One tab only: no "+" button next to "Document tabs".
+  await expect(sidebar(page).getByRole("button", { name: /add|new tab|\+/i })).toHaveCount(0);
 
   await page.getByRole("article", { name: 'Comment on "one"' }).click();
   await page.getByRole("button", { name: "Mark as resolved and hide discussion" }).click();

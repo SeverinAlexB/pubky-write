@@ -177,10 +177,13 @@ test("the Find and replace dialog has its controls in order and ignores diacriti
   await expect(dialog.getByRole("checkbox", { name: "Match case" })).not.toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /Use regular expressions/ })).not.toBeChecked();
 
+  // No scrim: the document behind the dialog is not dimmed.
+  expect(await dialog.evaluate((element) => getComputedStyle(element, "::backdrop").backgroundColor)).toBe("rgba(0, 0, 0, 0)");
   const findField = dialog.getByRole("textbox", { name: "Find", exact: true });
+  await expect(findField).toBeFocused();
   await findField.fill("cafe");
   await expect(dialog.getByText("1 of 3")).toBeVisible();
-  // The matches stay highlighted in the document behind the scrim.
+  // The matches stay highlighted in the document behind the dialog.
   await expect(editor(page).locator(".search-match")).toHaveCount(3);
   await expect(editor(page).locator(".search-match-current")).toHaveText("café");
 
@@ -205,6 +208,68 @@ test("the Find and replace dialog has its controls in order and ignores diacriti
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
+});
+
+test("⌘+Shift+H only opens Find and replace, with the selected text in the Find field selected", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("Mark this word");
+  await page.keyboard.press(lineEnd);
+  for (let step = 0; step < 4; step++) await page.keyboard.press("Shift+ArrowLeft");
+  await selectionSynced(page);
+  const before = await editor(page).innerHTML();
+
+  await page.keyboard.press(`${mod}+Shift+h`);
+  const dialog = page.getByRole("dialog", { name: "Find and replace" });
+  await expect(dialog).toBeVisible();
+  const findField = dialog.getByRole("textbox", { name: "Find", exact: true });
+  await expect(findField).toBeFocused();
+  await expect(findField).toHaveValue("word");
+  expect(await findField.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([0, 4]);
+  // The shortcut neither highlights the selection nor changes the document in any other way.
+  await expect(editor(page).locator("mark")).toHaveCount(0);
+
+  // Focus stays in the dialog: Tab from the last control wraps to the first, Shift+Tab back.
+  const inDialog = () => dialog.evaluate((element) => element.contains(document.activeElement));
+  for (let step = 0; step < 15; step++) {
+    await page.keyboard.press("Tab");
+    expect(await inDialog()).toBe(true);
+  }
+  await findField.focus();
+  for (let step = 0; step < 3; step++) {
+    await page.keyboard.press("Shift+Tab");
+    expect(await inDialog()).toBe(true);
+  }
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(await editor(page).innerHTML()).toBe(before);
+  await expect(editor(page).locator("mark")).toHaveCount(0);
+});
+
+test("default editor shortcuts do not collide with the documented ones", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+
+  // ⌘+Option+1 twice keeps Heading 1 (the heading extension's own shortcut would toggle it off).
+  await page.keyboard.type("Heading");
+  await page.keyboard.press(`${mod}+Alt+1`);
+  await page.keyboard.press(`${mod}+Alt+1`);
+  await expect(editor(page).locator("h1")).toHaveText("Heading");
+  await page.keyboard.press(`${mod}+Alt+0`);
+  await expect(editor(page).locator("h1")).toHaveCount(0);
+
+  // ⌘+Enter is a page break, never a line break, even in a code block.
+  await page.keyboard.press(lineEnd);
+  await page.keyboard.press(`${mod}+Enter`);
+  await expect(editor(page).locator(".page-break")).toHaveCount(1);
+  await expect(editor(page).locator("br:not(.ProseMirror-trailingBreak)")).toHaveCount(0);
+  await page.keyboard.type("``` ");
+  await page.keyboard.type("code");
+  await expect(editor(page).locator("pre")).toHaveCount(1);
+  await page.keyboard.press(`${mod}+Enter`);
+  await expect(editor(page).locator("pre")).toHaveText("code");
+  await expect(editor(page).locator("br:not(.ProseMirror-trailingBreak)")).toHaveCount(0);
 });
 
 test("Find and replace replaces one match at a time, all of them in one undo step, and with regular expressions", async ({
@@ -264,6 +329,17 @@ test("word count shows pages, words and characters, for the selection too", asyn
   await page.keyboard.press(`${mod}+Shift+c`);
   const dialog = page.getByRole("dialog", { name: "Word count" });
   expect((await dialog.boundingBox())!.width).toBe(349);
+  await expect(dialog.getByRole("heading", { name: "Word count" })).toHaveCSS("font-size", "24px");
+  const rowHeights = await dialog.getByRole("row").evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
+  // 52px rows; the dividers between rows add their pixel.
+  for (const height of rowHeights) expect(height).toBeGreaterThanOrEqual(52);
+  for (const height of rowHeights) expect(height).toBeLessThanOrEqual(53);
+  const firstLabel = dialog.getByRole("rowheader").first();
+  await expect(firstLabel).toHaveCSS("font-size", "14px");
+  await expect(firstLabel).toHaveCSS("padding-left", "16px");
+  await expect(dialog.getByRole("cell").first()).toHaveCSS("padding-right", "16px");
+  await expect(dialog.getByRole("checkbox", { name: "Display word count while typing" })).toHaveCSS("width", "18px");
+  await expect(dialog.locator(".word-count-live")).toHaveCSS("font-size", "16px");
   await expect(dialog.getByRole("row")).toHaveText([
     /^Pages\s*1 of 1$/,
     /^Words\s*4$/,

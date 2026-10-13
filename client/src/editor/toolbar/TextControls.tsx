@@ -46,16 +46,19 @@ export function StylesControl({
   );
 }
 
-/** A paragraph style as a menu entry, used by the Styles dropdown and Format > Paragraph styles. */
-export function styleEntry(editor: Editor, style: ParagraphStyle, current: ParagraphStyle | null): MenuEntry {
+/**
+ * A paragraph style as a menu entry. The Styles dropdown draws each name in its style
+ * (`preview`); Format > Paragraph styles uses plain menu text.
+ */
+export function styleEntry(editor: Editor, style: ParagraphStyle, current: ParagraphStyle | null, preview = true): MenuEntry {
   const apply = () => applyParagraphStyle(editor, style);
   return {
     label: style.label,
-    content: (
+    content: preview ? (
       <span className="style-preview" style={style.preview}>
         {style.label}
       </span>
-    ),
+    ) : undefined,
     checked: current?.id === style.id,
     onSelect: apply,
     submenu: [

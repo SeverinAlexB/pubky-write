@@ -196,6 +196,32 @@ describe("toDocx", () => {
     expect(numbering).toContain('<w:lvlText w:val="★"/>');
     expect(numbering).toContain('<w:lvlText w:val="%1.%2.%3."/>');
     expect(numbering).toContain('<w:numFmt w:val="upperLetter"/>');
+    expect(numbering).toContain('<w:numFmt w:val="upperRoman"/>');
+    expect(numbering).toContain('<w:numFmt w:val="decimalZero"/>');
+    for (const glyph of ["❏", "➔", "➢"]) expect(numbering).toContain(`<w:lvlText w:val="${glyph}"/>`);
+  });
+
+  it("numbers lists with the preset stored as an id or as an index in the old order", async () => {
+    const list = (listPreset: unknown) => ({
+      type: "orderedList",
+      attrs: { start: 1, listPreset },
+      content: [{ type: "listItem", content: [paragraph(text("Item"))] }],
+    });
+    const doc = Node.fromJSON(documentSchema, { type: "doc", content: [list("upper-roman"), list(1)] });
+    const numbering = await documentXml(await toDocx(doc, "Lists", async () => null), "word/numbering.xml");
+    // Each list gets its own numbering instance pointing at its preset's definition, by preset index.
+    const abstractOf = (instance: number) =>
+      numbering.match(new RegExp(`<w:num w:numId="${instance}"[^>]*>\\s*<w:abstractNumId w:val="(\\d+)"/>`))?.[1];
+    const abstracts = [...numbering.matchAll(/<w:num w:numId="(\d+)"/g)].map((match) => abstractOf(Number(match[1])));
+    expect(abstracts.length).toBeGreaterThanOrEqual(2);
+    const firstLevel = (abstractId: string | undefined) => {
+      const start = numbering.indexOf(`<w:abstractNum w:abstractNumId="${abstractId}"`);
+      return numbering.slice(start, numbering.indexOf("</w:lvl>", start));
+    };
+    const used = abstracts.slice(-2).map(firstLevel);
+    expect(used[0]).toContain('<w:numFmt w:val="upperRoman"/>');
+    // 1 was "A. a. i." in the old order.
+    expect(used[1]).toContain('<w:numFmt w:val="upperLetter"/>');
   });
 
 

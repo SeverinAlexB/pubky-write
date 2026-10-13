@@ -1,3 +1,4 @@
+import { listPresetAt } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import { useCallback, useRef, useState } from "react";
@@ -7,7 +8,7 @@ import { useDismiss } from "../components/useDismiss.ts";
 import type { EditorActions, ListKind, ViewSettings } from "./actions.ts";
 import { changeFontSize, clearFormatting } from "./extensions.ts";
 import { lineSpacingEntries, paragraphSpacingAt } from "./formatMenus.ts";
-import { ListPresetGrid } from "./ListPresets.tsx";
+import { ListPresetMenu } from "./ListPresets.tsx";
 import { currentParagraphStyle, paragraphStyles } from "./paragraphStyles.ts";
 import { TableSizePicker } from "./TableSizePicker.tsx";
 import { styleEntry } from "./toolbar/TextControls.tsx";
@@ -24,6 +25,11 @@ function selectMenuState({ editor }: { editor: Editor }) {
     inTable: editor.isActive("table"),
     style: currentParagraphStyle(editor),
     spacing: paragraphSpacingAt(editor),
+    listPresets: {
+      bullet: listPresetAt(editor.state, "bullet"),
+      numbered: listPresetAt(editor.state, "numbered"),
+      checklist: listPresetAt(editor.state, "checklist"),
+    },
   };
 }
 
@@ -291,10 +297,11 @@ function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): M
     {
       label: "Paragraph styles",
       icon: "format_paragraph",
-      submenu: paragraphStyles.flatMap((style, index): MenuEntry[] => [
-        ...(index > 0 ? ["separator" as const] : []),
-        styleEntry(editor, style, state.style),
-      ]),
+      submenu: [
+        ...paragraphStyles.map((style) => styleEntry(editor, style, state.style, false)),
+        "separator",
+        { label: "Options", onSelect: actions.styleOptions },
+      ],
     },
     {
       label: "Align and indent",
@@ -319,9 +326,9 @@ function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): M
       label: "Bullets and numbering",
       icon: "format_list_bulleted",
       submenu: [
-        listPresetEntry("Numbered list menu", "numbered", actions),
-        listPresetEntry("Bulleted list menu", "bullet", actions),
-        listPresetEntry("Checklist menu", "checklist", actions),
+        listPresetEntry("Numbered list menu", "numbered", actions, state),
+        listPresetEntry("Bulleted list menu", "bullet", actions, state),
+        listPresetEntry("Checklist menu", "checklist", actions, state),
       ],
     },
     "separator",
@@ -348,17 +355,18 @@ function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): M
   ];
 }
 
-function listPresetEntry(label: string, kind: ListKind, actions: EditorActions): MenuItem {
+function listPresetEntry(label: string, kind: ListKind, actions: EditorActions, state: MenuState): MenuItem {
   const apply = actions.applyListPreset;
   return {
     label,
     disabled: !apply,
     panel: (close) => (
-      <ListPresetGrid
+      <ListPresetMenu
         kind={kind}
-        onPick={(preset) => {
+        current={state.listPresets}
+        onPick={(pickedKind, preset) => {
           close();
-          apply?.(kind, preset);
+          apply?.(pickedKind, preset);
         }}
       />
     ),

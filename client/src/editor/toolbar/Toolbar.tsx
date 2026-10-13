@@ -1,3 +1,4 @@
+import { listPresetAt } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import type { ReactNode } from "react";
@@ -46,6 +47,11 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
         bulletList: editor.isActive("bulletList"),
         orderedList: editor.isActive("orderedList"),
         checklist: editor.isActive("taskList"),
+        listPresets: {
+          bullet: listPresetAt(editor.state, "bullet"),
+          numbered: listPresetAt(editor.state, "numbered"),
+          checklist: listPresetAt(editor.state, "checklist"),
+        },
         hasSelection: !editor.state.selection.empty,
         spacing: paragraphSpacingAt(editor),
       };
@@ -162,6 +168,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
       icon="checklist"
       active={state.checklist}
       onToggle={actions.toggleChecklist}
+      presets={state.listPresets}
       onPickPreset={actions.applyListPreset}
     />,
     <ListControl
@@ -171,6 +178,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
       icon="format_list_bulleted"
       active={state.bulletList}
       onToggle={() => run().toggleBulletList().run()}
+      presets={state.listPresets}
       onPickPreset={actions.applyListPreset}
     />,
     <ListControl
@@ -180,6 +188,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
       icon="format_list_numbered"
       active={state.orderedList}
       onToggle={() => run().toggleOrderedList().run()}
+      presets={state.listPresets}
       onPickPreset={actions.applyListPreset}
     />,
     <ToolButton key="outdent" label={withShortcut("Decrease indent", "⌘+[")} onClick={() => run().changeIndent(-1).run()}>

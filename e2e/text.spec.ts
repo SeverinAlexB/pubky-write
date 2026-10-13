@@ -31,6 +31,17 @@ async function chooseFormat(page: Page, ...path: string[]): Promise<void> {
   }
 }
 
+/** Opens Format and hovers through the submenus, leaving the last one open. */
+async function chooseFormatHover(page: Page, ...path: string[]): Promise<void> {
+  await page.getByRole("button", { name: "Format", exact: true }).click();
+  let parent = menu(page, "Format");
+  for (const label of path) {
+    await parent.getByRole("menuitem", { name: label, exact: true }).hover();
+    parent = page.getByRole("menu", { name: label, exact: true }).or(page.getByRole("group", { name: label, exact: true }));
+    await expect(parent).toBeVisible();
+  }
+}
+
 async function css(locator: Locator, property: string, pseudo?: string): Promise<string> {
   return locator.evaluate(
     (element, [name, pseudoElement]) => getComputedStyle(element, pseudoElement).getPropertyValue(name!),
@@ -217,7 +228,7 @@ test("list presets change the glyphs and numbering of the current list", async (
   await page.getByRole("button", { name: "Bulleted list menu" }).click();
   await page.getByRole("button", { name: "Star, circle, square" }).click();
   expect(await glyphs()).toEqual(['"★"', '"○"', '"■"', '"★"']);
-  await expect(editor(page).locator("ul").first()).toHaveAttribute("data-list-preset", "3");
+  await expect(editor(page).locator("ul").first()).toHaveAttribute("data-list-preset", "star");
 
   await waitUntilSaved(page);
   await page.reload();
@@ -228,8 +239,141 @@ test("list presets change the glyphs and numbering of the current list", async (
   await editor(page).locator("li p").first().click();
   await page.getByRole("button", { name: "Numbered list menu" }).click();
   await page.getByRole("button", { name: "1) a) i)" }).click();
-  await expect(editor(page).locator("ol").first()).toHaveAttribute("data-list-preset", "2");
+  await expect(editor(page).locator("ol").first()).toHaveAttribute("data-list-preset", "decimal-parenthesis");
   expect(await css(editor(page).locator("ol > li").first(), "content", "::before")).toBe('counter(list-item) ")"');
+});
+
+test("list menus show six presets in 3 × 2 grids and the bulleted list menu ends with the checklist presets", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("One");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Two");
+  await page.keyboard.press(`${mod}+a`);
+
+  await page.getByRole("button", { name: "Bulleted list menu" }).click();
+  const bullets = page.getByRole("group", { name: "bullet presets" });
+  const bulletTiles = bullets.getByRole("button");
+  await expect(bulletTiles).toHaveCount(6);
+  await expect(bulletTiles.first()).toHaveCSS("border", "1px solid rgb(196, 199, 197)");
+  await expect(bulletTiles.first()).toHaveCSS("border-radius", "2px");
+  const boxes = await bulletTiles.evaluateAll((tiles) => tiles.map((tile) => tile.getBoundingClientRect().toJSON()));
+  // Three columns, two rows; tiles of about 60 × 75px.
+  expect(new Set(boxes.map((box) => box.x)).size).toBe(3);
+  expect(new Set(boxes.map((box) => box.y)).size).toBe(2);
+  expect(boxes[0].width).toBeCloseTo(60, 0);
+  expect(boxes[0].height).toBeCloseTo(75, 0);
+  // Each tile previews five lines: levels 1, 2, 2, 3 and 1.
+  await expect(bulletTiles.nth(2).locator(".list-preset-glyph")).toHaveText(["❏", "❏", "❏", "❏", "❏"]);
+  await expect(bulletTiles.nth(3).locator(".list-preset-glyph")).toHaveText(["➔", "◆", "◆", "●", "➔"]);
+  await expect(bulletTiles.nth(5).locator(".list-preset-glyph")).toHaveText(["➢", "○", "○", "■", "➢"]);
+
+  // Not in a list yet: no tile is current.
+  await expect(bullets.locator(".is-current")).toHaveCount(0);
+  await bulletTiles.nth(2).click();
+  const firstItem = editor(page).locator("li").first();
+  await expect.poll(() => css(firstItem, "content", "::before")).toBe('"❏"');
+  await page.getByRole("button", { name: "Bulleted list menu" }).click();
+  await expect(bulletTiles.nth(2)).toHaveClass(/is-current/);
+  await expect(bulletTiles.nth(2)).toHaveCSS("border-top-color", "rgb(11, 87, 208)");
+
+  // The menu ends with a separator and "Checklist menu ▸" opening the two checklist presets.
+  await page.keyboard.press("Escape");
+  await editor(page).getByText("One").click();
+  await page.getByRole("button", { name: "Bulleted list menu" }).click();
+  const popover = page.locator(".list-popover");
+  await expect(popover.locator(".menu-separator")).toHaveCount(1);
+  await popover.getByRole("menuitem", { name: "Checklist menu" }).hover();
+  const checklists = page.getByRole("group", { name: "Checklist menu" });
+  await expect(checklists.getByRole("button")).toHaveText([/☐/, /☑/]);
+  await checklists.getByRole("button", { name: "Checklist with strike-through" }).click();
+  await expect(editor(page).getByRole("checkbox")).toHaveCount(2);
+  await expect(editor(page).locator('ul[data-type="taskList"]')).toHaveAttribute("data-list-preset", "strike-through");
+
+  // Numbered presets: 1. a. i.; 1) a) i); 1. 1.1. 1.1.1.; A. a. i.; I. A. 1.; 01. a. i.
+  await page.getByRole("button", { name: "Numbered list menu" }).click();
+  const numberTiles = page.getByRole("group", { name: "numbered presets" }).getByRole("button");
+  await expect(numberTiles).toHaveCount(6);
+  const markers = (index: number) => numberTiles.nth(index).locator(".list-preset-glyph");
+  await expect(markers(0)).toHaveText(["1.", "a.", "b.", "i.", "2."]);
+  await expect(markers(1)).toHaveText(["1)", "a)", "b)", "i)", "2)"]);
+  await expect(markers(2)).toHaveText(["1.", "1.1.", "1.2.", "1.2.1.", "2."]);
+  await expect(markers(3)).toHaveText(["A.", "a.", "b.", "i.", "B."]);
+  await expect(markers(4)).toHaveText(["I.", "A.", "B.", "1.", "II."]);
+  await expect(markers(5)).toHaveText(["01.", "a.", "b.", "i.", "02."]);
+
+  const numbers = async () =>
+    Promise.all([0, 1].map(async (index) => editor(page).locator("ol > li").nth(index).evaluate((item) => {
+      const list = item.parentElement!;
+      return getComputedStyle(item, "::before").content + "|" + list.getAttribute("data-list-preset");
+    })));
+  await numberTiles.nth(4).click();
+  await expect.poll(numbers).toEqual(['counter(list-item, upper-roman) "."|upper-roman', 'counter(list-item, upper-roman) "."|upper-roman']);
+  await page.getByRole("button", { name: "Numbered list menu" }).click();
+  await numberTiles.nth(5).click();
+  await expect.poll(() => css(editor(page).locator("ol > li").first(), "content", "::before")).toBe(
+    'counter(list-item, decimal-leading-zero) "."',
+  );
+
+  // Format > Bullets and numbering shows the same grids.
+  await chooseFormatHover(page, "Bullets and numbering", "Bulleted list menu");
+  await expect(page.getByRole("group", { name: "bullet presets" }).getByRole("button")).toHaveCount(6);
+  await expect(page.getByRole("group", { name: "Bulleted list menu" }).getByRole("menuitem", { name: "Checklist menu" })).toBeVisible();
+  await page.keyboard.press("Escape");
+});
+
+test("a numbered list inside a bulleted list uses its own preset", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.press(`${mod}+Shift+8`);
+  await page.keyboard.type("Bullet");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("Nested");
+  await page.getByRole("button", { name: "Numbered list menu" }).click();
+  await page.getByRole("button", { name: "I. A. 1." }).click();
+
+  const nested = editor(page).locator("ul > li ol > li").first();
+  // The second level of I. A. 1. is A.
+  await expect.poll(() => css(nested, "content", "::before")).toBe('counter(list-item, upper-alpha) "."');
+  expect(await css(editor(page).locator("ul > li").first(), "content", "::before")).toBe('"●"');
+});
+
+test("lists saved with presets in the old order keep their glyphs and numbering", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.press(`${mod}+Shift+7`);
+  await page.keyboard.type("Old numbering");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press(`${mod}+Shift+8`);
+  await page.keyboard.type("Old bullets");
+
+  // Before presets had ids, the attribute held the index in the old menu order:
+  // numbered 1 was A. a. i. and bulleted 2 was → ◆ ●.
+  await page.evaluate(() => {
+    type View = { state: { doc: { forEach: (visit: (node: { type: { name: string } }, offset: number) => void) => void }; tr: { setNodeAttribute: (pos: number, name: string, value: unknown) => unknown } }; dispatch: (tr: unknown) => void };
+    const view = (document.querySelector(".ProseMirror") as unknown as { editor: { view: View } }).editor.view;
+    const tr = view.state.tr;
+    view.state.doc.forEach((node, offset) => {
+      if (node.type.name === "orderedList") tr.setNodeAttribute(offset, "listPreset", 1);
+      if (node.type.name === "bulletList") tr.setNodeAttribute(offset, "listPreset", 2);
+    });
+    view.dispatch(tr);
+  });
+  await expect(editor(page).locator("ol")).toHaveAttribute("data-list-preset", "upper-alpha");
+  await expect(editor(page).locator("ul")).toHaveAttribute("data-list-preset", "arrow");
+  await expect.poll(() => css(editor(page).locator("ol > li").first(), "content", "::before")).toBe(
+    'counter(list-item, upper-alpha) "."',
+  );
+  await expect.poll(() => css(editor(page).locator("ul > li").first(), "content", "::before")).toBe('"➔"');
+
+  await waitUntilSaved(page);
+  await page.reload();
+  await expect(editor(page).locator("ol")).toHaveAttribute("data-list-preset", "upper-alpha");
+  await page.getByText("Old numbering").click();
+  await page.getByRole("button", { name: "Numbered list menu" }).click();
+  await expect(page.getByRole("group", { name: "numbered presets" }).getByRole("button", { name: "A. a. i." })).toHaveClass(/is-current/);
 });
 
 test("checklist items can be checked, struck through and stay checked after reload", async ({ page }) => {

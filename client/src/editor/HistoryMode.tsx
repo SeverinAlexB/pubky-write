@@ -149,110 +149,116 @@ export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, on
 
   return (
     <div className="history-mode">
-      <header className="history-top-bar">
-        <button type="button" className="icon-button" aria-label="Back" data-tooltip="Back" onClick={onBack}>
-          <Icon name="arrow_back" size={24} />
-        </button>
-        <h1 className="history-title">{selected ? (selected.name ?? formatVersionTitle(selected.endedAt)) : "Version history"}</h1>
-      </header>
-      <div className="history-toolbar" role="toolbar" aria-label="Version history toolbar">
-        <ToolButton label="Print" onClick={() => window.print()}>
-          <Icon name="print" />
-        </ToolButton>
-        <ZoomControl zoom={zoom} onChange={setZoom} />
-        <span className="history-toolbar-spacer" />
-        {highlight && comparison && (
-          <>
-            <span className="history-edit-count" aria-live="polite">
-              Total: {editCount} {editCount === 1 ? "edit" : "edits"}
-            </span>
-            <button
-              type="button"
-              className="icon-button history-edit-button"
-              aria-label="Previous edit"
-              data-tooltip="Previous edit"
-              disabled={currentEdit === null || currentEdit === 0}
-              onClick={() => goToEdit((currentEdit ?? 0) - 1)}
-            >
-              <Icon name="keyboard_arrow_up" />
-            </button>
-            <button
-              type="button"
-              className="icon-button history-edit-button"
-              aria-label="Next edit"
-              data-tooltip="Next edit"
-              disabled={currentEdit === editCount - 1 || editCount === 0}
-              onClick={() => goToEdit(currentEdit === null ? 0 : currentEdit + 1)}
-            >
-              <Icon name="keyboard_arrow_down" />
-            </button>
-          </>
-        )}
-      </div>
+      <div className="history-main">
+        <header className="history-top-bar">
+          <button type="button" className="icon-button" aria-label="Back" data-tooltip="Back" onClick={onBack}>
+            <Icon name="arrow_back" size={24} />
+          </button>
+          <h1 className="history-title">{selected ? (selected.name ?? formatVersionTitle(selected.endedAt)) : "Version history"}</h1>
+        </header>
+        <div className="history-toolbar" role="toolbar" aria-label="Version history toolbar">
+          <ToolButton label="Print" onClick={() => window.print()}>
+            <Icon name="print" />
+          </ToolButton>
+          <ZoomControl zoom={zoom} onChange={setZoom} />
+          <span className="history-toolbar-spacer" />
+          {highlight && comparison && (
+            <>
+              <span className="history-edit-count" aria-live="polite">
+                Total: {editCount} {editCount === 1 ? "edit" : "edits"}
+              </span>
+              <button
+                type="button"
+                className="icon-button history-edit-button"
+                aria-label="Previous edit"
+                data-tooltip="Previous edit"
+                disabled={currentEdit === null || currentEdit === 0}
+                onClick={() => goToEdit((currentEdit ?? 0) - 1)}
+              >
+                <Icon name="keyboard_arrow_up" />
+              </button>
+              <button
+                type="button"
+                className="icon-button history-edit-button"
+                aria-label="Next edit"
+                data-tooltip="Next edit"
+                disabled={currentEdit === editCount - 1 || editCount === 0}
+                onClick={() => goToEdit(currentEdit === null ? 0 : currentEdit + 1)}
+              >
+                <Icon name="keyboard_arrow_down" />
+              </button>
+            </>
+          )}
+        </div>
 
-      <div className="history-body">
-        <div className="editor-scroll history-scroll" ref={fit.ref}>
-          <div className="page-column" hidden={!comparison}>
-            <div className="page-stack" style={{ zoom: effectiveZoom }}>
-              {/* One sheet per page, drawn by the pagination plugin. */}
-              <div className="page-sheets" aria-hidden />
-              <EditorContent editor={preview} />
+        <div className="history-body">
+          <div className="editor-scroll history-scroll" ref={fit.ref}>
+            <div className="page-column" hidden={!comparison}>
+              <div className="page-stack" style={{ zoom: effectiveZoom }}>
+                {/* One sheet per page, drawn by the pagination plugin. */}
+                <div className="page-sheets" aria-hidden />
+                <EditorContent editor={preview} />
+              </div>
             </div>
           </div>
         </div>
-
-        <aside className="history-panel" aria-label="Version history">
-          <div className="history-panel-header">
-            <h2>Version history</h2>
-          </div>
-          <div className="history-filter">
-            <Menu
-              label={
-                <>
-                  {filter === "all" ? "All versions" : "Named versions"}
-                  <Icon name="arrow_drop_down" />
-                </>
-              }
-              ariaLabel="Show versions"
-              buttonClassName="history-filter-button"
-              listClassName="history-filter-menu"
-              entries={[
-                { label: "All versions", checked: filter === "all", onSelect: () => setFilter("all") },
-                { label: "Named versions", checked: filter === "named", onSelect: () => setFilter("named") },
-              ]}
-            />
-          </div>
-          {error && <p className="error">Couldn't load version history: {error}</p>}
-          {revisions && shown.length === 0 && (
-            <p className="empty">{filter === "named" ? "No named versions yet." : "No versions yet."}</p>
-          )}
-          <div className="history-versions">
-            {groupByDay(shown).map(({ day, versions }) => (
-              <section key={day} className="history-day" aria-label={day}>
-                <h3>{day}</h3>
-                <ol>
-                  {versions.map((revision) => (
-                    <VersionEntry
-                      key={revision.id}
-                      revision={revision}
-                      current={revision.id === newestId}
-                      selected={revision.id === selected?.id}
-                      onSelect={() => setSelectedId(revision.id)}
-                      onRestore={() => setRestoring(revision)}
-                      onName={() => setNaming(revision)}
-                      onMakeCopy={() => void onMakeCopy(revision)}
-                    />
-                  ))}
-                </ol>
-              </section>
-            ))}
-          </div>
-          <label className="history-highlight">
-            <input type="checkbox" checked={highlight} onChange={(event) => setHighlight(event.target.checked)} />
-            Highlight changes
-          </label>
-        </aside>
       </div>
+
+      <aside className="history-panel" aria-label="Version history">
+        <div className="history-panel-header">
+          <h2>Version history</h2>
+          {/* The panel's menu is P2. */}
+          <button type="button" className="icon-button history-panel-menu" aria-label="Version history options" disabled>
+            <Icon name="more_vert" />
+          </button>
+        </div>
+        <div className="history-filter">
+          <Menu
+            label={
+              <>
+                <span>{filter === "all" ? "All versions" : "Named versions"}</span>
+                <Icon name="arrow_drop_down" />
+              </>
+            }
+            ariaLabel="Show versions"
+            buttonClassName="history-filter-button"
+            listClassName="history-filter-menu"
+            entries={[
+              { label: "All versions", checked: filter === "all", onSelect: () => setFilter("all") },
+              { label: "Named versions", checked: filter === "named", onSelect: () => setFilter("named") },
+            ]}
+          />
+        </div>
+        {error && <p className="error">Couldn't load version history: {error}</p>}
+        {revisions && shown.length === 0 && (
+          <p className="empty">{filter === "named" ? "No named versions yet." : "No versions yet."}</p>
+        )}
+        <div className="history-versions">
+          {groupByDay(shown).map(({ day, versions }) => (
+            <section key={day} className="history-day" aria-label={day}>
+              <h3>{day}</h3>
+              <ol>
+                {versions.map((revision) => (
+                  <VersionEntry
+                    key={revision.id}
+                    revision={revision}
+                    current={revision.id === newestId}
+                    selected={revision.id === selected?.id}
+                    onSelect={() => setSelectedId(revision.id)}
+                    onRestore={() => setRestoring(revision)}
+                    onName={() => setNaming(revision)}
+                    onMakeCopy={() => void onMakeCopy(revision)}
+                  />
+                ))}
+              </ol>
+            </section>
+          ))}
+        </div>
+        <label className="history-highlight">
+          <input type="checkbox" checked={highlight} onChange={(event) => setHighlight(event.target.checked)} />
+          Highlight changes
+        </label>
+      </aside>
 
       {restoring && (
         <ConfirmDialog
