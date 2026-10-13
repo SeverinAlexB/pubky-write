@@ -5,17 +5,18 @@ import {
   documentSchema,
   emptyDocument,
   isPaperSize,
-  pageSetupKeys,
+  replaceDifference,
   type DocumentSort,
   type DocumentSummary,
   type OpenedDocument,
+  type Revision,
   type StepsConflictResponse,
 } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import { Mapping, Step, Transform } from "@tiptap/pm/transform";
 import { listComments, mapComments } from "./comments.ts";
 import { inTransaction, type Database } from "./database.ts";
-import { getRevision, recordRevision } from "./revisions.ts";
+import { getRevision, nameCurrentRevision, recordRevision } from "./revisions.ts";
 
 export const UNTITLED = "Untitled document";
 
@@ -66,6 +67,22 @@ export function copyDocument(db: Database, id: string, now = Date.now()): Docume
   const row = findRow(db, id);
   if (!row) return null;
   return createDocument(db, `Copy of ${row.title}`, now, Node.fromJSON(documentSchema, JSON.parse(row.content)));
+}
+
+/** Make a copy from version history: a new document with a version's content, without comments. */
+export function copyRevision(db: Database, id: string, revisionId: number, now = Date.now()): DocumentSummary | null {
+  const row = findRow(db, id);
+  const revision = getRevision(db, id, revisionId);
+  if (!row || !revision) return null;
+  return createDocument(db, `Copy of ${row.title}`, now, Node.fromJSON(documentSchema, revision.content));
+}
+
+/** File > Version history > Name current version. */
+export function nameCurrentVersion(db: Database, id: string, name: string, now = Date.now()): Revision | null {
+  return inTransaction(db, () => {
+    const row = findRow(db, id);
+    return row ? nameCurrentRevision(db, id, { version: row.version, content: row.content }, name, now) : null;
+  });
 }
 
 export function listDocuments(db: Database, options: { query?: string; sort?: DocumentSort } = {}): DocumentSummary[] {
@@ -178,27 +195,6 @@ export function restoreRevision(db: Database, id: string, revisionId: number, no
     revisionId,
   );
   return result?.kind === "applied" ? { version: result.version } : null;
-}
-
-/**
- * A transform that turns `doc` into `target` by replacing only the range where they differ,
- * and setting the page settings that differ.
- */
-export function replaceDifference(doc: Node, target: Node): Transform {
-  const transform = new Transform(doc);
-  for (const key of pageSetupKeys) {
-    if (doc.attrs[key] !== target.attrs[key]) transform.setDocAttribute(key, target.attrs[key]);
-  }
-  const start = doc.content.findDiffStart(target.content);
-  if (start === null) return transform;
-  let { a: endA, b: endB } = doc.content.findDiffEnd(target.content)!;
-  // When the differing ranges overlap (for example a repeated character), move both ends past the start.
-  const overlap = start - Math.min(endA, endB);
-  if (overlap > 0) {
-    endA += overlap;
-    endB += overlap;
-  }
-  return transform.replace(start, endA, target.slice(start, endB));
 }
 
 function stepsSince(db: Database, id: string, version: number): { steps: unknown[]; clientIds: string[] } {

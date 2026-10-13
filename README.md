@@ -85,9 +85,20 @@ npm start          # http://localhost:3001
 - **Autosave:** edits are sent about 300 ms after you stop typing. The header
   shows whether changes are saving, saved, or waiting for the connection to come
   back.
-- **Version history:** edits are grouped into sessions separated by 5 minutes
-  of inactivity. Select a version to preview it, then restore it. Restoring
-  replaces only the text that differs, so comments on unchanged text survive.
+- **Version history** (File > Version history > See version history, ⌘⌥⇧H or
+  the clock button): edits are grouped into sessions separated by 5 minutes of
+  inactivity. History mode replaces the header and toolbar with a top bar (Back,
+  the selected version's time, Print, zoom) and lists the versions by day in a
+  panel on the right, the newest marked "Current version". The selected version
+  is shown as read-only pages. With Highlight changes (on by default), text it
+  added compared with the version before it is marked in teal and text it
+  removed is struck through in red; "Total: N edits" counts the changes and
+  Previous edit / Next edit scroll between them. Each version's ⋮ menu can
+  restore it (after a confirmation; the restore becomes a new version), name it,
+  or make a copy as a new document. File > Version history > Name current
+  version names the newest version, and the panel can show only named
+  versions. Restoring replaces only the text that differs, so comments on
+  unchanged text survive.
 - **Export:** File > Download as Microsoft Word (.docx), plain text (.txt) or
   Markdown (.md). Word files use Word's Title, Subtitle and Heading 1–6 styles
   and the document's page size, orientation and margins.
@@ -157,6 +168,17 @@ and zoom) and the height of each card, then `commentLayout.ts` stacks the cards 
 document order: the active card stays at its line and the others move out of its
 way with an 8px gap.
 
+## How highlight changes works
+
+`shared/src/versionDiff.ts` compares a version with the one before it (the oldest
+with an empty document). It first matches equal top-level blocks (a longest common
+subsequence), then compares the text of each run of changed blocks with
+ProseMirror's changeset, which finds the changed characters and widens changes
+inside a word to the whole word. Each resulting range is one edit. The preview
+(`client/src/editor/HistoryMode.tsx`) is a read-only editor with the same
+pagination as the editor; `versionHighlight.ts` marks added text and inserts the
+removed text, struck through, where it was.
+
 ## Project layout
 
 | Path      | Contents                                                       |
@@ -181,6 +203,9 @@ way with an 8px gap.
 | `GET /api/documents/:id/revisions`                   | List versions                           |
 | `GET /api/documents/:id/revisions/:revisionId`       | Get one version's content               |
 | `POST /api/documents/:id/revisions/:revisionId/restore` | Restore a version                    |
+| `PATCH /api/documents/:id/revisions/:revisionId`     | Name a version (a blank name removes it) |
+| `POST /api/documents/:id/revisions/current/name`     | Name the current version                |
+| `POST /api/documents/:id/revisions/:revisionId/copy` | Make a copy of a version                |
 | `GET /api/documents/:id/export/:format`              | Download as `docx` or `md`              |
 | `POST /api/documents/:id/comments`                   | Start a comment thread on a range       |
 | `POST /api/documents/:id/comments/:commentId/replies` | Reply to a thread                      |

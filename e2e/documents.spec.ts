@@ -71,9 +71,11 @@ test("an earlier version can be previewed and restored from version history", as
   await expect(revisions).toHaveCount(2);
   await expect(revisions.first()).toContainText("Current version");
 
-  await revisions.nth(1).getByRole("button").click();
-  await expect(page.locator(".page-preview")).toHaveText("First draft");
-  await page.getByRole("button", { name: "Restore this version" }).click();
+  await revisions.nth(1).getByRole("button").first().click();
+  await expect(page.getByLabel("Version preview")).toHaveText("First draft");
+  await revisions.nth(1).getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Restore this version" }).click();
+  await page.getByRole("dialog", { name: "Restore this version?" }).getByRole("button", { name: "Restore" }).click();
 
   await expect(editor(page)).toHaveText("First draft");
   await page.getByRole("button", { name: "Version history" }).click();

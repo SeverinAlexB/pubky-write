@@ -71,6 +71,8 @@ export type Revision = {
   startedAt: number;
   endedAt: number;
   restoredFrom: number | null;
+  /** Given with "Name this version"; null for unnamed versions. */
+  name: string | null;
 };
 
 export type RevisionWithContent = Revision & { content: JSONContent };

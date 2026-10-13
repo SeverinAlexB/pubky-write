@@ -7,16 +7,18 @@ import {
   applySteps,
   blankDocument,
   copyDocument,
+  copyRevision,
   createDocument,
   deleteDocument,
   getDocumentContent,
   InvalidStepsError,
   listDocuments,
+  nameCurrentVersion,
   openDocument,
   renameDocument,
   restoreRevision,
 } from "./documents.ts";
-import { listRevisions, SESSION_GAP_MS } from "./revisions.ts";
+import { listRevisions, nameRevision, SESSION_GAP_MS } from "./revisions.ts";
 
 let db: Database;
 
@@ -176,6 +178,40 @@ describe("version history", () => {
 
     expect(pageSetupOf(getDocumentContent(db, id)!.doc)).toMatchObject({ orientation: "portrait", marginLeft: 72 });
     expect(textOf(id)).toBe("text");
+  });
+
+  it("names versions, and a named version stops absorbing edits", () => {
+    const { id } = createDocument(db, "Doc", 0);
+    applySteps(db, id, { clientId: "a", version: 0, steps: insertTextSteps(id, "one") }, 1_000);
+
+    expect(nameCurrentVersion(db, id, "  Draft  ", 1_500)).toMatchObject({ version: 1, name: "Draft" });
+    applySteps(db, id, { clientId: "a", version: 1, steps: insertTextSteps(id, " two") }, 2_000);
+
+    const [latest, named] = listRevisions(db, id);
+    expect(named).toMatchObject({ version: 1, name: "Draft" });
+    expect(latest).toMatchObject({ version: 2, name: null });
+    expect(nameRevision(db, id, named!.id, " ")).toMatchObject({ name: null });
+    expect(nameRevision(db, id, 9_999, "Missing")).toBeNull();
+  });
+
+  it("records a version when naming a document without edits", () => {
+    const { id } = createDocument(db, "Doc", 0);
+    expect(nameCurrentVersion(db, id, "Empty", 1_000)).toMatchObject({ version: 0, name: "Empty" });
+    expect(listRevisions(db, id)).toHaveLength(1);
+  });
+
+  it("copies a version into a new document", () => {
+    const { id } = createDocument(db, "Plan", 0);
+    applySteps(db, id, { clientId: "a", version: 0, steps: insertTextSteps(id, "first draft") }, 1_000);
+    applySteps(db, id, { clientId: "a", version: 1, steps: insertTextSteps(id, " plus edits") }, 1_000 + SESSION_GAP_MS);
+    const firstDraft = listRevisions(db, id).at(-1)!;
+
+    const copy = copyRevision(db, id, firstDraft.id)!;
+
+    expect(copy.title).toBe("Copy of Plan");
+    expect(textOf(copy.id)).toBe("first draft");
+    expect(textOf(id)).toBe("first draft plus edits");
+    expect(copyRevision(db, id, 9_999)).toBeNull();
   });
 
   it("keeps the stored document valid against the schema", () => {

@@ -3,17 +3,16 @@ import {
   pageGeometry,
   pageSetupKeys,
   pageSetupOf,
-  paperSizes,
   toMarkdown,
   type CommentThread,
   type OpenedDocument,
   type PageSetup,
   type Revision,
-  type RevisionWithContent,
 } from "@docs/shared";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { getVersion } from "prosemirror-collab";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { flushSync } from "react-dom";
 import { Link, useNavigate } from "react-router";
 import { api, ApiError, stepsTransport } from "../api.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -30,11 +29,12 @@ import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
 import { FindReplaceDialog } from "./FindReplaceDialog.tsx";
 import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
-import { HistoryPanel, RevisionPreview } from "./HistoryPanel.tsx";
+import { HistoryMode } from "./HistoryMode.tsx";
 import { MenuBar } from "./MenuBar.tsx";
 import { OutlinePanel, OutlineToggle } from "./OutlinePanel.tsx";
 import { PageSetupDialog } from "./PageSetupDialog.tsx";
-import { resetPagination, setGeometry } from "./pagination.ts";
+import { useFitZoom, usePrintPageRule } from "./pageView.ts";
+import { resetPagination } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
 import { DocumentSync, type SaveStatus } from "./sync.ts";
 import { Toolbar } from "./toolbar/Toolbar.tsx";
@@ -65,7 +65,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [linkDialog, setLinkDialog] = useState<{ href: string } | null>(null);
   const [imageUrlDialog, setImageUrlDialog] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [preview, setPreview] = useState<RevisionWithContent | null>(null);
+  const [namingVersion, setNamingVersion] = useState(false);
   // The find bar (⌘F) or the Find and replace dialog (⌘⇧H); `request` counts ⌘F presses.
   const [find, setFind] = useState<{ mode: "bar" | "dialog"; request: number } | null>(null);
   const [wordCountOpen, setWordCountOpen] = useState(false);
@@ -78,6 +78,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [notice, setNotice] = useState<string | null>(null);
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
   const sync = useRef<DocumentSync | null>(null);
+  const scrollBeforeHistory = useRef(0);
   const titleInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   // Editor callbacks are created once, so they reach the latest handlers through this ref.
@@ -89,6 +90,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     activateComment: (_id: number | null) => {},
     openHistory: () => {},
     toggleCommentsHidden: () => {},
+    historyOpen: false,
   });
 
   const extensions = useMemo(
@@ -204,13 +206,19 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   });
   const geometry = useMemo(() => pageGeometry(pageSetup), [pageSetup]);
   const unit = useMemo(() => lengthUnit(navigator.language), []);
-  usePrintPageRule(pageSetup);
+  // Version history mode sets its own, for the version it shows.
+  usePrintPageRule(pageSetup, !historyOpen);
 
   // Shortcuts that work anywhere on the page, overriding the browser's own find.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
       const pressed = `${event.altKey ? "Alt+" : ""}${event.shiftKey ? "Shift+" : ""}${event.code}`;
+      // Version history mode is read-only: the editor's shortcuts do nothing there.
+      if (handlers.current.historyOpen) {
+        if (pressed === "Alt+Shift+KeyH") event.preventDefault();
+        return;
+      }
       const action = {
         "Alt+Shift+KeyH": () => handlers.current.openHistory(),
         KeyF: () => openFind("bar"),
@@ -246,6 +254,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   handlers.current.selectComment = selectComment;
   handlers.current.activateComment = activateComment;
   handlers.current.toggleCommentsHidden = () => setCommentsHidden((hidden) => !hidden);
+  handlers.current.historyOpen = historyOpen;
 
   function startComment() {
     const { from, to, empty } = editor.state.selection;
@@ -360,6 +369,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     }
   }
 
+  /** Restoring reloads the document, which returns to editing with the restored content. */
   async function restore(revision: Revision) {
     await sync.current?.flushNow();
     await api.restoreRevision(doc.id, revision.id);
@@ -368,12 +378,31 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   function openHistory() {
     closeComments();
+    setFind(null);
+    editor.commands.blur();
+    scrollBeforeHistory.current = fitZoom.element?.scrollTop ?? 0;
     setHistoryOpen(true);
   }
 
   function closeHistory() {
-    setHistoryOpen(false);
-    setPreview(null);
+    flushSync(() => setHistoryOpen(false));
+    editor.commands.focus(undefined, { scrollIntoView: false });
+    // After the pages are laid out again, back where editing left off.
+    requestAnimationFrame(() => requestAnimationFrame(() => fitZoom.element?.scrollTo({ top: scrollBeforeHistory.current })));
+  }
+
+  /** The versions, newest first, after saving pending edits so the newest is what the editor shows. */
+  async function loadRevisions() {
+    await sync.current?.flushNow();
+    return api.listRevisions(doc.id);
+  }
+
+  async function nameCurrentVersion(name: string) {
+    setNamingVersion(false);
+    editor.commands.focus();
+    await sync.current?.flushNow();
+    await api.nameCurrentVersion(doc.id, name);
+    setNotice(name.trim() ? `Version named "${name.trim()}"` : "Version name removed");
   }
 
   function insertImageFromUrl(url: string) {
@@ -417,6 +446,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       navigate("/");
     },
     openVersionHistory: openHistory,
+    nameCurrentVersion: () => setNamingVersion(true),
     pageSetup: () => setPageSetupOpen(true),
     print: () => window.print(),
     cut: () => editor.commands.focus() && document.execCommand("cut"),
@@ -472,265 +502,267 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   // Zoom, the print layout setting and showing the page again all change the layout from outside the editor.
   useEffect(() => {
     if (stack && !editor.isDestroyed) resetPagination(editor.view, printLayout);
-  }, [editor, stack, effectiveZoom, printLayout, preview === null]);
+  }, [editor, stack, effectiveZoom, printLayout, historyOpen]);
 
   return (
-    <div className="editor-app">
-      {!menusHidden && (
-        <header className="editor-header">
-          <Link to="/" className="doc-logo" aria-label="Docs home" data-tooltip="Docs home">
-            <img src="/favicon.svg" alt="" width={24} height={32} />
-          </Link>
-          <div className="editor-header-main">
-            <div className="title-row">
-              <input
-                ref={titleInput}
-                className="doc-title"
-                aria-label="Rename"
-                value={title}
-                size={Math.max(title.length, 8)}
-                onChange={(event) => setTitle(event.target.value)}
-                onBlur={() => void commitTitle()}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.currentTarget.blur();
-                  if (event.key === "Escape") {
-                    setTitle(savedTitle);
-                    editor.commands.focus();
-                  }
-                }}
-              />
-              <SaveIndicator status={status} />
-            </div>
-            <MenuBar
-              editor={editor}
-              actions={actions}
-              view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden }}
-            />
-          </div>
-          <div className="header-actions">
-            <button
-              type="button"
-              className={`header-action${historyOpen ? " is-active" : ""}`}
-              aria-label="Version history"
-              data-tooltip={`Version history (${shortcut("⌘+Option+Shift+H")})`}
-              aria-pressed={historyOpen}
-              onClick={() => (historyOpen ? closeHistory() : openHistory())}
-            >
-              <Icon name="history" size={24} />
-            </button>
-            <button
-              type="button"
-              className={`header-action${allCommentsOpen ? " is-active" : ""}`}
-              aria-label={`Show all comments (${openCommentCount} open)`}
-              data-tooltip={`Show all comments (${shortcut("⌘+Option+Shift+A")})`}
-              aria-pressed={allCommentsOpen}
-              onClick={() => {
-                if (historyOpen) closeHistory();
-                setAllCommentsOpen((open) => historyOpen || !open);
-              }}
-            >
-              <Icon name="comment" size={24} />
-            </button>
-          </div>
-        </header>
-      )}
-
-      {!historyOpen && (
-        <Toolbar
-          editor={editor}
-          actions={actions}
-          zoom={zoom}
-          onZoomChange={setZoom}
-          menusHidden={menusHidden}
-          onToggleMenus={() => setMenusHidden((hidden) => !hidden)}
-        />
-      )}
-      {rulerVisible ? (
-        <HorizontalRuler editor={editor} stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />
-      ) : (
-        <div className="ruler-gap" />
-      )}
-
-      <div className="editor-workspace">
-        {rulerVisible && printLayout && <VerticalRuler stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />}
-        {outlineOpen && !historyOpen && (
-          <OutlinePanel editor={editor} openComments={openCommentCount} onClose={() => setOutlineOpen(false)} />
-        )}
-        {/* The editor area: the find bar and the live word count float over it, left of the comment margin. */}
-        <div
-          className={`editor-area${marginShown ? " has-comment-margin" : ""}`}
-          style={
-            {
-              "--column-width": `${geometry.width * effectiveZoom + marginWidth}px`,
-              "--comment-margin-width": `${marginWidth}px`,
-            } as CSSProperties
-          }
-        >
-          {!outlineOpen && !historyOpen && <OutlineToggle onOpen={() => setOutlineOpen(true)} />}
-          {find?.mode === "bar" && !historyOpen && (
-            <FindBar
-              editor={editor}
-              focusRequest={find.request}
-              onMoreOptions={() => setFind({ mode: "dialog", request: find.request })}
-              onClose={closeFind}
-            />
-          )}
-          {liveCount.visible && !historyOpen && <LiveWordCount editor={editor} setting={liveCount} onChange={setLiveCount} />}
-          <div className="editor-scroll" ref={fitZoom.ref}>
-            {/* The pages and, right of them, the comment margin, centred together. */}
-            <div ref={setColumn} className="page-column" hidden={preview !== null}>
-              <div
-                ref={setStack}
-                className={`page-stack${printLayout ? "" : " is-pageless"}`}
-                style={{ zoom: effectiveZoom }}
-              >
-                {/* One sheet per page, drawn by the pagination plugin. */}
-                <div className="page-sheets" aria-hidden />
-                <EditorContent editor={editor} />
-              </div>
-              {marginShown && (
-                <CommentMargin
-                  editor={editor}
-                  threads={threads}
-                  onCreate={createComment}
-                  onCancelDraft={cancelComment}
-                  onActivate={activateComment}
-                  onReply={async (id, body) => replaceThread(await api.replyToComment(doc.id, id, body))}
-                  onResolve={resolveComment}
-                  onDelete={deleteComment}
-                  onEditMessage={async (id, messageId, body) =>
-                    replaceThread(await api.editCommentMessage(doc.id, id, messageId, body))
-                  }
-                  onDeleteReply={async (id, messageId) => replaceThread(await api.deleteCommentReply(doc.id, id, messageId))}
-                  onCopyLink={(id) => void copyCommentLink(id)}
+    <>
+      {/* Hidden, not unmounted, in version history mode, so unsaved state and undo history survive. */}
+      <div className="editor-app" hidden={historyOpen}>
+        {!menusHidden && (
+          <header className="editor-header">
+            <Link to="/" className="doc-logo" aria-label="Docs home" data-tooltip="Docs home">
+              <img src="/favicon.svg" alt="" width={24} height={32} />
+            </Link>
+            <div className="editor-header-main">
+              <div className="title-row">
+                <input
+                  ref={titleInput}
+                  className="doc-title"
+                  aria-label="Rename"
+                  value={title}
+                  size={Math.max(title.length, 8)}
+                  onChange={(event) => setTitle(event.target.value)}
+                  onBlur={() => void commitTitle()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Escape") {
+                      setTitle(savedTitle);
+                      editor.commands.focus();
+                    }
+                  }}
                 />
-              )}
-              {!historyOpen && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
-            </div>
-            {preview && (
-              <div
-                className="page-preview"
-                style={{ zoom: effectiveZoom }}
-                ref={(element) => {
-                  if (element) setGeometry(element, pageGeometry(pageSetupOf(editor.schema.nodeFromJSON(preview.content))));
-                }}
-              >
-                <RevisionPreview revision={preview} />
+                <SaveIndicator status={status} />
               </div>
-            )}
-          </div>
-        </div>
-        {allCommentsOpen && !historyOpen && (
-          <AllCommentsPanel
+              <MenuBar
+                editor={editor}
+                actions={actions}
+                view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden }}
+              />
+            </div>
+            <div className="header-actions">
+              <button
+                type="button"
+                className="header-action"
+                aria-label="Version history"
+                data-tooltip={`Version history (${shortcut("⌘+Option+Shift+H")})`}
+                onClick={openHistory}
+              >
+                <Icon name="history" size={24} />
+              </button>
+              <button
+                type="button"
+                className={`header-action${allCommentsOpen ? " is-active" : ""}`}
+                aria-label={`Show all comments (${openCommentCount} open)`}
+                data-tooltip={`Show all comments (${shortcut("⌘+Option+Shift+A")})`}
+                aria-pressed={allCommentsOpen}
+                onClick={() => setAllCommentsOpen((open) => !open)}
+              >
+                <Icon name="comment" size={24} />
+              </button>
+            </div>
+          </header>
+        )}
+
+        {!historyOpen && (
+          <Toolbar
             editor={editor}
-            threads={threads}
-            onSelect={selectComment}
-            onReopen={(id) => void resolveComment(id, false)}
-            onClose={() => setAllCommentsOpen(false)}
+            actions={actions}
+            zoom={zoom}
+            onZoomChange={setZoom}
+            menusHidden={menusHidden}
+            onToggleMenus={() => setMenusHidden((hidden) => !hidden)}
           />
         )}
-        {historyOpen && (
-          <HistoryPanel
-            documentId={doc.id}
-            selected={preview}
-            onSelect={setPreview}
-            onRestore={(revision) => void restore(revision)}
-            onClose={closeHistory}
+        {rulerVisible ? (
+          <HorizontalRuler editor={editor} stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />
+        ) : (
+          <div className="ruler-gap" />
+        )}
+
+        <div className="editor-workspace">
+          {rulerVisible && printLayout && <VerticalRuler stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />}
+          {outlineOpen && !historyOpen && (
+            <OutlinePanel editor={editor} openComments={openCommentCount} onClose={() => setOutlineOpen(false)} />
+          )}
+          {/* The editor area: the find bar and the live word count float over it, left of the comment margin. */}
+          <div
+            className={`editor-area${marginShown ? " has-comment-margin" : ""}`}
+            style={
+              {
+                "--column-width": `${geometry.width * effectiveZoom + marginWidth}px`,
+                "--comment-margin-width": `${marginWidth}px`,
+              } as CSSProperties
+            }
+          >
+            {!outlineOpen && !historyOpen && <OutlineToggle onOpen={() => setOutlineOpen(true)} />}
+            {find?.mode === "bar" && !historyOpen && (
+              <FindBar
+                editor={editor}
+                focusRequest={find.request}
+                onMoreOptions={() => setFind({ mode: "dialog", request: find.request })}
+                onClose={closeFind}
+              />
+            )}
+            {liveCount.visible && !historyOpen && <LiveWordCount editor={editor} setting={liveCount} onChange={setLiveCount} />}
+            <div className="editor-scroll" ref={fitZoom.ref}>
+              {/* The pages and, right of them, the comment margin, centred together. */}
+              <div ref={setColumn} className="page-column">
+                <div
+                  ref={setStack}
+                  className={`page-stack${printLayout ? "" : " is-pageless"}`}
+                  style={{ zoom: effectiveZoom }}
+                >
+                  {/* One sheet per page, drawn by the pagination plugin. */}
+                  <div className="page-sheets" aria-hidden />
+                  <EditorContent editor={editor} />
+                </div>
+                {marginShown && (
+                  <CommentMargin
+                    editor={editor}
+                    threads={threads}
+                    onCreate={createComment}
+                    onCancelDraft={cancelComment}
+                    onActivate={activateComment}
+                    onReply={async (id, body) => replaceThread(await api.replyToComment(doc.id, id, body))}
+                    onResolve={resolveComment}
+                    onDelete={deleteComment}
+                    onEditMessage={async (id, messageId, body) =>
+                      replaceThread(await api.editCommentMessage(doc.id, id, messageId, body))
+                    }
+                    onDeleteReply={async (id, messageId) => replaceThread(await api.deleteCommentReply(doc.id, id, messageId))}
+                    onCopyLink={(id) => void copyCommentLink(id)}
+                  />
+                )}
+                {!historyOpen && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
+              </div>
+            </div>
+          </div>
+          {allCommentsOpen && !historyOpen && (
+            <AllCommentsPanel
+              editor={editor}
+              threads={threads}
+              onSelect={selectComment}
+              onReopen={(id) => void resolveComment(id, false)}
+              onClose={() => setAllCommentsOpen(false)}
+            />
+          )}
+        </div>
+
+        <input
+          ref={imageInput}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          multiple
+          hidden
+          onChange={(event) => {
+            void insertImages(editor, imageFiles(event.target.files));
+            event.target.value = "";
+          }}
+        />
+
+        {find?.mode === "dialog" && !historyOpen && <FindReplaceDialog editor={editor} onClose={closeFind} />}
+
+        {wordCountOpen && (
+          <WordCountDialog
+            editor={editor}
+            liveCountVisible={liveCount.visible}
+            onConfirm={(visible) => {
+              setLiveCount({ ...liveCount, visible });
+              setWordCountOpen(false);
+              editor.commands.focus();
+            }}
+            onCancel={() => {
+              setWordCountOpen(false);
+              editor.commands.focus();
+            }}
+          />
+        )}
+
+        {customSpacing && (
+          <CustomSpacingDialog
+            initial={customSpacing}
+            onApply={(spacing) => {
+              setCustomSpacing(null);
+              editor.chain().focus().setParagraphSpacing(spacing).run();
+            }}
+            onCancel={() => {
+              setCustomSpacing(null);
+              editor.commands.focus();
+            }}
+          />
+        )}
+
+        {pageSetupOpen && (
+          <PageSetupDialog
+            initial={pageSetup}
+            unit={unit}
+            onApply={applyPageSetup}
+            onCancel={() => {
+              setPageSetupOpen(false);
+              editor.commands.focus();
+            }}
+          />
+        )}
+
+        {imageUrlDialog && (
+          <PromptDialog
+            title="Insert image"
+            label="Image URL"
+            placeholder="Paste the URL of an image"
+            confirmLabel="Insert image"
+            onConfirm={insertImageFromUrl}
+            onCancel={() => {
+              setImageUrlDialog(false);
+              editor.commands.focus();
+            }}
+          />
+        )}
+
+        {notice && (
+          <div className="snackbar" role="status" aria-live="polite">
+            {notice}
+          </div>
+        )}
+
+        {namingVersion && (
+          <PromptDialog
+            title="Name current version"
+            label="Version name"
+            confirmLabel="Save"
+            onConfirm={(name) => void nameCurrentVersion(name)}
+            onCancel={() => {
+              setNamingVersion(false);
+              editor.commands.focus();
+            }}
+          />
+        )}
+
+        {linkDialog && (
+          <PromptDialog
+            title={linkDialog.href ? "Edit link" : "Insert link"}
+            label="Link URL"
+            placeholder="Paste a link"
+            initialValue={linkDialog.href}
+            confirmLabel="Apply"
+            onConfirm={applyLink}
+            onCancel={() => {
+              setLinkDialog(null);
+              editor.commands.focus();
+            }}
           />
         )}
       </div>
-
-      <input
-        ref={imageInput}
-        type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp"
-        multiple
-        hidden
-        onChange={(event) => {
-          void insertImages(editor, imageFiles(event.target.files));
-          event.target.value = "";
-        }}
-      />
-
-      {find?.mode === "dialog" && !historyOpen && <FindReplaceDialog editor={editor} onClose={closeFind} />}
-
-      {wordCountOpen && (
-        <WordCountDialog
-          editor={editor}
-          liveCountVisible={liveCount.visible}
-          onConfirm={(visible) => {
-            setLiveCount({ ...liveCount, visible });
-            setWordCountOpen(false);
-            editor.commands.focus();
-          }}
-          onCancel={() => {
-            setWordCountOpen(false);
-            editor.commands.focus();
-          }}
+      {historyOpen && (
+        <HistoryMode
+          documentId={doc.id}
+          loadRevisions={loadRevisions}
+          initialZoom={zoom}
+          onBack={closeHistory}
+          onRestore={restore}
+          onMakeCopy={async (revision) => navigate(`/d/${(await api.copyRevision(doc.id, revision.id)).id}`)}
         />
       )}
-
-      {customSpacing && (
-        <CustomSpacingDialog
-          initial={customSpacing}
-          onApply={(spacing) => {
-            setCustomSpacing(null);
-            editor.chain().focus().setParagraphSpacing(spacing).run();
-          }}
-          onCancel={() => {
-            setCustomSpacing(null);
-            editor.commands.focus();
-          }}
-        />
-      )}
-
-      {pageSetupOpen && (
-        <PageSetupDialog
-          initial={pageSetup}
-          unit={unit}
-          onApply={applyPageSetup}
-          onCancel={() => {
-            setPageSetupOpen(false);
-            editor.commands.focus();
-          }}
-        />
-      )}
-
-      {imageUrlDialog && (
-        <PromptDialog
-          title="Insert image"
-          label="Image URL"
-          placeholder="Paste the URL of an image"
-          confirmLabel="Insert image"
-          onConfirm={insertImageFromUrl}
-          onCancel={() => {
-            setImageUrlDialog(false);
-            editor.commands.focus();
-          }}
-        />
-      )}
-
-      {notice && (
-        <div className="snackbar" role="status" aria-live="polite">
-          {notice}
-        </div>
-      )}
-
-      {linkDialog && (
-        <PromptDialog
-          title={linkDialog.href ? "Edit link" : "Insert link"}
-          label="Link URL"
-          placeholder="Paste a link"
-          initialValue={linkDialog.href}
-          confirmLabel="Apply"
-          onConfirm={applyLink}
-          onCancel={() => {
-            setLinkDialog(null);
-            editor.commands.focus();
-          }}
-        />
-      )}
-    </div>
+    </>
   );
 }
 
@@ -747,36 +779,6 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
       <span>{content.text}</span>
     </span>
   );
-}
-
-/** Space kept on each side of the page when zoomed to fit. */
-const FIT_MARGIN = 16;
-
-/** The zoom at which a page `pageWidth` pixels wide (borders included) is as wide as the editor area. */
-function useFitZoom(pageWidth: number, reserved: number) {
-  const [areaWidth, setAreaWidth] = useState<number | null>(null);
-  const [element, ref] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!element) return;
-    const observer = new ResizeObserver(() => setAreaWidth(element.clientWidth));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [element]);
-  return { value: areaWidth === null ? 1 : (areaWidth - reserved - 2 * FIT_MARGIN) / pageWidth, ref };
-}
-
-/** Printing uses the document's paper size and margins. */
-function usePrintPageRule(setup: PageSetup) {
-  useEffect(() => {
-    const style = document.createElement("style");
-    const paper = paperSizes[setup.paperSize];
-    const [width, height] = setup.orientation === "landscape" ? [paper.height, paper.width] : [paper.width, paper.height];
-    const margins = [setup.marginTop, setup.marginRight, setup.marginBottom, setup.marginLeft].map((points) => `${points}pt`);
-    style.textContent = `@page { size: ${width}mm ${height}mm; margin: ${margins.join(" ")}; }`;
-    style.dataset.pageSetup = "";
-    document.head.append(style);
-    return () => style.remove();
-  }, [setup]);
 }
 
 /** Edit > Paste and Paste without formatting, which have to read the clipboard themselves. */

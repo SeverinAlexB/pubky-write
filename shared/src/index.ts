@@ -7,3 +7,4 @@ export * from "./pageBreak.ts";
 export * from "./pageSetup.ts";
 export * from "./anchors.ts";
 export * from "./markdown.ts";
+export * from "./versionDiff.ts";

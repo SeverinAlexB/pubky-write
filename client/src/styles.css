@@ -641,6 +641,10 @@ button:disabled {
   background: var(--surface);
 }
 
+.editor-app[hidden] {
+  display: none;
+}
+
 .editor-header {
   display: flex;
   flex: none;
@@ -1306,8 +1310,7 @@ button:disabled {
 /* Pages: the content column lies over one sheet per page (see editor/pagination.ts).
    The geometry variables come from the document's page setup. */
 
-.page-stack,
-.page-preview {
+.page-stack {
   --page-width: 794px;
   --page-height: 1123px;
   --margin-top: 96px;
@@ -1342,8 +1345,7 @@ button:disabled {
   height: 100%;
 }
 
-.page-stack .page-content,
-.page-preview .page-content {
+.page-stack .page-content {
   position: relative;
   min-height: 100%;
   padding: var(--margin-top) var(--margin-right) 0 var(--margin-left);
@@ -1370,16 +1372,6 @@ button:disabled {
   display: block;
   user-select: none;
   pointer-events: none;
-}
-
-.page-preview {
-  min-height: var(--page-height);
-  border: 1px solid var(--blue);
-  background: #fff;
-}
-
-.page-preview .page-content {
-  padding-bottom: var(--margin-bottom);
 }
 
 .page-content {
@@ -2450,75 +2442,241 @@ button:disabled {
   bottom: calc(100% + 4px);
 }
 
-/* Version history */
+/* Version history mode: top bar (56px), a slim toolbar, the preview and a 300px panel. */
+
+.history-mode {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface);
+}
+
+.history-top-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 56px;
+  padding: 0 8px;
+}
+
+.history-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-toolbar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  margin: 0 16px;
+  padding: 0 8px;
+  border-radius: 24px;
+  background: var(--toolbar);
+}
+
+.history-toolbar-spacer {
+  flex: 1;
+}
+
+.history-edit-count {
+  margin-right: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.icon-button.history-edit-button {
+  width: 32px;
+  height: 32px;
+}
+
+.history-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  margin-top: 8px;
+}
 
 .history-panel {
   display: flex;
+  flex: none;
   flex-direction: column;
   width: 300px;
   border-left: 1px solid var(--border);
   background: #fff;
 }
 
-.history-header {
+.history-panel-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 8px 8px 20px;
+  height: 48px;
+  padding: 0 16px 0 24px;
+}
+
+.history-panel-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.history-filter {
+  padding: 0 16px 8px;
   border-bottom: 1px solid var(--border);
 }
 
-.history-header h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 400;
+.history-filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 4px 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.history-filter-button:hover {
+  background: var(--hover);
 }
 
 .history-panel > .error,
 .history-panel > .empty {
-  padding: 0 20px;
+  padding: 0 24px;
+  font-size: 14px;
 }
 
-.revision-list {
+.history-versions {
   flex: 1;
   overflow: auto;
+  padding-bottom: 8px;
+}
+
+.history-day h3 {
   margin: 0;
-  padding: 8px 0;
-  list-style: none;
-}
-
-.revision {
-  display: grid;
-  gap: 2px;
-  width: 100%;
-  padding: 10px 20px;
-  border: 0;
-  background: none;
-  text-align: left;
-}
-
-.revision:hover {
-  background: var(--hover);
-}
-
-.revision.is-selected {
-  background: var(--active);
-}
-
-.revision-date {
+  padding: 16px 24px 4px;
+  color: var(--text);
   font-size: 14px;
   font-weight: 500;
 }
 
-.revision-note {
-  color: var(--text-muted);
+.history-day ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.version-entry {
+  position: relative;
+}
+
+.version-select {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 48px 8px 24px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.version-select:hover {
+  background: var(--hover);
+}
+
+.version-entry.is-selected .version-select {
+  background: var(--primary-container);
+}
+
+.version-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.version-time,
+.version-note {
+  color: var(--text-tertiary);
   font-size: 12px;
+}
+
+.version-note {
   font-style: italic;
 }
 
-.history-footer {
-  padding: 16px 20px;
+.version-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.version-author-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #52a49a;
+}
+
+/* The ⋮ menu shows on the selected entry, on hover and while it is used. */
+.version-entry > .menu {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+
+.icon-button.version-menu-button {
+  width: 32px;
+  height: 32px;
+  opacity: 0;
+}
+
+.version-entry:hover .version-menu-button,
+.version-entry.is-selected .version-menu-button,
+.version-menu-button:focus-visible,
+.version-menu-button[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.history-highlight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 24px;
   border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.history-highlight input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+/* Highlight changes: added text in teal, removed text struck through in red. */
+.page-content .version-added {
+  background: #ddedeb;
+  color: #52a49a;
+}
+
+.page-content .version-removed {
+  color: #c5221f;
+  text-decoration: line-through;
+}
+
+.page-content .is-current-edit {
+  box-shadow: 0 0 0 1px currentColor;
 }
 
 /* Printing and "Download as PDF" print only the page. */
@@ -2538,6 +2696,8 @@ button:disabled {
   .vertical-ruler,
   .page-sheets,
   .tooltip,
+  .history-top-bar,
+  .history-toolbar,
   .history-panel,
   .outline-panel,
   .outline-toggle,
@@ -2550,6 +2710,12 @@ button:disabled {
     display: none !important;
   }
 
+  .editor-app[hidden] {
+    display: none !important;
+  }
+
+  .history-mode,
+  .history-body,
   .editor-app,
   .editor-workspace,
   .editor-area,

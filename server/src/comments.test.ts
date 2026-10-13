@@ -1,5 +1,4 @@
 import { documentSchema } from "@docs/shared";
-import { Node } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -18,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "./app.ts";
 import { openDatabase, type Database } from "./database.ts";
-import { applySteps, createDocument, getDocumentContent, replaceDifference, restoreRevision } from "./documents.ts";
+import { applySteps, createDocument, getDocumentContent, restoreRevision } from "./documents.ts";
 import { listRevisions, SESSION_GAP_MS } from "./revisions.ts";
 
 let db: Database;
@@ -203,24 +202,5 @@ describe("restoring a version", () => {
     expect(doc.textContent).toBe("The quick brown fox");
     const [thread] = listComments(db, documentId);
     expect(doc.textBetween(thread!.from, thread!.to)).toBe("quick");
-  });
-});
-
-describe("replaceDifference", () => {
-  const paragraphs = (...texts: string[]) =>
-    Node.fromJSON(documentSchema, {
-      type: "doc",
-      content: texts.map((text) => ({ type: "paragraph", content: text ? [{ type: "text", text }] : [] })),
-    });
-
-  it.each([
-    [["aaa"], ["aa"]],
-    [["abc", "def"], ["abc"]],
-    [["abc"], ["abc", "", "xyz"]],
-    [["one", "two"], ["one", "TWO", "three"]],
-    [["same"], ["same"]],
-  ])("turns %j into %j", (from, to) => {
-    const target = paragraphs(...to);
-    expect(replaceDifference(paragraphs(...from), target).doc.eq(target)).toBe(true);
   });
 });

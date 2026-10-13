@@ -21,17 +21,19 @@ import {
   applySteps,
   blankDocument,
   copyDocument,
+  copyRevision,
   createDocument,
   deleteDocument,
   getDocumentContent,
   InvalidStepsError,
   listDocuments,
+  nameCurrentVersion,
   openDocument,
   renameDocument,
   restoreRevision,
 } from "./documents.ts";
 import { toDocx } from "./export/docx.ts";
-import { getRevision, listRevisions } from "./revisions.ts";
+import { getRevision, listRevisions, nameRevision } from "./revisions.ts";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const imageTypes: Record<string, string> = {
@@ -138,6 +140,18 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
 
   app.get("/api/documents/:id/revisions", (c) => c.json(listRevisions(db, c.req.param("id"))));
 
+  app.post("/api/documents/:id/revisions/current/name", async (c) =>
+    c.json(found(nameCurrentVersion(db, c.req.param("id"), await nameFrom(c.req.json())))),
+  );
+
+  app.patch("/api/documents/:id/revisions/:revisionId", async (c) =>
+    c.json(found(nameRevision(db, c.req.param("id"), Number(c.req.param("revisionId")), await nameFrom(c.req.json())))),
+  );
+
+  app.post("/api/documents/:id/revisions/:revisionId/copy", (c) =>
+    c.json(found(copyRevision(db, c.req.param("id"), Number(c.req.param("revisionId")))), 201),
+  );
+
   app.get("/api/documents/:id/revisions/:revisionId", (c) =>
     c.json(found(getRevision(db, c.req.param("id"), Number(c.req.param("revisionId"))))),
   );
@@ -187,6 +201,12 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
   });
 
   return app;
+}
+
+async function nameFrom(body: Promise<{ name?: unknown }>): Promise<string> {
+  const { name } = await body.catch(() => ({ name: undefined }));
+  if (typeof name !== "string") throw new HTTPException(400, { message: "name is required" });
+  return name;
 }
 
 function found<T>(value: T | null | undefined): T {

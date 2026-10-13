@@ -57,6 +57,13 @@ export const api = {
     request<RevisionWithContent>(`/api/documents/${id}/revisions/${revisionId}`),
   restoreRevision: (id: string, revisionId: number) =>
     request<{ version: number }>(`/api/documents/${id}/revisions/${revisionId}/restore`, { method: "POST" }),
+  /** Names a version; a blank name removes it. */
+  nameRevision: (id: string, revisionId: number, name: string) =>
+    request<Revision>(`/api/documents/${id}/revisions/${revisionId}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  nameCurrentVersion: (id: string, name: string) =>
+    request<Revision>(`/api/documents/${id}/revisions/current/name`, { method: "POST", body: JSON.stringify({ name }) }),
+  copyRevision: (id: string, revisionId: number) =>
+    request<DocumentSummary>(`/api/documents/${id}/revisions/${revisionId}/copy`, { method: "POST" }),
   uploadImage: (file: File) => {
     const form = new FormData();
     form.set("file", file);

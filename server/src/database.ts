@@ -37,7 +37,8 @@ export function openDatabase(path: string): Database {
       content       TEXT    NOT NULL,
       started_at    INTEGER NOT NULL,
       ended_at      INTEGER NOT NULL,
-      restored_from INTEGER
+      restored_from INTEGER,
+      name          TEXT -- set by "Name this version"; a named revision stops absorbing edits
     );
     CREATE INDEX IF NOT EXISTS revisions_by_document ON revisions (document_id, ended_at);
 
@@ -62,6 +63,9 @@ export function openDatabase(path: string): Database {
       created_at INTEGER NOT NULL
     );
   `);
+  // Databases created before versions could be named.
+  const revisionColumns = db.prepare("PRAGMA table_info(revisions)").all() as { name: string }[];
+  if (!revisionColumns.some((column) => column.name === "name")) db.exec("ALTER TABLE revisions ADD COLUMN name TEXT");
   return db;
 }
 
