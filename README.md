@@ -51,6 +51,14 @@ npm start          # http://localhost:3001
   into a "More" row when the window is narrow. Menu items for features that
   are not built yet are shown disabled; they call the optional actions listed
   in `client/src/editor/actions.ts`.
+- **Pages:** the document is shown as separate pages of its paper size with a
+  10px gap between them; text that does not fit continues on the next page,
+  line by line. File > Page setup sets orientation, paper size (A4, Letter,
+  Legal, A5, A3) and margins per document; new documents use Letter in the
+  United States and A4 elsewhere. A horizontal and a vertical ruler (in
+  centimetres, or inches in the United States) show the margins and the current
+  paragraph's indents. View > Show ruler and View > Show print layout (off for
+  one continuous sheet) are remembered in the browser.
 - **Find and replace** (⌘F, ⌘⇧H) with match case, **word count** (⌘⇧C) for the
   document or the selection, and a **document outline** of all headings.
 - **Comments:** select text and add a comment (⌘⌥M), reply, resolve, reopen or
@@ -63,11 +71,13 @@ npm start          # http://localhost:3001
   of inactivity. Select a version to preview it, then restore it. Restoring
   replaces only the text that differs, so comments on unchanged text survive.
 - **Export:** File > Download as Microsoft Word (.docx), plain text (.txt) or
-  Markdown (.md). Word files use Word's Title, Subtitle and Heading 1–6 styles.
+  Markdown (.md). Word files use Word's Title, Subtitle and Heading 1–6 styles
+  and the document's page size, orientation and margins.
   In Markdown, Title becomes a level 1 heading, Subtitle a plain paragraph,
   checklists `- [ ]` / `- [x]`, superscript and subscript `<sup>` / `<sub>`,
   and a page break the comment `<!-- page break -->`. PDF uses the browser's
-  print dialog with print styles that output only the page. Edit > Copy as
+  print dialog with print styles that output only the pages, on the document's
+  paper size and margins. Edit > Copy as
   Markdown copies the selection.
 - **Make a copy:** File > Make a copy creates "Copy of <title>" without the
   comments.
@@ -102,6 +112,22 @@ pending edits are saved, so its positions refer to the server's version.
 To add real-time collaboration later, push accepted steps to other open
 clients (for example over WebSocket) and apply them with `receiveTransaction`,
 as the sync already does for conflicts.
+
+## How pages work
+
+Page settings are attributes of the document's top node (`shared/src/pageSetup.ts`),
+changed with a ProseMirror `DocAttrStep`. They are saved, validated by the server,
+undone and restored from version history like any other edit. Documents saved
+before page settings existed open as A4 portrait with 2.54 cm margins.
+
+On screen the editor is one content column over a stack of page sheets
+(`client/src/editor/pagination.ts`). After each change the editor measures where
+blocks and lines fall and inserts spacer widgets (decorations, not document
+content) that push the next line past the bottom margin, the gap and the next
+page's top margin. The rules are in `client/src/editor/pageLayout.ts`. Images,
+tables and other atomic blocks move to the next page whole; one taller than a
+page overflows. Printing hides the spacers and lets the browser break pages with
+the same page size and margins.
 
 ## Project layout
 
@@ -145,8 +171,9 @@ npm run typecheck
 ## Limitations
 
 - One user, no accounts or sharing.
-- The page is one continuous sheet; page breaks show as a dashed line and
-  start a new page only when printing.
+- Tables are not split across pages, and printed page breaks can differ
+  slightly from the screen because the browser paginates the printout.
+- No headers, footers or page numbers.
 - Comments are listed in a side panel rather than aligned next to their text,
   and they are not included in exports.
 - No suggestion mode or real-time collaboration yet.

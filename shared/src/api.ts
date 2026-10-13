@@ -9,6 +9,12 @@ export type DocumentSummary = {
   lastOpenedAt: number;
 };
 
+export type CreateDocumentRequest = {
+  title?: string;
+  /** Paper size of the new document, chosen from the user's locale (see defaultPaperSize). */
+  paperSize?: string;
+};
+
 export type DocumentSort = "lastOpened" | "lastModified" | "title";
 
 export type OpenedDocument = DocumentSummary & {

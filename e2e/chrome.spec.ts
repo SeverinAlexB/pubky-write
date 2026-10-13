@@ -30,8 +30,8 @@ test("the window bands have the specified heights", async ({ page }) => {
   expect((await box(".editor-header")).height).toBe(58);
   expect(await box(".toolbar")).toMatchObject({ x: 16, y: 65, height: 40, width: 1408 });
   expect(await box(".ruler-band")).toMatchObject({ y: 113, height: 16 });
-  expect((await box(".page")).y).toBe(145);
-  await expect(page.locator(".page")).toHaveCSS("border", "1px solid rgb(196, 199, 197)");
+  expect((await box(".page >> nth=0")).y).toBe(145);
+  await expect(page.locator(".page").first()).toHaveCSS("border", "1px solid rgb(196, 199, 197)");
 });
 
 test("toolbar controls are in order and named after their tooltips", async ({ page }) => {
@@ -249,7 +249,8 @@ test("menus list their items in order without omitted ones", async ({ page }) =>
   await items("Download").toEqual(
     ["Microsoft Word (.docx)", "PDF document (.pdf)", "Plain text (.txt)", "Markdown (.md)"],
   );
-  await expect(menu(page, "File").getByRole("menuitem", { name: "Page setup" })).toBeDisabled();
+  await expect(menu(page, "File").getByRole("menuitem", { name: "Page setup" })).toBeEnabled();
+  await expect(menu(page, "File").getByRole("menuitem", { name: "Details" })).toBeDisabled();
 
   await page.getByRole("button", { name: "Edit", exact: true }).hover();
   await items("Edit").toEqual([
@@ -333,21 +334,21 @@ test("zoom offers Fit, presets and typed values", async ({ page }) => {
   await zoom.click();
   await expect(menu(page, "Zoom").getByRole("menuitem")).toHaveText(["Fit", "50%", "75%", "90%", "100%", "125%", "150%", "200%"]);
   await menu(page, "Zoom").getByRole("menuitem", { name: "150%" }).click();
-  await expect(page.locator(".page").first()).toHaveCSS("zoom", "1.5");
+  await expect(page.locator(".page-stack")).toHaveCSS("zoom", "1.5");
   // Choosing a zoom returns focus to the document.
   await expect(editor(page)).toBeFocused();
 
   await zoom.fill("80");
   await zoom.press("Enter");
   await expect(zoom).toHaveValue("80%");
-  await expect(page.locator(".page").first()).toHaveCSS("zoom", "0.8");
+  await expect(page.locator(".page-stack")).toHaveCSS("zoom", "0.8");
 
   await zoom.click();
   await menu(page, "Zoom").getByRole("menuitem", { name: "Fit" }).click();
   await expect(zoom).toHaveValue("Fit");
   const scroll = (await page.locator(".editor-scroll").boundingBox())!;
   const pageBox = (await page.locator(".page").first().boundingBox())!;
-  expect(Math.abs(pageBox.width - (scroll.width - 32))).toBeLessThan(20);
+  expect(Math.abs(pageBox.width - (scroll.width - 32))).toBeLessThan(2);
 });
 
 test("Insert > Table inserts the size picked in the grid", async ({ page }) => {

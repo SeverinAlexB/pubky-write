@@ -358,6 +358,89 @@ button:disabled {
   color: var(--primary);
 }
 
+.page-setup-dialog {
+  width: min(520px, 90vw);
+}
+
+.page-setup-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.page-setup-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+
+.page-setup-group legend,
+.page-setup-label {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.radio-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.select-field {
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.select-field:focus {
+  border-color: var(--primary);
+  outline: 1px solid var(--primary);
+}
+
+.margin-field {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  font-size: 14px;
+}
+
+.margin-field input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.margin-field input:focus {
+  border-color: var(--primary);
+  outline: 1px solid var(--primary);
+}
+
+.dialog-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 14px;
+}
+
 .custom-spacing-dialog {
   width: min(360px, 90vw);
 }
@@ -661,9 +744,63 @@ button:disabled {
 }
 
 .ruler-band {
+  position: relative;
   flex: none;
   height: 16px;
   margin-top: 8px;
+  overflow: hidden;
+}
+
+/* Without rulers the editor area starts where the ruler would. */
+.ruler-gap {
+  flex: none;
+  height: 8px;
+}
+
+/* Rulers: white over the writable area, slightly darker over the margins. */
+
+.ruler {
+  position: absolute;
+  display: block;
+  overflow: visible;
+}
+
+.horizontal-ruler {
+  top: 0;
+}
+
+.vertical-ruler {
+  position: relative;
+  flex: none;
+  width: 16px;
+  overflow: hidden;
+}
+
+.vertical-ruler .ruler {
+  left: 0;
+}
+
+.ruler-margin {
+  fill: #e3e7ed;
+}
+
+.ruler-writable {
+  fill: #fff;
+}
+
+.ruler-tick {
+  stroke: var(--outline);
+  stroke-width: 1;
+}
+
+.ruler-label {
+  fill: var(--text-secondary);
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+.ruler-marker {
+  fill: var(--primary);
 }
 
 /* Toolbar */
@@ -1158,21 +1295,86 @@ button:disabled {
   padding: 16px 0 64px;
 }
 
-.page {
-  width: 816px; /* 8.5in at 96dpi */
-  min-height: 1056px; /* 11in */
+/* Pages: the content column lies over one sheet per page (see editor/pagination.ts).
+   The geometry variables come from the document's page setup. */
+
+.page-stack,
+.page-preview {
+  --page-width: 794px;
+  --page-height: 1123px;
+  --margin-top: 96px;
+  --margin-bottom: 96px;
+  --margin-left: 96px;
+  --margin-right: 96px;
+  --page-count: 1;
+  position: relative;
+  width: var(--page-width);
   margin: 0 auto;
-  padding: 96px; /* 1in margins */
+}
+
+.page-stack {
+  height: calc(var(--page-count) * (var(--page-height) + 10px) - 10px);
+}
+
+.page-stack[hidden] {
+  display: none;
+}
+
+.page {
+  position: absolute;
+  left: 0;
+  top: calc(var(--page-index) * (var(--page-height) + 10px));
+  width: 100%;
+  height: var(--page-height);
   border: 1px solid var(--page-border);
   background: #fff;
 }
 
+.page-stack > div:not(.page-sheets) {
+  height: 100%;
+}
+
+.page-stack .page-content,
+.page-preview .page-content {
+  position: relative;
+  min-height: 100%;
+  padding: var(--margin-top) var(--margin-right) 0 var(--margin-left);
+}
+
+/* Without print layout the document is one continuous sheet. */
+.page-stack.is-pageless {
+  height: auto;
+  min-height: var(--page-height);
+  background: #fff;
+}
+
+.page-stack.is-pageless .page-sheets {
+  display: none;
+}
+
+.page-stack.is-pageless .page-content {
+  min-height: var(--page-height);
+  padding-bottom: var(--margin-bottom);
+}
+
+/* Pushes the content after it to the next page. */
+.page-content .page-spacer {
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
 .page-preview {
-  border-color: var(--blue);
+  min-height: var(--page-height);
+  border: 1px solid var(--blue);
+  background: #fff;
+}
+
+.page-preview .page-content {
+  padding-bottom: var(--margin-bottom);
 }
 
 .page-content {
-  min-height: 864px;
   outline: none;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14.667px; /* 11pt */
@@ -1448,12 +1650,17 @@ button:disabled {
   margin: 0;
 }
 
-/* Page breaks: a dashed line on screen, a new page in print. */
+/* Page breaks: a new page in print layout and when printing, a dashed line without pages. */
 
 .page-content .page-break {
   height: 0;
   margin: 12px 0;
   border-top: 1px dashed #9aa0a6;
+}
+
+.page-stack:not(.is-pageless) .page-content .page-break {
+  margin: 0;
+  border-top: 0;
 }
 
 .page-content .page-break.ProseMirror-selectednode {
@@ -1940,10 +2147,7 @@ button:disabled {
 
 /* Printing and "Download as PDF" print only the page. */
 
-@page {
-  size: letter;
-  margin: 1in;
-}
+/* The @page rule with the document's paper size and margins is added by DocumentEditor. */
 
 @media print {
   .page-content .comment-highlight {
@@ -1954,6 +2158,9 @@ button:disabled {
   .editor-header,
   .toolbar,
   .ruler-band,
+  .ruler-gap,
+  .vertical-ruler,
+  .page-sheets,
   .tooltip,
   .history-panel,
   .outline-panel,
@@ -1973,16 +2180,29 @@ button:disabled {
     background: #fff;
   }
 
-  .page {
+  .page-stack,
+  .page-stack > div {
     width: auto;
+    height: auto;
     min-height: 0;
-    padding: 0;
-    border: 0;
+    margin: 0;
+    background: none;
     zoom: 1 !important;
   }
 
-  .page-content {
+  .page-stack .page-content {
     min-height: 0;
+    padding: 0;
+  }
+
+  .page-content .page-spacer {
+    display: none;
+  }
+
+  /* Break lines where the screen does, without the browser's widow and orphan control. */
+  .page-content * {
+    orphans: 1;
+    widows: 1;
   }
 
   .page-content .page-break {

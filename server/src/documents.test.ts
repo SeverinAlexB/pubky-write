@@ -1,10 +1,11 @@
-import { documentSchema } from "@docs/shared";
+import { documentSchema, pageSetupOf } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
 import { beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, type Database } from "./database.ts";
 import {
   applySteps,
+  blankDocument,
   copyDocument,
   createDocument,
   deleteDocument,
@@ -106,6 +107,19 @@ describe("document list", () => {
     expect(openDocument(db, id)).toBeNull();
   });
 
+  it("creates documents on the requested paper size", () => {
+    const letter = createDocument(db, undefined, 0, blankDocument("Letter"));
+    expect(pageSetupOf(getDocumentContent(db, letter.id)!.doc).paperSize).toBe("Letter");
+    const fallback = createDocument(db, undefined, 0, blankDocument("Napkin"));
+    expect(pageSetupOf(getDocumentContent(db, fallback.id)!.doc).paperSize).toBe("A4");
+  });
+
+  it("rejects steps that set invalid page settings", () => {
+    const { id } = createDocument(db);
+    const step = { stepType: "docAttr", attr: "marginTop", value: "lots" };
+    expect(() => applySteps(db, id, { clientId: "a", version: 0, steps: [step] })).toThrow(InvalidStepsError);
+  });
+
   it("copies a document's content under a new title", () => {
     const original = createDocument(db, "Plan", 1);
     applySteps(db, original.id, { clientId: "a", version: 0, steps: insertTextSteps(original.id, "Budget") });
@@ -146,6 +160,22 @@ describe("version history", () => {
     // The next edit starts a new session instead of merging into the restore entry.
     applySteps(db, id, { clientId: "a", version: 3, steps: insertTextSteps(id, "!") }, 3_000 + SESSION_GAP_MS);
     expect(listRevisions(db, id)).toHaveLength(4);
+  });
+
+  it("restores page settings with the content", () => {
+    const { id } = createDocument(db, "Doc", 0);
+    applySteps(db, id, { clientId: "a", version: 0, steps: insertTextSteps(id, "text") }, 1_000);
+    const before = listRevisions(db, id)[0]!;
+    const { doc } = getDocumentContent(db, id)!;
+    const landscape = new Transform(doc).setDocAttribute("orientation", "landscape").setDocAttribute("marginLeft", 36);
+    const steps = landscape.steps.map((step) => step.toJSON());
+    applySteps(db, id, { clientId: "a", version: 1, steps }, 1_000 + SESSION_GAP_MS);
+    expect(pageSetupOf(getDocumentContent(db, id)!.doc)).toMatchObject({ orientation: "landscape", marginLeft: 36 });
+
+    restoreRevision(db, id, before.id, 2_000 + SESSION_GAP_MS);
+
+    expect(pageSetupOf(getDocumentContent(db, id)!.doc)).toMatchObject({ orientation: "portrait", marginLeft: 72 });
+    expect(textOf(id)).toBe("text");
   });
 
   it("keeps the stored document valid against the schema", () => {

@@ -9,6 +9,7 @@ import {
   LevelFormat,
   Packer,
   PageBreak,
+  PageOrientation,
   Paragraph,
   ShadingType,
   Table,
@@ -27,6 +28,8 @@ import {
   bulletPresets,
   DEFAULT_LINE_SPACING,
   numberedPresets,
+  pageSetupOf,
+  paperSizes,
   paragraphStyleDefinitions,
   type NumberFormat,
   type ParagraphStyleDefinition,
@@ -72,8 +75,33 @@ const numberFormats: Record<NumberFormat, (typeof LevelFormat)[keyof typeof Leve
 export async function toDocx(doc: Node, title: string, readImage: ImageReader): Promise<Buffer> {
   const converter = new DocxConverter(readImage);
   const children = await converter.blocks(doc);
-  const file = new Document({ title, styles, numbering, sections: [{ children }] });
+  const file = new Document({ title, styles, numbering, sections: [{ properties: sectionProperties(doc), children }] });
   return Packer.toBuffer(file);
+}
+
+const TWIPS_PER_MM = 1440 / 25.4;
+
+/** Page size, orientation and margins from File > Page setup. */
+function sectionProperties(doc: Node) {
+  const setup = pageSetupOf(doc);
+  const paper = paperSizes[setup.paperSize];
+  const twips = (points: number) => Math.round(points * TWIPS_PER_POINT);
+  return {
+    page: {
+      // Portrait dimensions; the library swaps them for landscape.
+      size: {
+        width: Math.round(paper.width * TWIPS_PER_MM),
+        height: Math.round(paper.height * TWIPS_PER_MM),
+        orientation: setup.orientation === "landscape" ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
+      },
+      margin: {
+        top: twips(setup.marginTop),
+        bottom: twips(setup.marginBottom),
+        left: twips(setup.marginLeft),
+        right: twips(setup.marginRight),
+      },
+    },
+  };
 }
 
 /** Word's paragraph style for one of the editor's styles. */

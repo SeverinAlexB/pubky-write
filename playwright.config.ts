@@ -16,6 +16,8 @@ export default defineConfig({
     baseURL: `http://localhost:${webPort}`,
     // Uses the installed Chrome instead of downloading a browser.
     channel: "chrome",
+    // The spec's measurements are for en-GB: A4 paper and centimetres.
+    locale: "en-GB",
     headless: true,
     trace: "retain-on-failure",
   },

@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import {
   documentSchema,
   emptyDocument,
+  isPaperSize,
+  pageSetupKeys,
   type DocumentSort,
   type DocumentSummary,
   type OpenedDocument,
@@ -51,6 +53,12 @@ export function createDocument(
      VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
   ).run(id, normalizeTitle(title), JSON.stringify(doc.toJSON()), plainText(doc), now, now, now);
   return { id, title: normalizeTitle(title), createdAt: now, updatedAt: now, lastOpenedAt: now };
+}
+
+/** The content of a new blank document on the given paper size (the client picks it from the user's locale). */
+export function blankDocument(paperSize?: unknown): Node {
+  const doc = Node.fromJSON(documentSchema, emptyDocument);
+  return isPaperSize(paperSize) ? new Transform(doc).setDocAttribute("paperSize", paperSize).doc : doc;
 }
 
 /** File > Make a copy: a new document named "Copy of <title>" with the same content, without comments. */
@@ -172,9 +180,15 @@ export function restoreRevision(db: Database, id: string, revisionId: number, no
   return result?.kind === "applied" ? { version: result.version } : null;
 }
 
-/** A transform that turns `doc` into `target` by replacing only the range where they differ. */
+/**
+ * A transform that turns `doc` into `target` by replacing only the range where they differ,
+ * and setting the page settings that differ.
+ */
 export function replaceDifference(doc: Node, target: Node): Transform {
   const transform = new Transform(doc);
+  for (const key of pageSetupKeys) {
+    if (doc.attrs[key] !== target.attrs[key]) transform.setDocAttribute(key, target.attrs[key]);
+  }
   const start = doc.content.findDiffStart(target.content);
   if (start === null) return transform;
   let { a: endA, b: endB } = doc.content.findDiffEnd(target.content)!;

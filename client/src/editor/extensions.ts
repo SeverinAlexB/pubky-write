@@ -5,6 +5,7 @@ import { UndoRedo } from "@tiptap/extensions";
 import { collab } from "prosemirror-collab";
 import { clampFontSize, DEFAULT_FONT, parseFontSize, stepFontSize } from "./fonts.ts";
 import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
+import { Pagination } from "./pagination.ts";
 import { Search } from "./search.ts";
 
 type EditorExtensionOptions = {
@@ -17,7 +18,7 @@ type EditorExtensionOptions = {
   onCommentClick: (id: number) => void;
 };
 
-/** The shared document schema plus the editor-only behaviour: undo, step tracking, search and shortcuts. */
+/** The shared document schema plus the editor-only behaviour: undo, step tracking, search, pages and shortcuts. */
 export function editorExtensions({
   version,
   clientId,
@@ -30,6 +31,7 @@ export function editorExtensions({
     ...documentExtensions,
     UndoRedo,
     Search,
+    Pagination,
     CommentAnchors.configure({ initial: comments, onActivate: onCommentClick }),
     Extension.create({
       name: "collab",

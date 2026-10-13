@@ -1,5 +1,17 @@
-import { toMarkdown, type CommentThread, type OpenedDocument, type Revision, type RevisionWithContent } from "@docs/shared";
-import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import {
+  lengthUnit,
+  pageGeometry,
+  pageSetupKeys,
+  pageSetupOf,
+  paperSizes,
+  toMarkdown,
+  type CommentThread,
+  type OpenedDocument,
+  type PageSetup,
+  type Revision,
+  type RevisionWithContent,
+} from "@docs/shared";
+import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { getVersion } from "prosemirror-collab";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -18,12 +30,17 @@ import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts
 import { HistoryPanel, RevisionPreview } from "./HistoryPanel.tsx";
 import { MenuBar } from "./MenuBar.tsx";
 import { OutlinePanel } from "./OutlinePanel.tsx";
+import { PageSetupDialog } from "./PageSetupDialog.tsx";
+import { resetPagination, setGeometry } from "./pagination.ts";
+import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
 import { DocumentSync, type SaveStatus } from "./sync.ts";
 import { Toolbar } from "./toolbar/Toolbar.tsx";
 import type { Zoom } from "./toolbar/ZoomControl.tsx";
 import { WordCountDialog } from "./WordCountDialog.tsx";
 
 const OUTLINE_SETTING = "docs.outlineOpen";
+const RULER_SETTING = "docs.rulerVisible";
+const PRINT_LAYOUT_SETTING = "docs.printLayout";
 
 type DocumentEditorProps = {
   document: OpenedDocument;
@@ -36,7 +53,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [savedTitle, setSavedTitle] = useState(doc.title);
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [zoom, setZoom] = useState<Zoom>(1);
-  const fitZoom = useFitZoom();
+  const [rulerVisible, setRulerVisible] = useState(() => localStorage.getItem(RULER_SETTING) !== "false");
+  const [printLayout, setPrintLayout] = useState(() => localStorage.getItem(PRINT_LAYOUT_SETTING) !== "false");
+  const [pageSetupOpen, setPageSetupOpen] = useState(false);
+  const [stack, setStack] = useState<HTMLDivElement | null>(null);
   const [menusHidden, setMenusHidden] = useState(false);
   const [linkDialog, setLinkDialog] = useState<{ href: string } | null>(null);
   const [imageUrlDialog, setImageUrlDialog] = useState(false);
@@ -134,6 +154,23 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   useEffect(() => {
     localStorage.setItem(OUTLINE_SETTING, String(outlineOpen));
   }, [outlineOpen]);
+
+  useEffect(() => {
+    localStorage.setItem(RULER_SETTING, String(rulerVisible));
+  }, [rulerVisible]);
+
+  useEffect(() => {
+    localStorage.setItem(PRINT_LAYOUT_SETTING, String(printLayout));
+  }, [printLayout]);
+
+  const pageSetup = useEditorState({
+    editor,
+    selector: ({ editor: current }) => pageSetupOf(current.state.doc),
+    equalityFn: (a, b) => b !== null && pageSetupKeys.every((key) => a[key] === b[key]),
+  });
+  const geometry = useMemo(() => pageGeometry(pageSetup), [pageSetup]);
+  const unit = useMemo(() => lengthUnit(navigator.language), []);
+  usePrintPageRule(pageSetup);
 
   // Shortcuts that work anywhere on the page, overriding the browser's own find.
   useEffect(() => {
@@ -280,6 +317,18 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     editor.chain().focus().insertContent({ type: "image", attrs: { src } }).run();
   }
 
+  function applyPageSetup(setup: PageSetup) {
+    setPageSetupOpen(false);
+    editor
+      .chain()
+      .focus()
+      .command(({ tr }) => {
+        for (const key of pageSetupKeys) if (tr.doc.attrs[key] !== setup[key]) tr.setDocAttribute(key, setup[key]);
+        return true;
+      })
+      .run();
+  }
+
   // Menu and toolbar actions. Optional actions of features not built yet are left out (see actions.ts).
   const actions: EditorActions = {
     newDocument: async () => navigate(`/d/${(await api.createDocument()).id}`),
@@ -302,6 +351,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       navigate("/");
     },
     openVersionHistory: openHistory,
+    pageSetup: () => setPageSetupOpen(true),
     print: () => window.print(),
     cut: () => editor.commands.focus() && document.execCommand("cut"),
     copy: () => editor.commands.focus() && document.execCommand("copy"),
@@ -314,6 +364,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     findAndReplace: () => openFind(true),
     showAllComments: () => setCommentsOpen(true),
     toggleOutline: () => setOutlineOpen((open) => !open),
+    togglePrintLayout: () => setPrintLayout((on) => !on),
+    toggleRuler: () => setRulerVisible((visible) => !visible),
     fullScreen: () => void document.documentElement.requestFullscreen?.(),
     uploadImage: () => imageInput.current?.click(),
     insertImageByUrl: () => setImageUrlDialog(true),
@@ -332,11 +384,19 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     customSpacing: () => setCustomSpacing(paragraphSpacingAt(editor)),
     toggleChecklist: () => editor.chain().focus().toggleTaskList().run(),
     applyListPreset: (kind, preset) => editor.chain().focus().applyListPreset(kind, preset).run(),
+    setPageOrientation: () => setPageSetupOpen(true),
+    switchToPageless: () => setPrintLayout(false),
     wordCount: () => setWordCountOpen(true),
   };
 
   const openCommentCount = threads.filter((thread) => !thread.resolved).length;
+  const fitZoom = useFitZoom(geometry.width);
   const effectiveZoom = zoom === "fit" ? fitZoom.value : zoom;
+
+  // Zoom, the print layout setting and showing the page again all change the layout from outside the editor.
+  useEffect(() => {
+    if (stack && !editor.isDestroyed) resetPagination(editor.view, printLayout);
+  }, [editor, stack, effectiveZoom, printLayout, preview === null]);
 
   return (
     <div className="editor-app">
@@ -368,7 +428,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             <MenuBar
               editor={editor}
               actions={actions}
-              view={{ outlineOpen, printLayout: true, rulerVisible: false, nonPrintingCharacters: false }}
+              view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false }}
             />
           </div>
           <div className="header-actions">
@@ -406,20 +466,37 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           onToggleMenus={() => setMenusHidden((hidden) => !hidden)}
         />
       )}
-      {/* Reserved for the horizontal ruler. */}
-      <div className="ruler-band" aria-hidden />
+      {rulerVisible ? (
+        <HorizontalRuler editor={editor} stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />
+      ) : (
+        <div className="ruler-gap" />
+      )}
 
       <div className="editor-workspace">
+        {rulerVisible && printLayout && <VerticalRuler stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />}
         {outlineOpen && !historyOpen && <OutlinePanel editor={editor} onClose={() => setOutlineOpen(false)} />}
         {find && !historyOpen && (
           <FindBar editor={editor} showReplace={find.replace} focusRequest={find.request} onClose={() => setFind(null)} />
         )}
         <div className="editor-scroll" ref={fitZoom.ref}>
-          <div className="page" style={{ zoom: effectiveZoom }} hidden={preview !== null}>
+          <div
+            ref={setStack}
+            className={`page-stack${printLayout ? "" : " is-pageless"}`}
+            style={{ zoom: effectiveZoom }}
+            hidden={preview !== null}
+          >
+            {/* One sheet per page, drawn by the pagination plugin. */}
+            <div className="page-sheets" aria-hidden />
             <EditorContent editor={editor} />
           </div>
           {preview && (
-            <div className="page page-preview" style={{ zoom: effectiveZoom }}>
+            <div
+              className="page-preview"
+              style={{ zoom: effectiveZoom }}
+              ref={(element) => {
+                if (element) setGeometry(element, pageGeometry(pageSetupOf(editor.schema.nodeFromJSON(preview.content))));
+              }}
+            >
               <RevisionPreview revision={preview} />
             </div>
           )}
@@ -484,6 +561,18 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         />
       )}
 
+      {pageSetupOpen && (
+        <PageSetupDialog
+          initial={pageSetup}
+          unit={unit}
+          onApply={applyPageSetup}
+          onCancel={() => {
+            setPageSetupOpen(false);
+            editor.commands.focus();
+          }}
+        />
+      )}
+
       {imageUrlDialog && (
         <PromptDialog
           title="Insert image"
@@ -531,22 +620,34 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   );
 }
 
-/** Width of the page including its border, before zooming. */
-const PAGE_WIDTH = 818;
 /** Space kept on each side of the page when zoomed to fit. */
 const FIT_MARGIN = 16;
 
-/** The zoom at which the page is as wide as the editor area. */
-function useFitZoom() {
-  const [value, setValue] = useState(1);
+/** The zoom at which a page `pageWidth` pixels wide (borders included) is as wide as the editor area. */
+function useFitZoom(pageWidth: number) {
+  const [areaWidth, setAreaWidth] = useState<number | null>(null);
   const [element, ref] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!element) return;
-    const observer = new ResizeObserver(() => setValue((element.clientWidth - 2 * FIT_MARGIN) / PAGE_WIDTH));
+    const observer = new ResizeObserver(() => setAreaWidth(element.clientWidth));
     observer.observe(element);
     return () => observer.disconnect();
   }, [element]);
-  return { value, ref };
+  return { value: areaWidth === null ? 1 : (areaWidth - 2 * FIT_MARGIN) / pageWidth, ref };
+}
+
+/** Printing uses the document's paper size and margins. */
+function usePrintPageRule(setup: PageSetup) {
+  useEffect(() => {
+    const style = document.createElement("style");
+    const paper = paperSizes[setup.paperSize];
+    const [width, height] = setup.orientation === "landscape" ? [paper.height, paper.width] : [paper.width, paper.height];
+    const margins = [setup.marginTop, setup.marginRight, setup.marginBottom, setup.marginLeft].map((points) => `${points}pt`);
+    style.textContent = `@page { size: ${width}mm ${height}mm; margin: ${margins.join(" ")}; }`;
+    style.dataset.pageSetup = "";
+    document.head.append(style);
+    return () => style.remove();
+  }, [setup]);
 }
 
 /** Edit > Paste and Paste without formatting, which have to read the clipboard themselves. */

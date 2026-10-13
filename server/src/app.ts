@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import { toMarkdown, type CreateCommentRequest, type DocumentSort, type SubmitStepsRequest } from "@docs/shared";
+import { toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type SubmitStepsRequest } from "@docs/shared";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -17,6 +17,7 @@ import {
 import { inTransaction, type Database } from "./database.ts";
 import {
   applySteps,
+  blankDocument,
   copyDocument,
   createDocument,
   deleteDocument,
@@ -60,8 +61,8 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
   });
 
   app.post("/api/documents", async (c) => {
-    const body = await c.req.json<{ title?: string }>().catch(() => ({}) as { title?: string });
-    return c.json(createDocument(db, body.title), 201);
+    const body = await c.req.json<CreateDocumentRequest>().catch(() => ({}) as CreateDocumentRequest);
+    return c.json(createDocument(db, body.title, Date.now(), blankDocument(body.paperSize)), 201);
   });
 
   app.get("/api/documents/:id", (c) => c.json(found(openDocument(db, c.req.param("id")))));

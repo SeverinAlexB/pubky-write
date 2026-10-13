@@ -207,7 +207,7 @@ test("list presets change the glyphs and numbering of the current list", async (
   expect(await glyphs()).toEqual(['"●"', '"○"', '"■"', '"●"']);
 
   // Geometry: glyph about 28px and text 48px right of the edge, 48px more per level.
-  const left = (await editor(page).boundingBox())!.x;
+  const left = (await editor(page).locator("ul").first().boundingBox())!.x;
   const firstText = (await items.first().locator("p").first().boundingBox())!.x;
   expect(firstText - left).toBeCloseTo(48, 0);
   const secondText = (await items.nth(1).locator("p").first().boundingBox())!.x;
@@ -221,7 +221,8 @@ test("list presets change the glyphs and numbering of the current list", async (
 
   await waitUntilSaved(page);
   await page.reload();
-  expect(await glyphs()).toEqual(['"★"', '"○"', '"■"', '"★"']);
+  // Polled: the editor can be mounted twice while the page loads.
+  await expect.poll(glyphs).toEqual(['"★"', '"○"', '"■"', '"★"']);
 
   // A numbered preset turns the list into a numbered list.
   await editor(page).locator("li p").first().click();

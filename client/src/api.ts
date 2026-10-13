@@ -1,15 +1,17 @@
-import type {
-  CommentThread,
-  CreateCommentRequest,
-  DocumentSort,
-  DocumentSummary,
-  OpenedDocument,
-  Revision,
-  RevisionWithContent,
-  StepsConflictResponse,
-  SubmitStepsRequest,
-  SubmitStepsResponse,
-  UploadResponse,
+import {
+  defaultPaperSize,
+  type CommentThread,
+  type CreateCommentRequest,
+  type CreateDocumentRequest,
+  type DocumentSort,
+  type DocumentSummary,
+  type OpenedDocument,
+  type Revision,
+  type RevisionWithContent,
+  type StepsConflictResponse,
+  type SubmitStepsRequest,
+  type SubmitStepsResponse,
+  type UploadResponse,
 } from "@docs/shared";
 import { RejectedError, type StepsTransport, type SubmitResult } from "./editor/sync.ts";
 
@@ -39,8 +41,12 @@ export const api = {
     if (options.sort) params.set("sort", options.sort);
     return request<DocumentSummary[]>(`/api/documents?${params}`);
   },
+  /** Creates a blank document on the paper size used in the user's locale. */
   createDocument: (title?: string) =>
-    request<DocumentSummary>("/api/documents", { method: "POST", body: JSON.stringify({ title }) }),
+    request<DocumentSummary>("/api/documents", {
+      method: "POST",
+      body: JSON.stringify({ title, paperSize: defaultPaperSize(navigator.language) } satisfies CreateDocumentRequest),
+    }),
   copyDocument: (id: string) => request<DocumentSummary>(`/api/documents/${id}/copy`, { method: "POST" }),
   openDocument: (id: string) => request<OpenedDocument>(`/api/documents/${id}`),
   renameDocument: (id: string, title: string) =>

@@ -199,6 +199,20 @@ describe("toDocx", () => {
   });
 
 
+  it("uses the page size, orientation and margins from page setup", async () => {
+    const landscape = Node.fromJSON(documentSchema, {
+      type: "doc",
+      attrs: { paperSize: "Letter", orientation: "landscape", marginTop: 36, marginBottom: 54, marginLeft: 72, marginRight: 90 },
+      content: [{ type: "paragraph" }],
+    });
+    const body = await documentXml(await toDocx(landscape, "Wide", async () => null), "word/document.xml");
+    expect(body).toMatch(/<w:pgSz w:w="15840" w:h="12240" w:orient="landscape"\/>/);
+    expect(body).toMatch(/<w:pgMar w:top="720" w:right="1800" w:bottom="1080" w:left="1440"/);
+
+    const a4 = await documentXml(await toDocx(sample, "Sample", async () => null), "word/document.xml");
+    expect(a4).toMatch(/<w:pgSz w:w="11906" w:h="16838" w:orient="portrait"\/>/);
+  });
+
   it("produces a Word file and tolerates missing images", async () => {
     const buffer = await toDocx(sample, "Sample", async () => null);
     expect(buffer.subarray(0, 2).toString()).toBe("PK"); // .docx is a zip archive

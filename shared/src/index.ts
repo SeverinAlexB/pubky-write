@@ -4,5 +4,6 @@ export * from "./paragraphFormat.ts";
 export * from "./paragraphStyles.ts";
 export * from "./lists.ts";
 export * from "./pageBreak.ts";
+export * from "./pageSetup.ts";
 export * from "./anchors.ts";
 export * from "./markdown.ts";
