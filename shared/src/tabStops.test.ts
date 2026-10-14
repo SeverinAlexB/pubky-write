@@ -37,6 +37,20 @@ describe("tabAdvance", () => {
     expect(tabAdvance({ ...base, at: 400 })).toEqual({ width: 32, stop: null });
   });
 
+  it("lays out a tab at the very start of a line, alone or before text", () => {
+    // An empty line: the first stop, or the first default stop.
+    expect(tabAdvance({ ...base, following: 0, at: 0 })).toEqual({ width: 170.08, stop: stops[0] });
+    expect(tabAdvance({ ...base, stops: [], following: 0, at: 0 })).toEqual({ width: 36, stop: null });
+    // An indented paragraph: default stops count from the indent, explicit stops from the margin.
+    expect(tabAdvance({ ...base, stops: [], indent: 36, at: 36 })).toEqual({ width: 36, stop: null });
+    expect(tabAdvance({ ...base, indent: 36, at: 36 })).toEqual({ width: 134.08, stop: stops[0] });
+    // A first line indent of 1 cm from 0: to 1.27 cm; a hanging first line: to the left indent.
+    expect(tabAdvance({ ...base, stops: [], at: 28.35 }).width).toBeCloseTo(7.65, 6);
+    expect(tabAdvance({ ...base, stops: [], indent: 72, at: 36 })).toEqual({ width: 36, stop: null });
+    // A right stop with nothing after the tab: the line ends at the stop.
+    expect(tabAdvance({ ...base, stops: [stops[2]!], following: 0, at: 0 })).toEqual({ width: 396.85, stop: stops[2] });
+  });
+
   it("never goes past the end of the line, and starts text that does not fit before a stop where the tab is", () => {
     expect(tabAdvance({ ...base, at: 440, stops: [] }).width).toBe(10);
     expect(tabAdvance({ ...base, at: 380, following: 30 }).width).toBe(0);

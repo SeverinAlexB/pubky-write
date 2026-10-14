@@ -57,7 +57,7 @@ describe("paragraph indents", () => {
     expect(Object.is(indentAttributes({ left: -0.001, firstLine: 0, right: 0 }).indentLeft, 0)).toBe(true);
   });
 
-  it("step to the next half inch with Tab and Shift+Tab", () => {
+  it("step to the next half inch with ⌘] and ⌘[", () => {
     expect(steppedIndent(0, 1)).toBe(36);
     expect(steppedIndent(36, 1)).toBe(72);
     // From a dragged indent to the next stop either way.
@@ -65,7 +65,7 @@ describe("paragraph indents", () => {
     expect(steppedIndent(50, -1)).toBe(36);
     expect(steppedIndent(36, -1)).toBe(0);
     expect(steppedIndent(0, -1)).toBe(0);
-    // At most eight steps; a larger dragged indent is left alone by Tab.
+    // At most eight steps; a larger dragged indent is left alone by ⌘].
     expect(steppedIndent(288, 1)).toBe(288);
     expect(steppedIndent(300, 1)).toBe(300);
   });

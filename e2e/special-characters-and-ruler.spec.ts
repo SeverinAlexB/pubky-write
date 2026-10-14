@@ -218,7 +218,7 @@ test.describe("ruler", () => {
     expect((await box(firstLineMarker(page))).x + 5 - margin).toBeCloseTo(0, 0);
   });
 
-  test("the right indent, Alt without snapping, every selected paragraph and Tab after a drag", async ({ page }) => {
+  test("the right indent, Alt without snapping, every selected paragraph and ⌘+] after a drag", async ({ page }) => {
     await createDocument(page);
     await editor(page).click();
     await page.keyboard.type("First paragraph");
@@ -239,7 +239,7 @@ test.describe("ruler", () => {
     // Only the paragraph with the cursor.
     expect((await box(paragraphs.nth(0))).x - margin).toBeCloseTo(0, 0);
 
-    // Tab moves on to the next half inch.
+    // ⌘+] moves on to the next half inch.
     await page.keyboard.press(`${mod}+]`);
     await expect.poll(async () => (await box(paragraphs.nth(2))).x - margin).toBeCloseTo(48, 0);
 

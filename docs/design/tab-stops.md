@@ -44,8 +44,11 @@ pagination's measuring box call `layoutTabsIn` directly.
 
 ## Editing
 
-- Tab inside a paragraph, after its start, inserts a tab; at the start (or across paragraphs) it
-  indents as before. Lists and tables keep their own Tab (nest the item, next cell).
+- Tab in a paragraph inserts a tab, also at its start and on an empty line (in a code block a
+  literal `"\t"`); across paragraphs it does nothing. It never indents: ⌘] and ⌘[ (also in headers,
+  footers and footnotes) and the toolbar do. Shift+Tab does nothing. Lists and tables keep their
+  own Tab and Shift+Tab (nest or lift the item, next or previous cell). In Suggesting mode the tab
+  is inserted text like any other.
 - The ruler shows the stops of the paragraph at the cursor (the first selected one). A click on the
   writable area opens the menu; adding, moving (remove at the old position and add at the new one)
   and removing apply to every selected paragraph and heading, one undo step each.

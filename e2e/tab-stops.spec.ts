@@ -275,26 +275,151 @@ test("stops apply to every selected paragraph and the ruler shows the first one'
   await expect(tabStops(page)).toHaveCount(1);
 });
 
-test("Tab at the start of a paragraph indents; after text it inserts a tab", async ({ page }) => {
+/** Sets attributes of the paragraph at the cursor through the editor's commands. */
+async function setParagraphAttributes(page: Page, attributes: Record<string, unknown>) {
+  await page.evaluate((attrs) => {
+    type Commands = { updateAttributes: (type: string, attrs: Record<string, unknown>) => boolean };
+    (document.querySelector(".ProseMirror") as unknown as { editor: { commands: Commands } }).editor.commands.updateAttributes("paragraph", attrs);
+  }, attributes);
+}
+
+test("on a new empty line with a stop at 6 cm, Tab and X put X at 6 cm without changing the indent", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("First line");
+  await page.keyboard.press("Enter");
+  await addTabStop(page, 6, "Add left tab-stop");
+  const paragraph = editor(page).locator("p").nth(1);
+  const margin = await contentLeft(page);
+
+  await page.keyboard.press("Tab");
+  await expect(paragraph.locator(".tab-char")).toHaveCount(1);
+  // The tab alone on its line already reaches the stop.
+  await expect.poll(async () => (await box(paragraph.locator(".tab-char"))).width).toBeCloseTo(6 * CM, 0);
+  await page.keyboard.type("X");
+  await expect(paragraph).toHaveText("\tX");
+  await expect.poll(async () => (await textBounds(paragraph, "X")).left - margin).toBeCloseTo(6 * CM, 0);
+  // The indent is unchanged: the paragraph still starts at the margin.
+  await expect(paragraph).toHaveCSS("margin-left", "0px");
+  expect((await box(paragraph)).x - margin).toBeCloseTo(0, 0);
+  const leftIndent = page.locator(".ruler-marker.left-indent");
+  expect((await box(leftIndent)).x + (await box(leftIndent)).width / 2 - margin).toBeCloseTo(0, 0);
+
+  // Kept after a reload.
+  await waitUntilSaved(page);
+  await page.reload();
+  const reloaded = editor(page).locator("p").nth(1);
+  await expect.poll(async () => (await textBounds(reloaded, "X")).left - margin).toBeCloseTo(6 * CM, 0);
+  await expect(reloaded).toHaveCSS("margin-left", "0px");
+});
+
+test("Tab at the start of a line with text inserts a tab; Shift+Tab does nothing", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("Text");
+  const paragraph = editor(page).locator("p").first();
+  const margin = await contentLeft(page);
+
+  // Without stops: the next 1.27 cm.
+  await page.keyboard.press(lineStart);
+  await selectionSynced(page);
+  await page.keyboard.press("Tab");
+  await expect(paragraph.locator(".tab-char")).toHaveCount(1);
+  await expect(paragraph).toHaveText("\tText");
+  await expect.poll(async () => (await textBounds(paragraph, "Text")).left - margin).toBeCloseTo(1.27 * CM, 0);
+  await expect(paragraph).toHaveCSS("margin-left", "0px");
+
+  // With a stop at 6 cm the same tab moves the text to the stop.
+  await addTabStop(page, 6, "Add left tab-stop");
+  await expect.poll(async () => (await textBounds(paragraph, "Text")).left - margin).toBeCloseTo(6 * CM, 0);
+  await expect(paragraph).toHaveCSS("margin-left", "0px");
+  // Typing after the tab starts at the stop.
+  await page.keyboard.type("A");
+  await expect(paragraph).toHaveText("\tAText");
+  await expect.poll(async () => (await textBounds(paragraph, "AText")).left - margin).toBeCloseTo(6 * CM, 0);
+
+  // Shift+Tab changes nothing, at the start and after text.
+  await page.keyboard.press(lineStart);
+  await selectionSynced(page);
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press(lineEnd);
+  await selectionSynced(page);
+  await page.keyboard.press("Shift+Tab");
+  await expect(paragraph).toHaveText("\tAText");
+  await expect(paragraph).toHaveCSS("margin-left", "0px");
+  // The document keeps the focus.
+  await expect(editor(page)).toBeFocused();
+
+  // ⌘+] still indents; the tab then counts from the stop (6 cm is past the indent).
+  await page.keyboard.press(`${mod}+]`);
+  await expect(paragraph).toHaveCSS("margin-left", "48px");
+  await expect.poll(async () => (await textBounds(paragraph, "AText")).left - margin).toBeCloseTo(6 * CM, 0);
+  await page.keyboard.press(`${mod}+[`);
+  await expect(paragraph).toHaveCSS("margin-left", "0px");
+
+  // A selection across paragraphs: Tab does nothing.
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Second");
+  await page.keyboard.press(`${mod}+a`);
+  await page.keyboard.press("Tab");
+  await expect(editor(page).locator("p")).toHaveText(["\tAText", "Second"]);
+  await expect(editor(page).locator(".tab-char")).toHaveCount(1);
+});
+
+test("a tab at the start of an indented, first line or hanging indented paragraph goes to the next stop", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  const paragraph = editor(page).locator("p").first();
+  const margin = await contentLeft(page);
+  const textLeft = async () => (await textBounds(paragraph, "Y")).left - margin;
+  await page.keyboard.type("Y");
+  await page.keyboard.press(lineStart);
+  await selectionSynced(page);
+  await page.keyboard.press("Tab");
+
+  // Left indent 1.27 cm: the default stops count from it.
+  await page.keyboard.press(`${mod}+]`);
+  await expect.poll(textLeft).toBeCloseTo(2.54 * CM, 0);
+  // First line indent 1 cm from 0: the tab goes to 1.27 cm.
+  await setParagraphAttributes(page, { indent: 0, indentLeft: 0, indentFirstLine: 72 / 2.54 });
+  await expect.poll(textLeft).toBeCloseTo(1.27 * CM, 0);
+  // Hanging indent: left 2.54 cm, first line at 1.27 cm: the tab goes to the left indent.
+  await setParagraphAttributes(page, { indentLeft: 72, indentFirstLine: -36 });
+  await expect.poll(textLeft).toBeCloseTo(2.54 * CM, 0);
+  // A stop at 6 cm wins over the default stops.
+  await addTabStop(page, 6, "Add left tab-stop");
+  await expect.poll(textLeft).toBeCloseTo(6 * CM, 0);
+  await expect(paragraph.locator(".tab-char")).toHaveCount(1);
+});
+
+test("a tab on a wrapped line goes to the stop of that line", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await addTabStop(page, 6, "Add left tab-stop");
+  const paragraph = editor(page).locator("p").first();
+  const margin = await contentLeft(page);
+  // Enough words to wrap, then a tab at the start of the second line's word "Z".
+  await page.keyboard.type(`${"word ".repeat(30)}Z`);
+  await page.keyboard.press("ArrowLeft");
+  await selectionSynced(page);
+  await page.keyboard.press("Tab");
+  const tab = await box(paragraph.locator(".tab-char"));
+  // The tab is on the second line, and Z starts at the next default stop after the tab (every
+  // 1.27 cm from the indent; the stop at 6 cm is behind it).
+  expect(tab.y).toBeGreaterThan((await box(paragraph)).y + 5);
+  const at = (tab.x - margin) / CM;
+  expect(at).toBeGreaterThan(6);
+  const expected = (Math.floor(at / 1.27 + 1e-6) + 1) * 1.27;
+  await expect.poll(async () => ((await textBounds(paragraph, "Z")).left - margin) / CM).toBeCloseTo(expected, 1);
+});
+
+test("in a list Tab still nests the item and a typed tab character becomes a tab", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();
   await page.keyboard.type("Indented");
   const paragraph = editor(page).locator("p").first();
-  const margin = await contentLeft(page);
-
-  await page.keyboard.press(lineStart);
-  await selectionSynced(page);
-  await page.keyboard.press("Tab");
-  await expect.poll(async () => (await box(paragraph)).x - margin).toBeCloseTo(48, 0);
-  await expect(paragraph.locator(".tab-char")).toHaveCount(0);
-
-  await page.keyboard.press(lineEnd);
-  await selectionSynced(page);
   await page.keyboard.press("Tab");
   await page.keyboard.type("x");
-  await expect(paragraph.locator(".tab-char")).toHaveCount(1);
-  // Still indented once.
-  expect((await box(paragraph)).x - margin).toBeCloseTo(48, 0);
   await expect(paragraph).toHaveText("Indented\tx");
   // Backspace deletes a tab like a character.
   await page.keyboard.press("Backspace");
@@ -306,7 +431,6 @@ test("Tab at the start of a paragraph indents; after text it inserts a tab", asy
   await expect(paragraph.locator(".tab-char")).toHaveCount(1);
   await expect(paragraph).toHaveText("Indenteda\tb");
 
-  // In a list Tab still nests the item.
   await page.keyboard.press("Enter");
   await page.keyboard.type("* One");
   await page.keyboard.press("Enter");
@@ -314,6 +438,28 @@ test("Tab at the start of a paragraph indents; after text it inserts a tab", asy
   await page.keyboard.press("Tab");
   await expect(editor(page).locator("ul ul")).toHaveCount(1);
   await expect(editor(page).locator("li .tab-char")).toHaveCount(0);
+  // Shift+Tab lifts it back.
+  await page.keyboard.press("Shift+Tab");
+  await expect(editor(page).locator("ul ul")).toHaveCount(0);
+  await expect(editor(page).locator("li")).toHaveCount(2);
+});
+
+test("in a table Tab still moves between cells", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await menuBarItem(page, "Insert").click();
+  await page.getByRole("menu", { name: "Insert" }).getByRole("menuitem", { name: "Table" }).hover();
+  await page.getByRole("menuitem", { name: "2 x 2", exact: true }).click();
+  const cells = editor(page).locator("td");
+  await expect(cells).toHaveCount(4);
+  await page.keyboard.type("A");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("B");
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.type("!");
+  // Moving to a cell selects its text, so "!" replaces "A".
+  await expect(cells).toHaveText(["!", "B", "", ""]);
+  await expect(editor(page).locator(".tab-char")).toHaveCount(0);
 });
 
 test("indent markers can be grabbed anywhere within 8px of their shape", async ({ page }) => {
@@ -387,4 +533,32 @@ test("tab stops in a header, and in the Word export", async ({ page }) => {
   expect(documentXml).toContain("<w:tab/>");
   const headerXml = Object.keys(zip.files).find((name) => /^word\/header\d*\.xml$/.test(name))!;
   expect(await zip.file(headerXml)!.async("string")).toMatch(/<w:tab w:val="right" w:pos="5669"\/>/);
+});
+
+test("in a header Tab at the start inserts a tab and ⌘+] indents", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await menuBarItem(page, "Insert").click();
+  await page.getByRole("menu", { name: "Insert" }).getByRole("menuitem", { name: "Page elements" }).hover();
+  await page.getByRole("menu", { name: "Page elements" }).getByRole("menuitem", { name: "Header", exact: true }).click();
+  const header = page.getByRole("textbox", { name: "Header" });
+  await expect(header).toBeFocused();
+  const paragraph = header.locator("p").first();
+  const margin = await contentLeft(page);
+
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("H");
+  await expect(paragraph.locator(".tab-char")).toHaveCount(1);
+  await expect.poll(async () => (await textBounds(paragraph, "H")).left - margin).toBeCloseTo(1.27 * CM, 0);
+  await expect(paragraph).toHaveCSS("margin-left", "0px");
+  await page.keyboard.press("Shift+Tab");
+  await expect(paragraph).toHaveText("\tH");
+  await expect(header).toBeFocused();
+
+  await addTabStop(page, 6, "Add left tab-stop");
+  await expect.poll(async () => (await textBounds(paragraph, "H")).left - margin).toBeCloseTo(6 * CM, 0);
+  await page.keyboard.press(`${mod}+]`);
+  await expect(paragraph).toHaveCSS("margin-left", "48px");
+  await page.keyboard.press(`${mod}+[`);
+  await expect(paragraph).toHaveCSS("margin-left", "0px");
 });

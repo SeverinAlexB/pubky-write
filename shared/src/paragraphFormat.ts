@@ -8,7 +8,7 @@ import { paragraphStyleDefinitions, paragraphStyleOf } from "./paragraphStyles.t
 
 export const lineSpacings = [1, 1.15, 1.5, 2] as const;
 export const DEFAULT_LINE_SPACING = 1.15;
-/** One indent step (Tab, ⌘]) on screen: half an inch. */
+/** One indent step (⌘]) on screen: half an inch. */
 export const INDENT_STEP_PX = 48;
 /** What "Add space before/after paragraph" adds, in points. */
 export const SPACE_STEP_PT = 10;

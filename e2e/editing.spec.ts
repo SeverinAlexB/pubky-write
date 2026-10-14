@@ -15,11 +15,9 @@ test("font, font size, line spacing and indent are kept", async ({ page }) => {
   await page.keyboard.type("!");
   await page.getByRole("button", { name: "Line & paragraph spacing" }).click();
   await page.getByRole("menuitemcheckbox", { name: "Double" }).click();
-  // Tab indents at the start of the paragraph (after text it types a tab).
-  await page.keyboard.press(lineStart);
-  await selectionSynced(page);
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
+  // ⌘+] indents by half an inch.
+  await page.keyboard.press(`${mod}+]`);
+  await page.keyboard.press(`${mod}+]`);
   await waitUntilSaved(page);
 
   await page.reload();

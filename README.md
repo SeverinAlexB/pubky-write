@@ -74,9 +74,9 @@ To restore a backup:
   by URL, paste or drag and drop), tables (see below), bulleted
   and numbered lists with glyph and numbering presets, checklists (⌘⇧9),
   alignment, line spacing, space before and after paragraphs (Custom spacing),
-  indentation (Tab at the start of a paragraph, Shift+Tab, ⌘] and ⌘[ move to
-  the next half inch; the ruler sets any left, first line or hanging and right
-  indent), tab characters (Tab after text) and tab stops, page breaks
+  indentation (⌘] and ⌘[ move to the next half inch; the ruler sets any left,
+  first line or hanging and right indent), tab characters (Tab, outside lists
+  and tables) and tab stops, page breaks
   (⌘↵), quotes, code blocks, horizontal lines, undo and redo, zoom (presets,
   typed or Fit).
 - **Special characters** (Insert > Symbols > Special characters, or Emoji): a

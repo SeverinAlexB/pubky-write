@@ -177,6 +177,8 @@ function regionBehaviour(main: Editor, kind: "header" | "footnote", onEscape: ()
         },
         "Mod-Enter": () => true,
         "Mod-Alt-f": () => true,
+        "Mod-]": () => this.editor.commands.changeIndent(1) || true,
+        "Mod-[": () => this.editor.commands.changeIndent(-1) || true,
       };
     },
     addProseMirrorPlugins() {

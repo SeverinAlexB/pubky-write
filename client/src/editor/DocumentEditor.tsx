@@ -329,7 +329,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           return;
         }
       }
-      // Alt+F10 moves to the toolbar, as in other editors (the document uses Tab for indentation).
+      // Alt+F10 moves to the toolbar, as in other editors (the document uses Tab for tab characters).
       if (event.altKey && event.key === "F10" && !handlers.current.historyOpen) {
         event.preventDefault();
         focusToolbar(document.querySelector<HTMLElement>('.editor-app [role="toolbar"]'));

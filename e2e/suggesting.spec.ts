@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import JSZip from "jszip";
-import { chooseDownload, createDocument, editor, lineEnd, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { chooseDownload, createDocument, editor, lineEnd, lineStart, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -131,6 +131,25 @@ test("typed text becomes a green insertion with an Add card", async ({ page }) =
   await expect(card(page, "Add: “suggested”").locator("em")).toHaveText("suggested");
   await expect(card(page, "Add: “suggested”")).toContainText("You");
   await expect(suggestionCards(page)).toHaveCount(1);
+});
+
+test("a tab typed at the start of a line becomes a green insertion", async ({ page }) => {
+  await threeLines(page);
+  await chooseMode(page, "Editing", "Suggesting");
+  await endOfLine(page, 2);
+  await page.keyboard.press(lineStart);
+  await selectionSynced(page);
+  await page.keyboard.press("Tab");
+
+  const second = editor(page).locator("p").nth(1);
+  await expect(second.locator(".suggestion-insert .tab-char")).toHaveCount(1);
+  await expect(second).toHaveText("\tSecond item");
+  await expect(second).toHaveCSS("margin-left", "0px");
+  await expect(suggestionCards(page)).toHaveCount(1);
+  // Rejecting it removes the tab.
+  await suggestionCards(page).first().getByRole("button", { name: "Reject suggestion" }).click();
+  await expect(second).toHaveText("Second item");
+  await expect(editor(page).locator(".tab-char")).toHaveCount(0);
 });
 
 test("the \"You're suggesting\" snackbar is a 48px dark bar 16px from the bottom left", async ({ page }) => {

@@ -210,9 +210,10 @@ function inList(editor: Editor): boolean {
 }
 
 /**
- * Tab and Shift+Tab, below lists and tables (Tab nests list items and moves between cells). At
- * the start of a paragraph, or across paragraphs, Tab indents to the next half inch; elsewhere in
- * a paragraph it types a tab character. Tab never moves the focus out of the document.
+ * Tab and Shift+Tab, below lists and tables (Tab nests list items and moves between cells). Tab
+ * types a tab character anywhere in a paragraph, also at its start or on an empty line (a code
+ * block gets a literal "\t"); it never indents (⌘+] does) and does nothing across paragraphs.
+ * Shift+Tab does nothing. Neither moves the focus out of the document.
  */
 export const TabKey = Extension.create({
   name: "tabKey",
@@ -223,11 +224,11 @@ export const TabKey = Extension.create({
         const { editor } = this;
         if (inList(editor)) return true;
         const { $from, $to } = editor.state.selection;
-        const inParagraph = $from.parent.isTextblock && $from.sameParent($to) && $from.parent.type.name !== "codeBlock";
-        if (inParagraph && $from.parentOffset > 0) return editor.commands.insertTab() || true;
-        return editor.commands.changeIndent(1) || true;
+        if (!$from.parent.isTextblock || !$from.sameParent($to)) return true;
+        if ($from.parent.type.name === "codeBlock") return editor.commands.command(({ tr }) => Boolean(tr.insertText("\t").scrollIntoView()));
+        return editor.commands.insertTab() || true;
       },
-      "Shift-Tab": () => inList(this.editor) || this.editor.commands.changeIndent(-1) || true,
+      "Shift-Tab": () => true,
     };
   },
 });

@@ -1,9 +1,9 @@
-// Paragraph indents in points (Format > Align & indent, Tab and ⌘], the ruler). Kept apart
+// Paragraph indents in points (Format > Align & indent, ⌘] and ⌘[, the ruler). Kept apart
 // from the paragraph attributes in paragraphFormat.ts so that code that only reads documents
 // (the document list's thumbnails) does not load the editor framework.
 
 export const MAX_INDENT = 8;
-/** One indent step (Tab, ⌘]) is half an inch. */
+/** One indent step (⌘]) is half an inch. */
 export const INDENT_STEP_PT = 36;
 /** Indents stay within this many points (22 inches) either way. */
 export const MAX_INDENT_PT = 1584;
@@ -34,7 +34,7 @@ export function indentAttributes(indents: ParagraphIndents) {
   return { indent: 0, indentLeft: round(indents.left), indentFirstLine: round(indents.firstLine), indentRight: round(indents.right) };
 }
 
-/** The left indent after Tab or ⌘] (`step` 1) or Shift+Tab or ⌘[ (-1): the next half-inch stop. */
+/** The left indent after ⌘] (`step` 1) or ⌘[ (-1): the next half-inch stop. */
 export function steppedIndent(left: number, step: 1 | -1): number {
   const stops = left / INDENT_STEP_PT;
   if (step > 0) return Math.max(left, Math.min(Math.floor(stops + 1e-6) + 1, MAX_INDENT) * INDENT_STEP_PT);
