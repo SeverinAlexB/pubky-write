@@ -119,6 +119,24 @@ describe("document list", () => {
     expect(pageSetupOf(getDocumentContent(db, fallback.id)!.doc).paperSize).toBe("A4");
   });
 
+  it("creates documents with the default page setup, ignoring invalid values", () => {
+    const defaults = { paperSize: "A5", orientation: "landscape", marginLeft: 36, marginTop: "lots", pageColor: "#fce5cd", other: 1 };
+    const doc = blankDocument("Letter", defaults);
+    expect(pageSetupOf(doc)).toEqual({
+      paperSize: "A5",
+      orientation: "landscape",
+      marginTop: 72,
+      marginBottom: 72,
+      marginLeft: 36,
+      marginRight: 72,
+      pageColor: "#fce5cd",
+    });
+    expect(() => doc.check()).not.toThrow();
+    // The paper size of the locale when the defaults have none.
+    expect(pageSetupOf(blankDocument("Letter", { marginLeft: 18 }))).toMatchObject({ paperSize: "Letter", marginLeft: 18 });
+    expect(pageSetupOf(templateDocument("letter", "A4", { pageColor: "#d9ead3" })!.doc).pageColor).toBe("#d9ead3");
+  });
+
   it("rejects steps that set invalid page settings", () => {
     const { id } = createDocument(db);
     const step = { stepType: "docAttr", attr: "marginTop", value: "lots" };

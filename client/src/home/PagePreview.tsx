@@ -1,7 +1,7 @@
 // A read-only rendering of the top of a document's first page, scaled down to a thumbnail.
 // It renders the stored JSON directly with the editor's content styles (.page-content), so the
 // document list does not load the editor.
-import { normalizePageSetup, pageGeometry } from "@docs/shared";
+import { normalizePageSetup, pageGeometry, paragraphIndents } from "@docs/shared";
 import type { JSONContent } from "@tiptap/core";
 import { createElement, memo, type CSSProperties, type ReactNode } from "react";
 
@@ -13,8 +13,10 @@ type PagePreviewProps = {
 
 /** Decorative: hidden from assistive technology, which reads the document's title instead. */
 export const PagePreview = memo(function PagePreview({ content, width }: PagePreviewProps) {
-  const page = pageGeometry(normalizePageSetup(content.attrs ?? {}));
+  const setup = normalizePageSetup(content.attrs ?? {});
+  const page = pageGeometry(setup);
   const style: CSSProperties = {
+    background: setup.pageColor,
     width: page.width,
     minHeight: page.height,
     padding: `${page.marginTop}px ${page.marginRight}px 0 ${page.marginLeft}px`,
@@ -123,7 +125,10 @@ function paragraphStyle(attrs: Record<string, unknown>): CSSProperties | undefin
   if (typeof attrs.lineSpacing === "number") style.lineHeight = attrs.lineSpacing;
   if (typeof attrs.spaceBefore === "number") style.paddingTop = `${attrs.spaceBefore}pt`;
   if (typeof attrs.spaceAfter === "number") style.paddingBottom = `${attrs.spaceAfter}pt`;
-  if (typeof attrs.indent === "number" && attrs.indent > 0) style.marginLeft = attrs.indent * 48;
+  const indents = paragraphIndents(attrs);
+  if (indents.left) style.marginLeft = `${indents.left}pt`;
+  if (indents.firstLine) style.textIndent = `${indents.firstLine}pt`;
+  if (indents.right) style.marginRight = `${indents.right}pt`;
   return Object.keys(style).length > 0 ? style : undefined;
 }
 

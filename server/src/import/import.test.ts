@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { documentSchema, regionText, toMarkdown } from "@docs/shared";
+import { documentSchema, paragraphIndents, regionText, toMarkdown } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import {
   AlignmentType,
@@ -349,7 +349,7 @@ describe("docxToDocument", () => {
     expect(marksOn(doc, "Marked")).toEqual(["highlight(#ffff00)"]);
 
     expect(findNode(doc, "paragraph", "Bold Italic")?.attrs.textAlign).toBe("center");
-    expect(findNode(doc, "paragraph", "Indented")?.attrs.indent).toBe(2);
+    expect(paragraphIndents(findNode(doc, "paragraph", "Indented")!.attrs)).toEqual({ left: 72, firstLine: 0, right: 0 });
     expect(findNode(doc, "paragraph", "Fin")?.attrs).toMatchObject({ lineSpacing: 2, spaceAfter: 10 });
     expect(findNode(doc, "orderedList")?.attrs.listPreset).toBe("upper-roman");
     expect(findNode(doc, "image")?.attrs).toMatchObject({ src: "/uploads/image-1.png", alt: "Dot", width: 40, height: 20 });
@@ -429,6 +429,33 @@ describe("docxToDocument", () => {
     const row = findNode(doc, "tableRow")!;
     const [wide, narrow] = [row.child(0).attrs.colwidth[0], row.child(1).attrs.colwidth[0]];
     expect(wide / narrow).toBeCloseTo(3, 1);
+  });
+
+  it("keeps paragraph indents and the page colour through an export and import", async () => {
+    const paragraph = (text: string, attrs: Record<string, unknown> = {}) => ({ type: "paragraph", attrs, content: [{ type: "text", text }] });
+    const original = Node.fromJSON(documentSchema, {
+      type: "doc",
+      attrs: { pageColor: "#fce5cd" },
+      content: [
+        paragraph("Hanging", { indentLeft: 56.69, indentFirstLine: -28.35 }),
+        paragraph("First line", { indentFirstLine: 36, indentRight: 72 }),
+        // Saved before indents in points: two half-inch steps.
+        paragraph("Old", { indent: 2 }),
+        paragraph("Plain"),
+      ],
+    });
+    const word = await toDocx(original, "Indents", async () => null);
+    const { doc } = await docxToDocument(word, { storeImage: imageStore().storeImage });
+    const indents = (text: string) => paragraphIndents(findNode(doc, "paragraph", text)!.attrs);
+    expect(indents("Hanging")).toEqual({ left: 56.7, firstLine: -28.35, right: 0 });
+    expect(indents("First line")).toEqual({ left: 0, firstLine: 36, right: 72 });
+    expect(indents("Old")).toEqual({ left: 72, firstLine: 0, right: 0 });
+    expect(indents("Plain")).toEqual({ left: 0, firstLine: 0, right: 0 });
+    expect(doc.attrs.pageColor).toBe("#fce5cd");
+
+    // White pages have no background in Word and import as white.
+    const white = await toDocx(Node.fromJSON(documentSchema, { type: "doc", content: [paragraph("White")] }), "White", async () => null);
+    expect((await docxToDocument(white, { storeImage: imageStore().storeImage })).doc.attrs.pageColor).toBe("#ffffff");
   });
 
   it("rejects files that are not Word documents", async () => {

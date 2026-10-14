@@ -66,11 +66,11 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
   app.post("/api/documents", async (c) => {
     const body = await c.req.json<CreateDocumentRequest>().catch(() => ({}) as CreateDocumentRequest);
     if (body.template !== undefined) {
-      const template = templateDocument(String(body.template), body.paperSize);
+      const template = templateDocument(String(body.template), body.paperSize, body.pageSetup);
       if (!template) throw new HTTPException(400, { message: `Unknown template: ${body.template}` });
       return c.json(createDocument(db, body.title ?? template.name, Date.now(), template.doc), 201);
     }
-    return c.json(createDocument(db, body.title, Date.now(), blankDocument(body.paperSize)), 201);
+    return c.json(createDocument(db, body.title, Date.now(), blankDocument(body.paperSize, body.pageSetup)), 201);
   });
 
   app.post(

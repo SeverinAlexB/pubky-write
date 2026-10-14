@@ -23,10 +23,13 @@ export type PageSetup = {
   marginBottom: number;
   marginLeft: number;
   marginRight: number;
+  /** The background of the pages, `#rrggbb` in lower case. */
+  pageColor: string;
 };
 
 export const DEFAULT_MARGIN_PT = 72;
 export const MAX_MARGIN_PT = 72 * 6;
+export const DEFAULT_PAGE_COLOR = "#ffffff";
 
 export const defaultPageSetup: PageSetup = {
   paperSize: "A4",
@@ -35,6 +38,7 @@ export const defaultPageSetup: PageSetup = {
   marginBottom: DEFAULT_MARGIN_PT,
   marginLeft: DEFAULT_MARGIN_PT,
   marginRight: DEFAULT_MARGIN_PT,
+  pageColor: DEFAULT_PAGE_COLOR,
 };
 
 export const pageSetupKeys = Object.keys(defaultPageSetup) as (keyof PageSetup)[];
@@ -52,6 +56,10 @@ export function isMargin(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_MARGIN_PT;
 }
 
+export function isPageColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/.test(value);
+}
+
 /** The page settings of a document; unknown or missing values fall back to the defaults. */
 export function pageSetupOf(doc: Node): PageSetup {
   return normalizePageSetup(doc.attrs);
@@ -62,6 +70,7 @@ export function normalizePageSetup(attrs: Record<string, unknown>): PageSetup {
     paperSize: isPaperSize(attrs.paperSize) ? attrs.paperSize : defaultPageSetup.paperSize,
     orientation: attrs.orientation === "landscape" ? "landscape" : "portrait",
     ...defaultMargins(),
+    pageColor: isPageColor(attrs.pageColor) ? attrs.pageColor : DEFAULT_PAGE_COLOR,
   };
   for (const key of marginKeys) if (isMargin(attrs[key])) setup[key] = attrs[key];
   return setup;

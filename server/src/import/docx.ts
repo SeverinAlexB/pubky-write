@@ -17,7 +17,9 @@
 import {
   bulletPresets,
   documentSchema,
+  indentAttributes,
   isMargin,
+  isPageColor,
   isPageNumberStart,
   numberedPresets,
   paperSizes,
@@ -128,6 +130,9 @@ export async function docxToDocument(data: Uint8Array, options: ImportOptions): 
   const blocks = await converter.blocks(body.children);
   const section = body.children.findLast((child) => child.name === "sectPr");
   const attrs = section ? { ...pageSetup(section), ...(await headersAndFooters(section, rels, parts)) } : {};
+  // The page colour (w:background, shown by Word with w:displayBackgroundShape).
+  const background = val(child(child(document, "document"), "background"), "color")?.toLowerCase();
+  if (background && isPageColor(`#${background}`) && background !== "ffffff") attrs.pageColor = `#${background}`;
   return { doc: finishDocument(blocks, options, attrs), dropped: parts.dropped.list() };
 }
 
@@ -457,7 +462,8 @@ class DocxConverter {
       const indent = number(val(child(properties, "ind"), "left") ?? val(child(properties, "ind"), "start")) ?? TWIPS_PER_INDENT;
       const taskList: ListInfo = { type: "taskList", key: "task", preset: 0, start: 1 };
       const level = Math.max(0, Math.min(MAX_INDENT, Math.round(indent / TWIPS_PER_INDENT) - 1));
-      const first = { ...task.paragraph, attrs: { ...task.paragraph.attrs, indent: 0 } };
+      const { indentLeft: _left, indentFirstLine: _firstLine, indentRight: _right, ...attrs } = task.paragraph.attrs ?? {};
+      const first = { ...task.paragraph, attrs };
       return [...pageBreakBefore, { kind: "item", list: taskList, level, checked: task.checked, blocks: [first, ...blocks.slice(1)] }];
     }
     return [...pageBreakBefore, ...blocks.map((node) => ({ kind: "block" as const, node }))];
@@ -830,9 +836,14 @@ function paragraphAttributes(properties: Element | undefined, style: ParagraphSt
 
   if (!inList) {
     const indentation = child(properties, "ind");
-    const left = number(val(indentation, "left") ?? val(indentation, "start"));
-    const indent = left ? Math.round(left / TWIPS_PER_INDENT) : 0;
-    if (indent > 0) attrs.indent = Math.min(indent, MAX_INDENT);
+    const points = (twips: number | undefined) => (twips === undefined ? 0 : twips / TWIPS_PER_POINT);
+    const hanging = number(val(indentation, "hanging"));
+    const indents = indentAttributes({
+      left: points(number(val(indentation, "left") ?? val(indentation, "start"))),
+      right: points(number(val(indentation, "right") ?? val(indentation, "end"))),
+      firstLine: hanging ? -points(hanging) : points(number(val(indentation, "firstLine"))),
+    });
+    for (const key of ["indentLeft", "indentFirstLine", "indentRight"] as const) if (indents[key] !== 0) attrs[key] = indents[key];
   }
   return attrs;
 }

@@ -1,6 +1,7 @@
 export * from "./api.ts";
 export * from "./schema.ts";
 export * from "./paragraphFormat.ts";
+export * from "./indents.ts";
 export * from "./paragraphStyles.ts";
 export * from "./lists.ts";
 export * from "./pageBreak.ts";

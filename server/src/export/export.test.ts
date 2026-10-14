@@ -239,6 +239,28 @@ describe("toDocx", () => {
     expect(a4).toMatch(/<w:pgSz w:w="11906" w:h="16838" w:orient="portrait"\/>/);
   });
 
+  it("writes paragraph indents and the page colour", async () => {
+    const doc = Node.fromJSON(documentSchema, {
+      type: "doc",
+      attrs: { pageColor: "#d9ead3" },
+      content: [
+        { type: "paragraph", attrs: { indentLeft: 72, indentFirstLine: -18, indentRight: 36 }, content: [text("Hanging")] },
+        { type: "heading", attrs: { level: 2, indentFirstLine: 36 }, content: [text("First line")] },
+        { type: "paragraph", attrs: { indent: 1 }, content: [text("Old indent")] },
+      ],
+    });
+    const body = await documentXml(await toDocx(doc, "Indents", async () => null), "word/document.xml");
+    expect(body).toMatch(/<w:ind w:left="1440" w:right="720" w:hanging="360"\/>/);
+    expect(body).toMatch(/<w:ind w:firstLine="720"\/>/);
+    expect(body).toMatch(/<w:ind w:left="720"\/>/);
+    expect(body).toContain('<w:background w:color="D9EAD3"/>');
+    const settings = await documentXml(await toDocx(doc, "Indents", async () => null), "word/settings.xml");
+    expect(settings).toContain("<w:displayBackgroundShape/>");
+
+    const white = await documentXml(await toDocx(sample, "Sample", async () => null), "word/document.xml");
+    expect(white).not.toContain("<w:background");
+  });
+
   it("uses the image size set in the editor", async () => {
     // A 4 × 2 PNG.
     const png = Buffer.from(

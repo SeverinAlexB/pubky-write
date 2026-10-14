@@ -3,18 +3,51 @@
 // paragraphs and headings.
 import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
+import { indentAttributes, MAX_INDENT_PT, paragraphIndents, steppedIndent, type ParagraphIndents } from "./indents.ts";
 import { paragraphStyleDefinitions, paragraphStyleOf } from "./paragraphStyles.ts";
 
 export const lineSpacings = [1, 1.15, 1.5, 2] as const;
 export const DEFAULT_LINE_SPACING = 1.15;
-export const MAX_INDENT = 8;
-/** One indent step is half an inch, as in the reference product. */
+/** One indent step (Tab, ⌘]) on screen: half an inch. */
 export const INDENT_STEP_PX = 48;
 /** What "Add space before/after paragraph" adds, in points. */
 export const SPACE_STEP_PT = 10;
 export const MAX_PARAGRAPH_SPACE_PT = 1000;
 
 const formattedTypes = ["paragraph", "heading"];
+
+function indentStyle(attributes: Record<string, unknown>): string {
+  const { left, firstLine, right } = paragraphIndents(attributes);
+  return [
+    left ? `margin-left: ${left}pt` : "",
+    firstLine ? `text-indent: ${firstLine}pt` : "",
+    right ? `margin-right: ${right}pt` : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+/** A CSS length in px or pt (as pasted from this editor or elsewhere) in points. */
+function cssPoints(value: string): number | null {
+  const match = value.trim().match(/^(-?\d+(?:\.\d+)?)(px|pt)$/);
+  if (!match) return null;
+  const points = match[2] === "px" ? (Number(match[1]) * 72) / 96 : Number(match[1]);
+  return Math.min(Math.max(Math.round(points * 100) / 100, -MAX_INDENT_PT), MAX_INDENT_PT);
+}
+
+function indentAttribute(css: string) {
+  return {
+    default: 0,
+    parseHTML: (element: HTMLElement) => cssPoints(element.style.getPropertyValue(css)) ?? 0,
+    // Rendered together by the `indent` attribute.
+    renderHTML: () => ({}),
+    validate: (value: unknown) => {
+      if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > MAX_INDENT_PT) {
+        throw new RangeError(`Invalid indent ${String(value)}`);
+      }
+    },
+  };
+}
 
 export type ParagraphSpacing = { lineSpacing?: number; spaceBefore?: number; spaceAfter?: number };
 type SpaceSide = "spaceBefore" | "spaceAfter";
@@ -53,6 +86,8 @@ declare module "@tiptap/core" {
       toggleParagraphSpace: (side: SpaceSide) => ReturnType;
       /** Indents (or with a negative step, outdents) every paragraph in the selection. */
       changeIndent: (step: 1 | -1) => ReturnType;
+      /** Sets the given indents (in points, as stored) on every paragraph in the selection. */
+      setParagraphIndents: (indents: Partial<ParagraphIndents>) => ReturnType;
     };
   }
 }
@@ -77,15 +112,19 @@ export const ParagraphFormat = Extension.create({
           // Space before and after in points; null means the paragraph style's spacing.
           spaceBefore: spaceAttribute("spaceBefore", "padding-top"),
           spaceAfter: spaceAttribute("spaceAfter", "padding-bottom"),
+          // Half-inch steps, from documents saved before the indents in points (see paragraphIndents).
+          // Pasted HTML has the whole left indent in `margin-left`, which goes to indentLeft.
           indent: {
             default: 0,
-            parseHTML: (element) => {
-              const level = Math.round(Number.parseFloat(element.style.marginLeft) / INDENT_STEP_PX);
-              return Number.isFinite(level) ? Math.min(Math.max(level, 0), MAX_INDENT) : 0;
+            parseHTML: () => 0,
+            renderHTML: (attributes) => {
+              const style = indentStyle(attributes);
+              return style ? { style } : {};
             },
-            renderHTML: (attributes) =>
-              attributes.indent ? { style: `margin-left: ${attributes.indent * INDENT_STEP_PX}px` } : {},
           },
+          indentLeft: indentAttribute("margin-left"),
+          indentFirstLine: indentAttribute("text-indent"),
+          indentRight: indentAttribute("margin-right"),
         },
       },
     ];
@@ -140,9 +179,24 @@ export const ParagraphFormat = Extension.create({
           let changed = false;
           state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
             if (!formattedTypes.includes(node.type.name)) return;
-            const indent = Math.min(Math.max((node.attrs.indent ?? 0) + step, 0), MAX_INDENT);
-            if (indent === node.attrs.indent) return;
-            tr.setNodeAttribute(pos, "indent", indent);
+            const indents = paragraphIndents(node.attrs);
+            const left = steppedIndent(indents.left, step);
+            if (left === indents.left) return;
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...indentAttributes({ ...indents, left }) });
+            changed = true;
+          });
+          if (changed) dispatch?.(tr);
+          return changed;
+        },
+      setParagraphIndents:
+        (change) =>
+        ({ tr, state, dispatch }) => {
+          let changed = false;
+          state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
+            if (!formattedTypes.includes(node.type.name)) return;
+            const indents = indentAttributes({ ...paragraphIndents(node.attrs), ...change });
+            if (Object.entries(indents).every(([key, value]) => node.attrs[key] === value)) return;
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...indents });
             changed = true;
           });
           if (changed) dispatch?.(tr);

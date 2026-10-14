@@ -13,6 +13,8 @@ export type CreateDocumentRequest = {
   title?: string;
   /** Paper size of the new document, chosen from the user's locale (see defaultPaperSize). */
   paperSize?: string;
+  /** Page settings saved with "Set as default" in Page setup (see pageSetup.ts); invalid values are ignored. */
+  pageSetup?: Record<string, unknown>;
   /** Starts from a built-in template (see templates.ts); the title defaults to the template's name. */
   template?: string;
 };

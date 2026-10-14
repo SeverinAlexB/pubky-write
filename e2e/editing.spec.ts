@@ -23,7 +23,8 @@ test("font, font size, line spacing and indent are kept", async ({ page }) => {
   const paragraph = editor(page).locator("p").first();
   await expect(paragraph).toHaveCSS("line-height", /px$/);
   await expect(paragraph).toHaveAttribute("style", /line-height: 2/);
-  await expect(paragraph).toHaveAttribute("style", /margin-left: 96px/);
+  // Two half-inch steps.
+  await expect(paragraph).toHaveCSS("margin-left", "96px");
   await expect(paragraph.locator("span").first()).toHaveAttribute("style", /font-family: Georgia; font-size: 18pt/);
   await expect(paragraph.locator("span").last()).toHaveAttribute("style", /font-size: 24pt/);
 

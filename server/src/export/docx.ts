@@ -50,6 +50,8 @@ import {
   numberedPresets,
   pageElementsOf,
   pageSetupOf,
+  paragraphIndents,
+  DEFAULT_PAGE_COLOR,
   pageSizeMm,
   paperSizes,
   paragraphStyleDefinitions,
@@ -117,8 +119,10 @@ export async function toDocx(doc: Node, title: string, readImage: ImageReader): 
   const headers = { default: await region("header", Header, false), ...(first && { first: await region("firstPageHeader", Header, true) }) };
   const footers = { default: await region("footer", Footer, false), ...(first && { first: await region("firstPageFooter", Footer, true) }) };
   const properties = sectionProperties(doc);
+  const { pageColor } = pageSetupOf(doc);
   const file = new Document({
     title,
+    ...(pageColor !== DEFAULT_PAGE_COLOR && { background: { color: pageColor.slice(1).toUpperCase() } }),
     styles,
     numbering,
     footnotes: converter.footnotes,
@@ -281,7 +285,7 @@ class DocxConverter {
     const base: IParagraphOptions = {
       alignment: alignments[node.attrs.textAlign as keyof typeof alignments],
       ...(spacing(node) && { spacing: spacing(node) }),
-      ...(node.attrs.indent && { indent: { left: TWIPS_PER_INDENT * node.attrs.indent } }),
+      ...(!list && indentation(node) && { indent: indentation(node) }),
       ...(quoted && { indent: { left: 720 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: "CCCCCC", space: 12 } } }),
       ...listOptions(list),
     };
@@ -558,6 +562,19 @@ function listOptions(list: ListContext | undefined): Partial<IParagraphOptions> 
   if (!list || list.kind === "task") return {};
   const reference = list.kind === "bullet" ? bulletReference(list.preset) : orderedReference(list.preset);
   return { numbering: { reference, level: list.level, instance: list.instance } };
+}
+
+/** Left, first line (or hanging) and right indents of a paragraph or heading. */
+function indentation(node: Node): IParagraphOptions["indent"] | undefined {
+  const { left, firstLine, right } = paragraphIndents(node.attrs);
+  const twips = (points: number) => Math.round(points * TWIPS_PER_POINT);
+  const result = {
+    ...(left !== 0 && { left: twips(left) }),
+    ...(right !== 0 && { right: twips(right) }),
+    ...(firstLine > 0 && { firstLine: twips(firstLine) }),
+    ...(firstLine < 0 && { hanging: twips(-firstLine) }),
+  };
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 /** Line spacing and the block's own space before and after; the rest comes from its Word style. */

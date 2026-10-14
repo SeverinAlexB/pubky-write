@@ -96,8 +96,20 @@ test("the document list, editor, dialogs and version history have no serious acc
   await page.getByRole("menuitem", { name: "Page setup" }).click();
   await expect(page.getByRole("dialog", { name: "Page setup" })).toBeVisible();
   await expectAccessible(page, "Page setup");
+  await page.getByRole("dialog", { name: "Page setup" }).getByRole("tab", { name: "Pageless" }).click();
+  await expectAccessible(page, "Page setup, Pageless tab");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Page setup" })).toBeHidden();
+
+  await menuBarItem(page, "Insert").click();
+  await page.getByRole("menuitem", { name: "Symbols" }).hover();
+  await page.getByRole("menuitem", { name: "Special characters" }).click();
+  const characters = page.getByRole("dialog", { name: "Insert special characters" });
+  await expect(characters.locator(".special-character").first()).toBeVisible();
+  await characters.locator(".special-character").first().hover();
+  await expectAccessible(page, "Insert special characters");
+  await page.keyboard.press("Escape");
+  await expect(characters).toBeHidden();
 
   // A menu bar menu.
   await menuBarItem(page, "Format").click();

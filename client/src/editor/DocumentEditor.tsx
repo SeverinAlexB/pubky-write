@@ -65,6 +65,9 @@ const CustomSpacingDialog = lazyComponent(() => import("./CustomSpacingDialog.ts
 const TableOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.TableOptionsPanel));
 const ImageOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.ImageOptionsPanel));
 const PageNumbersDialog = lazyComponent(() => import("./PageNumbersDialog.tsx").then((module) => module.PageNumbersDialog));
+const SpecialCharactersDialog = lazyComponent(() =>
+  import("./characters/SpecialCharactersDialog.tsx").then((module) => module.SpecialCharactersDialog),
+);
 const onDemand = [
   HistoryMode,
   FindReplaceDialog,
@@ -75,6 +78,7 @@ const onDemand = [
   TableOptionsPanel,
   ImageOptionsPanel,
   PageNumbersDialog,
+  SpecialCharactersDialog,
 ];
 
 /** The second key of a header (H) or footer (F) chord must follow Ctrl+⌘O within this time. */
@@ -120,6 +124,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [regionTarget, setRegionTarget] = useState<RegionTarget | null>(null);
   const [regionEditor, setRegionEditor] = useState<Editor | null>(null);
   const [pageNumbersDialog, setPageNumbersDialog] = useState<Required<PageNumberOptions> | null>(null);
+  // Insert > Symbols > Special characters (or Emoji), opened on that category.
+  const [specialCharacters, setSpecialCharacters] = useState<{ category: string } | null>(null);
   const location = useLocation();
   // A notice from the document list, such as content an import left out.
   const [notice, setNotice] = useState<string | null>(
@@ -530,6 +536,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   function applyPageSetup(setup: PageSetup) {
     setPageSetupOpen(false);
+    // OK on the Pages tab leaves pageless format.
+    if (!printLayout) setPrintLayout(true);
     editor
       .chain()
       .focus()
@@ -590,6 +598,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     uploadImage: () => imageInput.current?.click(),
     insertImageByUrl: () => setImageUrlDialog(true),
     insertLink: () => handlers.current.openLinkDialog(),
+    insertSpecialCharacter: () => setSpecialCharacters({ category: "Symbol" }),
+    insertEmoji: () => setSpecialCharacters({ category: "Emoji" }),
     insertPageBreak: () => editor.chain().focus().insertPageBreak().run(),
     insertTableOfContents: (style) => {
       setRegionTarget(null);
@@ -720,7 +730,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           />
         )}
         {rulerVisible ? (
-          <HorizontalRuler editor={editor} stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />
+          <HorizontalRuler
+            editor={editor}
+            paragraphEditor={activeEditor}
+            stack={stack}
+            geometry={geometry}
+            zoom={effectiveZoom}
+            unit={unit}
+          />
         ) : (
           <div className="ruler-gap" />
         )}
@@ -866,7 +883,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           <PageSetupDialog
             initial={pageSetup}
             unit={unit}
+            pageless={!printLayout}
             onApply={applyPageSetup}
+            onSwitchToPageless={() => {
+              setPageSetupOpen(false);
+              setPrintLayout(false);
+              editor.commands.focus();
+            }}
             onCancel={() => {
               setPageSetupOpen(false);
               editor.commands.focus();
@@ -881,6 +904,18 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             onCancel={() => {
               setPageNumbersDialog(null);
               (regionEditor ?? editor).commands.focus();
+            }}
+          />
+        )}
+
+        {specialCharacters && !historyOpen && (
+          <SpecialCharactersDialog
+            key={specialCharacters.category}
+            editor={activeEditor}
+            initialCategory={specialCharacters.category}
+            onClose={() => {
+              setSpecialCharacters(null);
+              activeEditor.commands.focus();
             }}
           />
         )}

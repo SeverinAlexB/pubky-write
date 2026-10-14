@@ -648,7 +648,10 @@ function collapsedMargin(view: EditorView, pos: number): number {
 /** Sizes the page stack around the editor from the document's page setup. */
 function applyPageStyles(view: EditorView): HTMLElement | null {
   const stack = view.dom.closest<HTMLElement>(".page-stack");
-  if (stack) setGeometry(stack, pageGeometry(pageSetupOf(view.state.doc)));
+  if (!stack) return null;
+  const setup = pageSetupOf(view.state.doc);
+  setGeometry(stack, pageGeometry(setup));
+  stack.style.setProperty("--page-color", setup.pageColor);
   return stack;
 }
 

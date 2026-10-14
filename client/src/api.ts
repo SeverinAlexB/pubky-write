@@ -12,6 +12,7 @@ import {
   type RevisionWithContent,
   type UploadResponse,
 } from "@docs/shared";
+import { storedPageSetupDefaults } from "./pageSetupDefaults.ts";
 
 export class ApiError extends Error {
   constructor(
@@ -39,11 +40,18 @@ export const api = {
     if (options.sort) params.set("sort", options.sort);
     return request<DocumentSummary[]>(`/api/documents?${params}`);
   },
-  /** Creates a blank document, or one from a built-in template, on the paper size used in the user's locale. */
+  /**
+   * Creates a blank document, or one from a built-in template, on the paper size used in the
+   * user's locale and with the page setup saved as the default, if any.
+   */
   createDocument: (options: { title?: string; template?: string } = {}) =>
     request<DocumentSummary>("/api/documents", {
       method: "POST",
-      body: JSON.stringify({ ...options, paperSize: defaultPaperSize(navigator.language) } satisfies CreateDocumentRequest),
+      body: JSON.stringify({
+        ...options,
+        paperSize: defaultPaperSize(navigator.language),
+        pageSetup: storedPageSetupDefaults(),
+      } satisfies CreateDocumentRequest),
     }),
   /** Converts a Word or Markdown file into a new document. */
   importDocument: (file: File) => {

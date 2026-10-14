@@ -6,6 +6,8 @@ import {
   emptyDocument,
   findTemplate,
   isPaperSize,
+  normalizePageSetup,
+  pageSetupKeys,
   replaceDifference,
   type DocumentPreview,
   type DocumentSort,
@@ -61,21 +63,35 @@ export function createDocument(
   return { id, title: normalizeTitle(title), createdAt: now, updatedAt: now, lastOpenedAt: now };
 }
 
-/** The content of a new blank document on the given paper size (the client picks it from the user's locale). */
-export function blankDocument(paperSize?: unknown): Node {
-  const doc = Node.fromJSON(documentSchema, emptyDocument);
-  return isPaperSize(paperSize) ? new Transform(doc).setDocAttribute("paperSize", paperSize).doc : doc;
+/**
+ * The content of a new blank document on the given paper size (the client picks it from the
+ * user's locale), with the page setup saved by "Set as default" in Page setup, if any.
+ */
+export function blankDocument(paperSize?: unknown, pageSetup?: unknown): Node {
+  return withPageSetup(Node.fromJSON(documentSchema, emptyDocument), paperSize, pageSetup);
 }
 
-/** A new document from a built-in template, on the given paper size. Null for an unknown template. */
-export function templateDocument(templateId: string, paperSize?: unknown): { name: string; doc: Node } | null {
+/** A new document from a built-in template, on the given paper size and default page setup. Null for an unknown template. */
+export function templateDocument(templateId: string, paperSize?: unknown, pageSetup?: unknown): { name: string; doc: Node } | null {
   const template = findTemplate(templateId);
   if (!template) return null;
-  const doc = Node.fromJSON(documentSchema, template.content);
-  return {
-    name: template.name,
-    doc: isPaperSize(paperSize) ? new Transform(doc).setDocAttribute("paperSize", paperSize).doc : doc,
-  };
+  return { name: template.name, doc: withPageSetup(Node.fromJSON(documentSchema, template.content), paperSize, pageSetup) };
+}
+
+/** Invalid values in `pageSetup` are ignored. */
+function withPageSetup(doc: Node, paperSize: unknown, pageSetup: unknown): Node {
+  const transform = new Transform(doc);
+  if (isPaperSize(paperSize)) transform.setDocAttribute("paperSize", paperSize);
+  if (pageSetup && typeof pageSetup === "object") {
+    const current = normalizePageSetup(transform.doc.attrs);
+    const setup = normalizePageSetup({ ...current, ...Object.fromEntries(Object.entries(pageSetup).filter(([key]) => key in current)) });
+    // A value normalizePageSetup rejected falls back to its default, not to the current value.
+    for (const key of pageSetupKeys) {
+      const value = (pageSetup as Record<string, unknown>)[key] === setup[key] ? setup[key] : current[key];
+      if (transform.doc.attrs[key] !== value) transform.setDocAttribute(key, value);
+    }
+  }
+  return transform.doc;
 }
 
 /** The thumbnail content of a document (see preview.ts); made and stored on first use for older documents. */

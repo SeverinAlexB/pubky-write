@@ -30,6 +30,14 @@ describe("page setup", () => {
     expect(Node.fromJSON(documentSchema, result.toJSON()).attrs.orientation).toBe("landscape");
   });
 
+  it("stores the page colour, white by default", () => {
+    const doc = Node.fromJSON(documentSchema, oldDocument);
+    expect(doc.attrs.pageColor).toBe("#ffffff");
+    const coloured = Step.fromJSON(documentSchema, { stepType: "docAttr", attr: "pageColor", value: "#fce5cd" }).apply(doc).doc!;
+    expect(pageSetupOf(coloured).pageColor).toBe("#fce5cd");
+    expect(normalizePageSetup({ pageColor: "blue" }).pageColor).toBe("#ffffff");
+  });
+
   it("rejects steps with invalid page settings", () => {
     const doc = Node.fromJSON(documentSchema, oldDocument);
     for (const [attr, value] of [
@@ -37,6 +45,8 @@ describe("page setup", () => {
       ["orientation", "sideways"],
       ["marginTop", -1],
       ["marginLeft", "72"],
+      ["pageColor", "red"],
+      ["pageColor", "#FFFFFF"],
     ] as const) {
       const step = Step.fromJSON(documentSchema, { stepType: "docAttr", attr, value });
       expect(() => step.apply(doc)).toThrow();

@@ -359,13 +359,121 @@ button:disabled {
 }
 
 .page-setup-dialog {
-  width: min(520px, 90vw);
+  width: min(396px, 90vw);
+  /* The page colour palette may reach past the dialog's bottom edge. */
+  overflow: visible;
 }
 
-.page-setup-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.page-setup-dialog h2 {
+  margin-bottom: 12px;
+}
+
+/* Pages / Pageless */
+.page-setup-tabs {
+  display: flex;
+  margin: 0 -24px 20px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.page-setup-tab {
+  flex: 1;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.page-setup-tab:hover {
+  background: var(--hover);
+}
+
+.page-setup-tab[aria-selected="true"] {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+}
+
+.page-setup-panel {
+  min-height: 300px;
+}
+
+.page-setup-radios {
+  display: flex;
   gap: 24px;
+}
+
+.page-setup-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+}
+
+.page-setup-row .select-field {
+  width: 100%;
+}
+
+.page-colour-menu {
+  position: relative;
+}
+
+.page-colour-button {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.page-colour-swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--divider);
+  border-radius: 50%;
+}
+
+.page-colour-menu .color-popover {
+  right: 0;
+  left: auto;
+}
+
+.page-setup-margin-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.page-setup-margins .margin-field {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.page-setup-margins .margin-field input {
+  width: 100%;
+}
+
+.page-setup-pageless {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.page-setup-actions .page-setup-default {
+  margin-right: auto;
+}
+
+.page-setup-saved {
+  align-self: center;
+  margin-right: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .page-setup-group {
@@ -1246,6 +1354,40 @@ button:disabled {
 
 .ruler-marker {
   fill: var(--primary);
+  cursor: ew-resize;
+}
+
+/* The margin areas of the horizontal ruler can be dragged to change the margins. */
+.ruler-margin-handle {
+  fill: transparent;
+  cursor: col-resize;
+}
+
+.horizontal-ruler.is-dragging {
+  cursor: ew-resize;
+}
+
+/* While dragging a marker or margin: a dotted line down the page and the value under the ruler. */
+.ruler-guide {
+  position: fixed;
+  bottom: 0;
+  z-index: 30;
+  width: 0;
+  border-left: 1px dotted var(--text-secondary);
+  pointer-events: none;
+}
+
+.ruler-tooltip {
+  position: fixed;
+  z-index: 31;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #3c4043;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  transform: translateX(8px);
+  pointer-events: none;
 }
 
 /* Toolbar */
@@ -1808,7 +1950,9 @@ button:disabled {
   width: 100%;
   height: var(--page-height);
   border: 1px solid var(--page-border);
-  background: #fff;
+  /* Page setup's page colour (set by the pagination). */
+  background: var(--page-color, #fff);
+  print-color-adjust: exact;
 }
 
 .page-stack > div:not(.page-sheets) {
@@ -1831,7 +1975,7 @@ button:disabled {
 .page-stack.is-pageless {
   height: auto;
   min-height: var(--page-height);
-  background: #fff;
+  background: var(--page-color, #fff);
 }
 
 .page-stack.is-pageless .page-sheets {
@@ -3705,6 +3849,9 @@ body.is-column-resizing * {
   .page-stack:not(.is-pageless) {
     margin: 0;
     zoom: 1 !important;
+    /* The sheets are not printed; the stack (exactly the pages, without gaps) has the page colour. */
+    background: var(--page-color, #fff);
+    print-color-adjust: exact;
   }
 
   .page-stack:not(.is-pageless) .page-region-slot,
@@ -3879,4 +4026,142 @@ body.is-column-resizing * {
   height: 20px;
   border: 1px solid var(--outline);
   border-radius: 4px;
+}
+
+/* Insert > Symbols > Special characters: a non-modal dialog, 604 × 425, near the bottom of the editor area. */
+.special-characters-dialog {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 604px;
+  height: 425px;
+  padding: 20px 24px 24px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+  color: var(--text);
+}
+
+.special-characters-dialog h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.special-characters-dialog .dialog-title-row {
+  margin-bottom: 16px;
+}
+
+.special-characters-body {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+  min-height: 0;
+}
+
+.special-characters-browse {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 338px;
+  min-height: 0;
+}
+
+.special-characters-selects {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.special-characters-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(14, 24px);
+  grid-auto-rows: 24px;
+  align-content: start;
+  overflow-y: auto;
+  border: 1px solid var(--divider);
+}
+
+.special-character {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+  font-size: 16px;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.special-character:hover,
+.special-character:focus-visible {
+  background: var(--primary-container);
+  outline: none;
+}
+
+.special-characters-empty {
+  grid-column: 1 / -1;
+  margin: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.special-characters-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.special-characters-search input {
+  height: 40px;
+  padding-right: 36px;
+  font-size: 14px;
+}
+
+.special-characters-search input::placeholder {
+  color: var(--text-secondary);
+}
+
+.special-characters-search input:not(:focus)::placeholder {
+  color: var(--text-secondary);
+}
+
+.special-characters-search .icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: var(--text-secondary);
+}
+
+/* Where the reference draws a handwriting area: the preview of the character under the pointer. */
+.special-characters-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 180px;
+  height: 180px;
+  margin: 0 auto;
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  text-align: center;
+}
+
+.special-characters-preview-char {
+  font-size: 64px;
+  line-height: 1.1;
+}
+
+.special-characters-preview-name {
+  padding: 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
