@@ -67,3 +67,11 @@ criteria pass in an end-to-end test and the existing tests still pass.
 ### Round 2 (second capture session)
 
 New documents 10–14. 14 also amends the Page setup dialog described in 02.
+
+### Round 2 corrections (after comparing the round 2 implementation)
+
+- 13: Header/footer editing does not dim the body; the label band spans the
+  page width (24px, lines top and bottom); opening a footer scrolls it into
+  view. Top-level table of contents entries are bold and the block has no
+  border. In the Page numbers dialog "Start at" comes before "Continue from
+  previous section".

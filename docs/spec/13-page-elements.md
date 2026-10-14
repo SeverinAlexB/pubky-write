@@ -12,13 +12,17 @@ and exported to Word.
   footer area ends 1.27 cm from the bottom edge. Their text uses Normal text
   style. If header content is taller than the space above the top margin, the
   body content moves down.
-- While editing a header: the body text is shown at reduced opacity (about
-  50%); a 1px `#c4c7c5` horizontal line runs under the header area across the
-  page with, on it, the label "Header" at the left (12px, secondary, white
-  background) and at the right a checkbox "Different first page" and an
-  "Options" text button (menu: Header format… (P2), Page numbers…, Remove
-  header). The footer is the same with the line above its area and the label
-  "Footer".
+- While editing a header the body text keeps its **normal appearance (not
+  dimmed)**. Directly under the header area a **label band** spans the full
+  page width: 24px tall, white, with a 1px `#c4c7c5` line along its top and
+  bottom. In the band: the label "Header" at the left (12px, medium weight,
+  text colour, aligned with the page's left margin edge + 8px) and, at the
+  right, a checkbox "Different first page" (12px label) and an "Options" text
+  button in primary colour (menu: Header format… (P2), Page numbers…, Remove
+  header). The footer is the same with the band directly **above** the footer
+  area and the label "Footer".
+- Opening a header or footer for editing scrolls it into view (for a footer:
+  the bottom of the current page).
 - The same header and footer appear on every page (except page 1 if
   "Different first page" is checked, which gives page 1 its own header and
   footer).
@@ -35,8 +39,9 @@ and exported to Word.
 - "Page count" inserts a field showing the total number of pages at the
   cursor.
 - More options opens "Page numbers" (dialog, 304px): Position (radio: Header,
-  Footer), checkbox "Show on first page", Numbering (radio "Start at" with a
-  number field, default 1; "Continue from previous section" disabled), Cancel
+  Footer), checkbox "Show on first page", Numbering with, in this order, a
+  radio "Start at" followed by a small number field with up/down steppers
+  (default 1), then a disabled radio "Continue from previous section"; Cancel
   and Apply.
 - Page number fields update as pagination changes.
 
@@ -62,7 +67,8 @@ and exported to Word.
   2. "Dotted": the same with a dotted leader between text and number.
   3. "With blue links": headings as blue underlined links, no page numbers.
 - The table of contents lists Heading 1–6 (and Title) with 0.5 in more indent
-  per level below the highest level. It is one block; clicking an entry in
+  per level below the highest level. Entries of the highest level used are
+  **bold**; deeper levels are regular weight. The block has no border. It is one block; clicking an entry in
   the linked style jumps to the heading.
 - It does not update automatically: when the cursor is in it, a small pill
   with a refresh icon ("Update table of contents") and a ⋮ (Delete table of
