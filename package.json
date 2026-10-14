@@ -13,7 +13,8 @@
     "start": "npm run start -w server",
     "typecheck": "tsc -p shared && tsc -p server && tsc -p client",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "perf": "playwright test --config playwright.perf.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

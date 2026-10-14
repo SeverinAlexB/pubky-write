@@ -221,7 +221,14 @@ removed text, struck through, where it was.
 npm test             # unit tests: step authority, revisions, comments, exports, sync, search
 npm run e2e          # browser tests against a throwaway server and data directory
 npm run typecheck
+npm run perf         # performance with a 60-page document, against the production build
 ```
+
+`npm run perf` builds the client, opens a 60-page document with 40 comments, the
+outline and the live word count, and prints the time to open it, the time until
+the pages settle and frame times while typing on pages 1 and 50. Set
+`PERF_CPU_THROTTLE=4` to emulate a slower computer and
+`PERF_PROFILE=<file>.cpuprofile` to record a CPU profile of typing on page 50.
 
 ## Limitations
 

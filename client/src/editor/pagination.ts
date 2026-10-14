@@ -259,10 +259,39 @@ export function boxNodes(doc: Node): BoxNode[] {
   return boxes;
 }
 
+/** The parts of ProseMirror's view tree that `blockElements` reads; not public API. */
+type ViewDesc = { node: Node | null; size: number; border: number; nodeDOM: globalThis.Node; children: ViewDesc[] };
+
+/**
+ * The DOM node of every block `boxNodes` returns, by position. `view.nodeDOM` searches the
+ * document's top-level blocks from the start for every call, which is quadratic for a long
+ * document; this walks the view tree once. Falls back to `nodeDOM` if the tree is not there.
+ */
+function blockElements(view: EditorView): (pos: number) => globalThis.Node | null {
+  const docView = (view as unknown as { docView?: ViewDesc }).docView;
+  if (!Array.isArray(docView?.children)) return (pos) => view.nodeDOM(pos);
+  const elements = new Map<number, globalThis.Node>();
+  const visit = (parent: ViewDesc, start: number) => {
+    let pos = start;
+    for (const child of parent.children) {
+      const { node } = child;
+      if (node && child.size > 0) {
+        elements.set(pos, child.nodeDOM);
+        // The same containers boxNodes descends into.
+        if (!(node.isTextblock || node.isAtom || node.isLeaf || node.type.spec.tableRole === "table")) visit(child, pos + child.border);
+      }
+      pos += child.size;
+    }
+  };
+  visit(docView, 0);
+  return (pos) => elements.get(pos) ?? view.nodeDOM(pos);
+}
+
 function layoutBoxes(view: EditorView, toNatural: (clientY: number) => number): LayoutBox[] {
   const boxes: LayoutBox[] = [];
+  const elementAt = blockElements(view);
   for (const { node, pos, breakPos } of boxNodes(view.state.doc)) {
-    const element = view.nodeDOM(pos);
+    const element = elementAt(pos);
     if (!(element instanceof HTMLElement)) continue;
     const rect = element.getBoundingClientRect();
     boxes.push({

@@ -7,15 +7,23 @@ import { Icon } from "../components/Icon.tsx";
 /** A heading in the outline; level 0 is the Title. */
 export type OutlineHeading = { level: number; text: string; pos: number };
 
+// The outline of each document, kept while the editor shows it: the selector runs on every transaction.
+const outlines = new WeakMap<Node, OutlineHeading[]>();
+
 /** Title and Heading 1–6 blocks with text, in document order. */
 export function outlineHeadings(doc: Node): OutlineHeading[] {
+  const cached = outlines.get(doc);
+  if (cached) return cached;
   const headings: OutlineHeading[] = [];
   doc.descendants((node, pos) => {
     const level = node.type.name === "heading" ? (node.attrs.level as number) : node.attrs.paragraphStyle === "title" ? 0 : null;
-    const text = node.textContent.trim();
-    if (level !== null && node.isTextblock && text) headings.push({ level, text, pos });
+    if (level !== null && node.isTextblock) {
+      const text = node.textContent.trim();
+      if (text) headings.push({ level, text, pos });
+    }
     return node.isBlock && !node.isTextblock; // headings only live at block level
   });
+  outlines.set(doc, headings);
   return headings;
 }
 
@@ -87,10 +95,11 @@ export function OutlinePanel({ editor, openComments, onClose }: OutlinePanelProp
         <p className="outline-empty">Headings that you add to the document will appear here.</p>
       ) : (
         <ol className="outline-list" aria-label="Outline">
-          {headings.map((heading) => {
+          {headings.map((heading, index) => {
             const current = heading.pos === currentPos;
             return (
-              <li key={heading.pos} className={current ? "is-current" : undefined}>
+              // By index: typing above a heading moves its position, which would recreate every item after it.
+              <li key={index} className={current ? "is-current" : undefined}>
                 <button
                   type="button"
                   className="outline-item"

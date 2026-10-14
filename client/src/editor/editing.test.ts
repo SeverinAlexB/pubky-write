@@ -16,7 +16,7 @@ import {
   setSearch,
   type SearchOptions,
 } from "./search.ts";
-import { countText } from "./textStats.ts";
+import { countText, documentStats } from "./textStats.ts";
 
 const doc = (...paragraphs: unknown[][]) =>
   Node.fromJSON(documentSchema, {
@@ -155,6 +155,34 @@ describe("countText", () => {
   it("counts words and characters like a word processor", () => {
     expect(countText("Hello, world! It's 2026.\nNew line")).toEqual({ words: 6, characters: 32, charactersExcludingSpaces: 28 });
     expect(countText("")).toEqual({ words: 0, characters: 0, charactersExcludingSpaces: 0 });
+  });
+});
+
+describe("documentStats", () => {
+  it("counts the document block by block like its whole text, and the selection", () => {
+    const document = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [text("Big title")] },
+        { type: "paragraph", content: [text("One two"), { type: "hardBreak" }, text("three, four.")] },
+        { type: "horizontalRule" },
+        { type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [text("item one")] }] }] },
+        {
+          type: "table",
+          content: [{ type: "tableRow", content: [{ type: "tableCell", content: [{ type: "paragraph", content: [text("cell")] }] }] }],
+        },
+      ],
+    });
+    const state = EditorState.create({ doc: document });
+    expect(documentStats(state)).toEqual({
+      total: countText(document.textBetween(0, document.content.size, "\n", "\n")),
+      selected: null,
+    });
+    const selected = state.apply(state.tr.setSelection(TextSelection.create(document, 2, 16)));
+    expect(documentStats(selected).selected).toEqual(countText(document.textBetween(2, 16, "\n", "\n")));
+    // After an edit only the changed block is counted again; the result is the same as counting everything.
+    const edited = state.apply(state.tr.insertText(" more words", 4));
+    expect(documentStats(edited).total).toEqual(countText(edited.doc.textBetween(0, edited.doc.content.size, "\n", "\n")));
   });
 });
 

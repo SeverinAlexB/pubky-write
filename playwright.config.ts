@@ -9,6 +9,8 @@ const dataDir = join(tmpdir(), `docs-e2e-${process.pid}`);
 
 export default defineConfig({
   testDir: "e2e",
+  // The performance test runs on its own: npm run perf.
+  testIgnore: "perf.spec.ts",
   fullyParallel: false,
   workers: 1,
   reporter: "list",
