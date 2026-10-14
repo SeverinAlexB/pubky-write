@@ -84,6 +84,9 @@ describe("Word export of page elements", () => {
     expect(body).toMatch(/<w:hyperlink [^>]*w:anchor="_Toc0"/);
     expect(body).toMatch(/<w:bookmarkStart [^>]*w:name="_Toc0"/);
     expect(body).toMatch(/<w:bookmarkStart [^>]*_Toc1/);
+    // Top-level entries are bold, deeper ones are not.
+    expect(body).toMatch(/<w:r><w:rPr><w:b\/><w:bCs\/><\/w:rPr><w:t xml:space="preserve">Introduction<\/w:t><\/w:r>/);
+    expect(body).not.toMatch(/<w:b\/><w:bCs\/><\/w:rPr><w:t xml:space="preserve">Details<\/w:t>/);
   });
 });
 

@@ -71,13 +71,19 @@ export function PageElements({ editor, target, onTargetChange, onRegionEditor, o
   const layer = useRef<HTMLDivElement>(null);
   const editingHeader = target && target.kind !== "footnote" ? target : null;
 
-  // The body is dimmed while a header or footer is edited; clicking it ends editing.
+  // While a header or footer is edited, clicking another page's copy edits that one.
   useEffect(() => {
     const stack = layer.current?.parentElement;
     if (!stack || !editingHeader) return;
     stack.classList.add("is-editing-region");
     return () => stack.classList.remove("is-editing-region");
   }, [editingHeader !== null]);
+
+  // Opening a header or footer scrolls it, with its band and the page's edge, into view.
+  const scrollTarget = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    scrollTarget.current?.scrollIntoView({ block: "nearest" });
+  }, [editingHeader?.kind, editingHeader?.page, layout !== null]);
 
   useEffect(() => {
     if (!target || !onTargetChange) return;
@@ -154,6 +160,7 @@ export function PageElements({ editor, target, onTargetChange, onRegionEditor, o
               onTargetChange({ kind, page, at: { x: event.clientX, y: event.clientY } });
             }}
           >
+            {editing && <div ref={scrollTarget} className="region-scroll-target" />}
             {editing && kind === "footer" && regionBar(kind)}
             {editing ? (
               <RegionEditor

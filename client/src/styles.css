@@ -2051,39 +2051,51 @@ button:disabled {
   outline: none;
 }
 
-/* While a header or footer is edited the body is dimmed. */
-.page-stack.is-editing-region > div:not(.page-elements, .page-sheets) > .page-content,
-.page-stack.is-editing-region .footnote-area {
-  opacity: 0.5;
+/* What opening a header or footer scrolls into view: from the page's edge to its band. */
+.region-scroll-target {
+  position: absolute;
+  left: 0;
+  right: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
-/* The line under the header (above the footer) being edited, with its label and options. */
+.page-region-slot.is-header .region-scroll-target {
+  top: -48px;
+  bottom: -24px;
+}
+
+.page-region-slot.is-footer .region-scroll-target {
+  top: -24px;
+  bottom: -48px;
+}
+
+/* The band under the header (above the footer) being edited, with its label and options. */
 .region-bar {
   position: absolute;
-  top: calc(100% + 8px);
+  top: 100%;
   left: calc(-1 * var(--margin-left));
   right: calc(-1 * var(--margin-right));
   z-index: 2;
-  height: 0;
+  box-sizing: border-box;
+  height: 24px;
   border-top: 1px solid #c4c7c5;
+  border-bottom: 1px solid #c4c7c5;
+  background: #fff;
   pointer-events: auto;
 }
 
 .region-bar.is-footer {
-  top: -8px;
+  top: auto;
+  bottom: 100%;
 }
 
 .region-bar-content {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 calc(var(--margin-right) - 8px) 0 calc(var(--margin-left) - 8px);
-  transform: translateY(-50%);
-  pointer-events: none;
+  height: 100%;
+  padding: 0 calc(var(--margin-right) - 8px) 0 calc(var(--margin-left) + 8px);
 }
 
 .region-bar-label,
@@ -2091,11 +2103,12 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 8px;
-  background: #fff;
-  color: var(--text-secondary);
+  color: var(--text);
   font-size: 12px;
-  pointer-events: auto;
+}
+
+.region-bar-label {
+  font-weight: 500;
 }
 
 .region-bar-actions label {
@@ -2197,8 +2210,9 @@ button:disabled {
   cursor: default;
 }
 
+/* No border; only a faint outline while the block is selected. */
 .page-content .toc.ProseMirror-selectednode {
-  outline: 1px solid #adc6f7;
+  outline: 1px solid #d3e3fd;
   outline-offset: 2px;
 }
 
@@ -2207,6 +2221,11 @@ button:disabled {
   align-items: baseline;
   padding-bottom: 4pt;
   line-height: 1.15;
+}
+
+/* Entries of the highest level used (indent 0) are bold; the placeholder has no heading. */
+.page-content .toc-entry[data-indent="0"][data-heading] {
+  font-weight: 700;
 }
 
 .page-content .toc-text {
@@ -2328,19 +2347,64 @@ button:disabled {
   min-height: 32px;
 }
 
-.page-numbers-dialog .radio-option input[type="number"] {
-  width: 72px;
-  height: 32px;
-  margin-left: 8px;
-  padding: 0 8px;
-  border: 1px solid var(--outline);
-  border-radius: 4px;
-  font-size: 14px;
+.page-numbers-dialog .numbering-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.page-numbers-dialog .radio-option input[type="number"]:focus {
+/* A small number field with its own up and down arrows. */
+.number-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+}
+
+.number-stepper:focus-within {
   border-color: var(--primary);
   outline: 1px solid var(--primary);
+}
+
+.number-stepper input[type="number"] {
+  width: 48px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  font-size: 14px;
+  outline: none;
+  appearance: textfield;
+}
+
+.number-stepper input[type="number"]::-webkit-inner-spin-button,
+.number-stepper input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.number-stepper-buttons {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--outline);
+}
+
+.number-stepper-buttons button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.number-stepper-buttons button:hover {
+  background: var(--hover);
 }
 
 .preset-panel-items .menu-item:hover {
@@ -3852,12 +3916,6 @@ body.is-column-resizing * {
     /* The sheets are not printed; the stack (exactly the pages, without gaps) has the page colour. */
     background: var(--page-color, #fff);
     print-color-adjust: exact;
-  }
-
-  .page-stack:not(.is-pageless) .page-region-slot,
-  .page-stack:not(.is-pageless) .footnote-area,
-  .page-stack:not(.is-pageless) > div:not(.page-elements, .page-sheets) > .page-content {
-    opacity: 1;
   }
 
   .region-bar,

@@ -357,8 +357,10 @@ class DocxConverter {
       const indent = { left: TWIPS_PER_INDENT * (entry.attrs.indent as number) };
       const target = tocTarget(this.doc, toc, index);
       const bookmark = target ? headingIndex.get(target.pos) : undefined;
+      // Entries of the highest level used are bold.
+      const bold = entry.attrs.indent === 0 && entry.attrs.heading !== null;
       if (toc.attrs.style === "links") {
-        const run = new TextRun({ text, color: "1155CC", underline: {} });
+        const run = new TextRun({ text, bold, color: "1155CC", underline: {} });
         return new Paragraph({
           indent,
           spacing: { after: 4 * TWIPS_PER_POINT },
@@ -372,7 +374,7 @@ class DocxConverter {
         tabStops: [
           { type: TabStopType.RIGHT, position: this.contentWidth, ...(toc.attrs.style === "dotted" && { leader: LeaderType.DOT }) },
         ],
-        children: [new TextRun(text), ...page],
+        children: [new TextRun({ text, bold }), ...page],
       });
     });
   }

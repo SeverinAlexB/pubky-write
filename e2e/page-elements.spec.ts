@@ -92,7 +92,7 @@ test("a header shows on every page, Different first page leaves page 1 empty, an
   expect((await placeOf(page, headerSlots(page).first())).page).toBe(1);
 });
 
-test("editing a header dims the body, shows its bar and supports formatting, undo and the shortcuts", async ({ page }) => {
+test("editing a header keeps the body as it is, shows its band and supports formatting, undo and the shortcuts", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();
   await page.keyboard.type("Body text");
@@ -104,13 +104,32 @@ test("editing a header dims the body, shows its bar and supports formatting, und
   const header = page.getByRole("textbox", { name: "Header" });
   await expect(header).toBeFocused();
 
+  // The body keeps its normal appearance.
   await expect(page.locator(".page-stack")).toHaveClass(/is-editing-region/);
-  await expect(editor(page)).toHaveCSS("opacity", "0.5");
+  await expect(editor(page)).toHaveCSS("opacity", "1");
+  // A 24px white band across the page, lines top and bottom, directly under the header area.
   const bar = page.locator(".region-bar");
-  await expect(bar).toHaveCSS("border-top-color", "rgb(196, 199, 197)");
-  await expect(bar.locator(".region-bar-label")).toHaveText("Header");
-  await expect(bar.locator(".region-bar-label")).toHaveCSS("font-size", "12px");
+  await expect(bar).toHaveCSS("height", "24px");
+  await expect(bar).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(bar).toHaveCSS("border-top", "1px solid rgb(196, 199, 197)");
+  await expect(bar).toHaveCSS("border-bottom", "1px solid rgb(196, 199, 197)");
+  const stackBox = (await page.locator(".page-stack").boundingBox())!;
+  const barBox = (await bar.boundingBox())!;
+  const headerBox = (await header.boundingBox())!;
+  expect(Math.round(barBox.x)).toBe(Math.round(stackBox.x));
+  expect(Math.round(barBox.width)).toBe(794);
+  expect(Math.round(barBox.y)).toBe(Math.round(headerBox.y + headerBox.height));
+  const label = bar.locator(".region-bar-label");
+  await expect(label).toHaveText("Header");
+  await expect(label).toHaveCSS("font-size", "12px");
+  await expect(label).toHaveCSS("font-weight", "500");
+  await expect(label).toHaveCSS("color", "rgb(31, 31, 31)");
+  // The label starts 8px inside the left margin (1 in).
+  expect(Math.round((await label.boundingBox())!.x - stackBox.x)).toBe(96 + 8);
+  await expect(bar.getByRole("checkbox", { name: "Different first page" })).toBeVisible();
+  await expect(bar.getByText("Different first page")).toHaveCSS("font-size", "12px");
   await expect(bar.getByRole("button", { name: "Header options" })).toHaveText("Options");
+  await expect(bar.getByRole("button", { name: "Header options" })).toHaveCSS("color", "rgb(11, 87, 208)");
 
   // Character formatting from the keyboard; typing is one undo step, undone from the header.
   await page.keyboard.press(`${mod}+b`);
@@ -141,6 +160,9 @@ test("editing a header dims the body, shows its bar and supports formatting, und
   await expect(footer).toBeFocused();
   await page.keyboard.type("Confidential");
   await expect(page.locator(".region-bar-label")).toHaveText("Footer");
+  // The footer's band sits directly above the footer area.
+  const footerBand = (await page.locator(".region-bar").boundingBox())!;
+  expect(Math.round(footerBand.y + footerBand.height)).toBe(Math.round((await footer.boundingBox())!.y));
   await page.keyboard.press("Escape");
   await expect(footerSlots(page)).toHaveText(["Confidential"]);
   // The footer area ends 1.27 cm (48px) above the bottom edge.
@@ -158,6 +180,34 @@ test("editing a header dims the body, shows its bar and supports formatting, und
   await expect(footer).toHaveCount(0);
   await expect(footerSlots(page)).toHaveCount(0);
   await expect(headerSlots(page)).toHaveText(["Bold title"]);
+});
+
+test("opening the footer from the top of a long page scrolls the page's bottom into view", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await addParagraphs(page, 45);
+  await page.keyboard.press(`${mod}+Home`);
+  await selectionSynced(page);
+  const scroller = page.locator(".editor-scroll");
+  await scroller.evaluate((element) => (element.scrollTop = 0));
+  const stackTop = (await page.locator(".page-stack").boundingBox())!.y;
+  expect(stackTop + 1123).toBeGreaterThan(900);
+
+  await pageElements(page, "Footer");
+  const footer = page.getByRole("textbox", { name: "Footer" });
+  await expect(footer).toBeFocused();
+  await expect(footer).toBeInViewport();
+  await expect(page.locator(".region-bar")).toBeInViewport();
+  // The bottom edge of page 1 is visible.
+  await expect.poll(async () => (await page.locator(".page-stack").boundingBox())!.y + 1123).toBeLessThanOrEqual(900);
+  await page.keyboard.type("Page footer");
+  await expect(footer).toHaveText("Page footer");
+
+  // Back at the top, the header opens in view the same way.
+  await page.keyboard.press("Escape");
+  await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await pageElements(page, "Header");
+  await expect(page.getByRole("textbox", { name: "Header" })).toBeInViewport();
 });
 
 test("a tall header moves the body down", async ({ page }) => {
@@ -203,10 +253,24 @@ test("a footer with page numbers shows 1, 2, 3 on consecutive pages", async ({ p
   const dialog = page.getByRole("dialog", { name: "Page numbers" });
   await expect(dialog).toHaveCSS("width", "304px");
   await expect(dialog.getByRole("radio", { name: "Footer" })).toBeChecked();
+  // "Start at" with its number field and arrows comes before the disabled "Continue from previous section".
+  const numbering = dialog.getByRole("group", { name: "Numbering" });
+  await expect(numbering.getByRole("radio")).toHaveCount(2);
+  await expect(numbering.getByRole("radio").first()).toHaveAccessibleName("Start at");
+  await expect(numbering.getByRole("radio").first()).toBeChecked();
+  await expect(numbering.getByRole("radio").nth(1)).toHaveAccessibleName("Continue from previous section");
   await expect(dialog.getByRole("radio", { name: "Continue from previous section" })).toBeDisabled();
-  await expect(dialog.getByRole("spinbutton", { name: "Start at" })).toHaveValue("1");
+  const startAt = dialog.getByRole("spinbutton", { name: "Start at" });
+  await expect(startAt).toHaveValue("1");
+  expect((await startAt.boundingBox())!.y).toBeLessThan((await numbering.getByText("Continue from previous section").boundingBox())!.y);
+  await dialog.getByRole("button", { name: "Increase start page" }).click();
+  await expect(startAt).toHaveValue("2");
+  await dialog.getByRole("button", { name: "Decrease start page" }).click();
+  await dialog.getByRole("button", { name: "Decrease start page" }).click();
+  await dialog.getByRole("button", { name: "Decrease start page" }).click();
+  await expect(startAt).toHaveValue("0");
   await dialog.getByRole("checkbox", { name: "Show on first page" }).uncheck();
-  await dialog.getByRole("spinbutton", { name: "Start at" }).fill("5");
+  await startAt.fill("5");
   await dialog.getByRole("button", { name: "Apply" }).click();
   await expect(dialog).toBeHidden();
   await expect(footerSlots(page)).toHaveText(["6", "7", "8"]);
@@ -338,6 +402,14 @@ test("each table of contents preset lists the headings; Update refreshes it", as
   await expect(toc.locator(".toc-page").nth(2)).toHaveAttribute("data-number", "2");
   // One more step of indent (0.5 in) for Heading 2.
   await expect(toc.locator(".toc-entry").nth(1)).toHaveCSS("padding-left", "48px");
+  // Entries of the highest level used are bold, deeper ones regular; the block has no border.
+  await expect(toc.locator(".toc-text").nth(0)).toHaveCSS("font-weight", "700");
+  await expect(toc.locator(".toc-text").nth(1)).toHaveCSS("font-weight", "400");
+  await expect(toc.locator(".toc-text").nth(2)).toHaveCSS("font-weight", "700");
+  await expect(toc).toHaveCSS("border-top-style", "none");
+  // Only while it is selected (as after inserting it) a faint outline shows.
+  await expect(toc).toHaveClass(/ProseMirror-selectednode/);
+  await expect(toc).toHaveCSS("outline", "rgb(211, 227, 253) solid 1px");
   // The page number is right-aligned at the right margin.
   const page1 = (await toc.locator(".toc-page").first().boundingBox())!;
   const stack = (await page.locator(".page-stack").boundingBox())!;
@@ -349,6 +421,8 @@ test("each table of contents preset lists the headings; Update refreshes it", as
   await expect(pill).toBeVisible();
   await editor(page).getByRole("heading", { name: "Background" }).click();
   await expect(pill).toBeHidden();
+  await expect(toc).toHaveCSS("outline-style", "none");
+  await expect(toc).toHaveCSS("border-top-style", "none");
   await page.keyboard.press(lineEnd);
   await selectionSynced(page);
   await page.keyboard.type(" and context");

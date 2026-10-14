@@ -1,6 +1,7 @@
 // Insert > Page elements > Page numbers > More options, and Options > Page numbers… in a header.
 import { MAX_PAGE_NUMBER_START } from "@docs/shared";
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../components/Icon.tsx";
 import type { PageNumberOptions } from "./pageElementCommands.ts";
 
 type PageNumbersDialogProps = {
@@ -16,6 +17,17 @@ export function PageNumbersDialog({ initial, onApply, onCancel }: PageNumbersDia
   const [start, setStart] = useState(String(initial.start));
   const [error, setError] = useState<string | null>(null);
   useEffect(() => dialog.current?.showModal(), []);
+
+  const changeStart = (value: string) => {
+    setStart(value);
+    setError(null);
+  };
+  // The arrows keep the number within 0 to the maximum.
+  const step = (by: 1 | -1) => {
+    const value = Number.parseInt(start, 10);
+    const next = (Number.isInteger(value) ? value : initial.start) + by;
+    changeStart(String(Math.min(MAX_PAGE_NUMBER_START, Math.max(0, next))));
+  };
 
   const apply = () => {
     const value = Number(start);
@@ -50,25 +62,33 @@ export function PageNumbersDialog({ initial, onApply, onCancel }: PageNumbersDia
         </fieldset>
         <fieldset>
           <legend>Numbering</legend>
+          <div className="numbering-start">
+            <label className="radio-option">
+              <input type="radio" name="numbering" checked readOnly />
+              Start at
+            </label>
+            <span className="number-stepper">
+              <input
+                type="number"
+                aria-label="Start at"
+                min={0}
+                max={MAX_PAGE_NUMBER_START}
+                value={start}
+                onChange={(event) => changeStart(event.target.value)}
+              />
+              <span className="number-stepper-buttons">
+                <button type="button" aria-label="Increase start page" tabIndex={-1} onClick={() => step(1)}>
+                  <Icon name="keyboard_arrow_up" size={16} />
+                </button>
+                <button type="button" aria-label="Decrease start page" tabIndex={-1} onClick={() => step(-1)}>
+                  <Icon name="keyboard_arrow_down" size={16} />
+                </button>
+              </span>
+            </span>
+          </div>
           <label className="radio-option">
             <input type="radio" name="numbering" disabled />
             Continue from previous section
-          </label>
-          <label className="radio-option">
-            <input type="radio" name="numbering" checked readOnly />
-            Start at
-            <input
-              type="number"
-             
-              aria-label="Start at"
-              min={0}
-              max={MAX_PAGE_NUMBER_START}
-              value={start}
-              onChange={(event) => {
-                setStart(event.target.value);
-                setError(null);
-              }}
-            />
           </label>
         </fieldset>
         {error && (
