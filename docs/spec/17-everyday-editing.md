@@ -66,7 +66,11 @@ punctuation (or immediately for symbol sequences like `-->`).
 
 - A modal dialog 600px wide (09), title "Keyboard shortcuts" with a "Close
   dialogue" × button; under the title a full-width pill search field
-  "Search" that filters rows by name.
+  "Search" (filled `#f1f4f8` background, no outline, 40px tall, search icon at
+  the left; focused: a 2px primary outline) that filters rows by name.
+- Section headers in the text colour `#1f1f1f`, 14px, medium weight, 16px
+  above and 8px below. Rows 44px tall with a 1px `#e1e3e1` divider between
+  rows.
 - Grouped sections with headers (e.g. "Text formatting", "Paragraph
   formatting", "Actions", "Navigation", "Menus", "Comments") listing every
   shortcut the app supports: name at the left (14px), keys at the right as

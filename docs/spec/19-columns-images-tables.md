@@ -4,9 +4,10 @@
 
 - Format > Columns ▸ shows three icon presets (one, two, three columns; the
   current one outlined in primary colour) and "More options".
-- "Column options" dialog (398px): "Number of columns" dropdown (1–3),
-  "Spacing (centimetres)" number field (default 1.27), checkbox "Line between
-  columns", Cancel / Apply.
+- "Column options" dialog (398px): three rows, each with the label at the
+  left (14px) and its control right-aligned (controls 100px wide, 32px tall):
+  "Number of columns" dropdown (1–3), "Spacing (centimetres)" number field
+  (default 1.27), "Line between columns" checkbox; then Cancel / Apply.
 - Columns apply to the whole document (the reference applies per section;
   sections are out of scope). Text flows down the first column to the bottom
   margin of the page, then continues at the top of the next column, then the

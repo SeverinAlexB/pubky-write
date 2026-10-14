@@ -105,3 +105,9 @@ New documents 17–19. 18 amends 07 (multiple tabs instead of one).
 
 - 16 (round 4 amendment): structural suggestions — objects, table structure,
   image changes, and headers/footers/footnotes in Suggesting mode.
+
+### Round 4 corrections
+
+- 17: Keyboard shortcuts dialog styling (filled search pill, dark section
+  headers, 44px rows with dividers). 19: Column options dialog rows (label
+  left, control right). 18: no empty-outline hint under tabs.

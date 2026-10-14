@@ -13,6 +13,8 @@ footers are shared by all tabs. Amends 07, which assumed a single tab.
   was chosen), the tab name, the open-comment badge (07), and on hover or when
   current a ⋮ "Tab options" button. The current tab has the pill styling from
   07; other tabs have no background (hover: `#f1f4f8`).
+- The "Headings that you add to the document will appear here." hint (07) is
+  not shown for tabs; a tab without headings simply shows no outline.
 - Clicking a tab switches to it (scroll position per tab is remembered during
   the session). The current tab's headings are listed under it (07); other
   tabs show their outline only when "Show outline" is on for them.
