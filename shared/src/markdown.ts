@@ -32,6 +32,14 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
       state.closeBlock(node);
     },
     hardBreak: defaults.hard_break!,
+    // A tab character, or its character reference at the start of a line, where a tab would make
+    // an indented code block.
+    tab(state) {
+      state.write("");
+      // atBlank is not in the published types.
+      const atLineStart = (state as unknown as { atBlank: () => boolean }).atBlank();
+      state.write(atLineStart ? "&#9;" : "\t");
+    },
     text: defaults.text!,
     listItem: defaults.list_item!,
     bulletList(state, node) {

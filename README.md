@@ -74,8 +74,9 @@ To restore a backup:
   by URL, paste or drag and drop), tables (see below), bulleted
   and numbered lists with glyph and numbering presets, checklists (⌘⇧9),
   alignment, line spacing, space before and after paragraphs (Custom spacing),
-  indentation (Tab, Shift+Tab, ⌘] and ⌘[ move to the next half inch; the
-  ruler sets any left, first line or hanging and right indent), page breaks
+  indentation (Tab at the start of a paragraph, Shift+Tab, ⌘] and ⌘[ move to
+  the next half inch; the ruler sets any left, first line or hanging and right
+  indent), tab characters (Tab after text) and tab stops, page breaks
   (⌘↵), quotes, code blocks, horizontal lines, undo and redo, zoom (presets,
   typed or Fit).
 - **Special characters** (Insert > Symbols > Special characters, or Emoji): a
@@ -129,7 +130,13 @@ To restore a backup:
   left indent (the first line moves with it), first line and right indent
   markers to indent the selected paragraphs, or the shaded margin areas to
   change the left and right margins; a dotted line and the value show while
-  dragging, values snap to 0.25 cm (⅛ in) and Alt turns snapping off. The ruler
+  dragging, values snap to 0.25 cm (⅛ in) and Alt turns snapping off. Click
+  the ruler between the margins to add a left, centre or right tab stop there;
+  drag a stop to move it (its position shows above the ruler) or off the ruler
+  to remove it. Tabs advance to the next stop of their paragraph, or every
+  1.27 cm from the left indent (see
+  [docs/design/tab-stops.md](docs/design/tab-stops.md)). Markers can be
+  grabbed up to 8px around their shape. The ruler
   indents the header, footer or footnote being edited, or else the body. View >
   Show ruler and View > Show print layout (off for one continuous sheet) are
   remembered in the browser.

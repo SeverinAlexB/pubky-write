@@ -33,6 +33,7 @@ import {
   type PageSpacer,
 } from "./pageLayout.ts";
 import { HEADER_OFFSET, regionHTML } from "./regionRender.ts";
+import { layoutTabsIn } from "./tabLayout.ts";
 
 /** Space between pages, in CSS pixels at 100% zoom. */
 export const PAGE_GAP = 10;
@@ -430,6 +431,7 @@ class PaginationView {
     const element = document.createElement("div");
     fill(element);
     this.measureBox.replaceChildren(element);
+    layoutTabsIn([element]);
     const height = Math.round((element.getBoundingClientRect().height / scale) * 100) / 100;
     this.measureBox.replaceChildren();
     cache.set(content, height);

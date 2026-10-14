@@ -261,6 +261,29 @@ describe("toDocx", () => {
     expect(white).not.toContain("<w:background");
   });
 
+  it("writes tab stops and tab characters", async () => {
+    const doc = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: {
+            tabStops: [
+              { pos: 170.08, kind: "left" },
+              { pos: 250, kind: "center" },
+              { pos: 396.85, kind: "right" },
+            ],
+          },
+          content: [text("Name"), { type: "tab" }, text("Role"), { type: "tab", marks: [{ type: "bold" }] }, text("Total")],
+        },
+      ],
+    });
+    const body = await documentXml(await toDocx(doc, "Tabs", async () => null), "word/document.xml");
+    expect(body).toContain('<w:tabs><w:tab w:val="left" w:pos="3402"/><w:tab w:val="center" w:pos="5000"/><w:tab w:val="right" w:pos="7937"/></w:tabs>');
+    expect(body.match(/<w:tab\/>/g)).toHaveLength(2);
+    expect(body).toMatch(/<w:r><w:rPr><w:b\/><w:bCs\/><\/w:rPr><w:tab\/><\/w:r>/);
+  });
+
   it("uses the image size set in the editor", async () => {
     // A 4 × 2 PNG.
     const png = Buffer.from(

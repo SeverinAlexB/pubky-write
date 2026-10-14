@@ -7,6 +7,9 @@ export type TextStats = {
   charactersExcludingSpaces: number;
 };
 
+/** Tabs are white space; other inline nodes (line breaks, images) end a word and are not characters. */
+const leafText = (node: Node) => (node.type.name === "tab" ? "\t" : "\n");
+
 const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
 
 /** Counts words with the locale-aware word segmenter, so punctuation and CJK text are handled. */
@@ -39,7 +42,7 @@ function totalStats(doc: Node): TextStats {
   doc.forEach((block) => {
     let stats = blockCounts.get(block);
     if (!stats) {
-      stats = countText(block.textBetween(0, block.content.size, "\n", "\n"));
+      stats = countText(block.textBetween(0, block.content.size, "\n", leafText));
       blockCounts.set(block, stats);
     }
     total.words += stats.words;
@@ -57,7 +60,7 @@ export function documentStats(state: EditorState): DocumentStats {
   let selected: TextStats | null = null;
   if (!selection.empty) {
     if (!(lastSelection && lastSelection.doc === doc && lastSelection.from === from && lastSelection.to === to)) {
-      lastSelection = { doc, from, to, stats: countText(doc.textBetween(from, to, "\n", "\n")) };
+      lastSelection = { doc, from, to, stats: countText(doc.textBetween(from, to, "\n", leafText)) };
     }
     selected = lastSelection.stats;
   }

@@ -21,6 +21,7 @@ import { formatDay, formatVersionTime, formatVersionTitle } from "../format.ts";
 import { PageElements } from "./PageElements.tsx";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { Pagination, resetPagination } from "./pagination.ts";
+import { TabLayout } from "./tabLayout.ts";
 import { ToolButton } from "./toolbar/ToolButton.tsx";
 import { ZoomControl, type Zoom } from "./toolbar/ZoomControl.tsx";
 import { VersionHighlight } from "./versionHighlight.ts";
@@ -107,7 +108,7 @@ export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, on
 
   const preview = useEditor(
     {
-      extensions: [...documentExtensions, Pagination, VersionHighlight.configure({ edits: highlight ? edits : [] })],
+      extensions: [...documentExtensions, TabLayout, Pagination, VersionHighlight.configure({ edits: highlight ? edits : [] })],
       content: (comparison?.after ?? emptyDoc).toJSON(),
       editable: false,
       editorProps: { attributes: { class: "page-content", "aria-label": "Version preview" } },

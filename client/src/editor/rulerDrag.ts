@@ -6,7 +6,11 @@ import {
   MAX_MARGIN_PT,
   paragraphIndents,
   pointsPerUnit,
+  sameTabStop,
+  storedTabStops,
+  tabStopsOf,
   type LengthUnit,
+  type TabStop,
 } from "@docs/shared";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node } from "@tiptap/pm/model";
@@ -79,19 +83,56 @@ function rulerIndentsOf(block: Node, lists: number): RulerIndents {
   return { left, firstLine: left + own.firstLine - (lists > 0 ? LIST_GLYPH_OFFSET_PT : 0), right: own.right };
 }
 
-/** The indents of the paragraph at the cursor, or of the first paragraph in the selection. */
-export function rulerIndents(state: EditorState): RulerIndents {
+/** The paragraph or heading at the cursor, or the first one in the selection. */
+function firstParagraph(state: EditorState): { node: Node; pos: number } | null {
   const { $from, from, to } = state.selection;
-  if ($from.parent.isTextblock) return rulerIndentsOf($from.parent, listDepth(state, $from.pos));
+  if ($from.parent.isTextblock) return { node: $from.parent, pos: $from.before() };
   // Select all, or a selected block: the first paragraph or heading in it.
-  let found: RulerIndents | null = null;
+  let found: { node: Node; pos: number } | null = null;
   state.doc.nodesBetween(from, to, (node, pos) => {
     if (found) return false;
     if (!indentedTypes.has(node.type.name)) return true;
-    found = rulerIndentsOf(node, listDepth(state, pos + 1));
+    found = { node, pos };
     return false;
   });
-  return found ?? { left: 0, firstLine: 0, right: 0 };
+  return found;
+}
+
+/** The indents of the paragraph at the cursor, or of the first paragraph in the selection. */
+export function rulerIndents(state: EditorState): RulerIndents {
+  const paragraph = firstParagraph(state);
+  return paragraph ? rulerIndentsOf(paragraph.node, listDepth(state, paragraph.pos + 1)) : { left: 0, firstLine: 0, right: 0 };
+}
+
+/** The tab stops of the paragraph at the cursor, or of the first paragraph in the selection. */
+export function rulerTabStops(state: EditorState): TabStop[] {
+  const paragraph = firstParagraph(state);
+  return paragraph && indentedTypes.has(paragraph.node.type.name) ? tabStopsOf(paragraph.node.attrs) : [];
+}
+
+/** The ruler's tooltip while a tab stop is dragged: the position in the ruler's unit, "13.00". */
+export function tabStopLabel(points: number, unit: LengthUnit): string {
+  return (Math.round((points / pointsPerUnit(unit)) * 100) / 100 || 0).toFixed(2);
+}
+
+/**
+ * Adds a tab stop, removes one, or both (a move), in every paragraph and heading in the
+ * selection; one undo step. A stop that is moved or removed is the one the ruler shows: paragraphs
+ * without it just get the new stop.
+ */
+export function changeTabStopsTransaction(state: EditorState, change: { add?: TabStop; remove?: TabStop }): Transaction | null {
+  const tr = closeHistory(state.tr);
+  const { from, to } = state.selection;
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!indentedTypes.has(node.type.name)) return;
+    const current = tabStopsOf(node.attrs);
+    let next = change.remove ? current.filter((stop) => !sameTabStop(stop, change.remove!)) : current;
+    if (change.add) next = [...next.filter((stop) => Math.abs(stop.pos - change.add!.pos) >= 0.01), change.add];
+    const stored = storedTabStops(next);
+    if (JSON.stringify(stored) === JSON.stringify(node.attrs.tabStops ?? null)) return;
+    tr.setNodeAttribute(pos, "tabStops", stored);
+  });
+  return tr.docChanged ? tr : null;
 }
 
 /**

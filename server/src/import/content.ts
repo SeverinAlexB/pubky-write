@@ -26,6 +26,17 @@ export function textNode(text: string, marks: readonly MarkJSON[]): JSONContent[
   return [{ type: "text", text, ...(set.length > 0 && { marks: set }) }];
 }
 
+/** Text with tab characters, which become tab nodes. */
+export function textWithTabs(text: string, marks: readonly MarkJSON[]): JSONContent[] {
+  return text.split("\t").flatMap((part, index) => [...(index > 0 ? [leafNode("tab", marks)] : []), ...textNode(part, marks)]);
+}
+
+/** An inline leaf node such as a tab, with marks. */
+export function leafNode(type: string, marks: readonly MarkJSON[]): JSONContent {
+  const set = markSet(marks);
+  return { type, ...(set.length > 0 && { marks: set }) };
+}
+
 /** Sorts marks, drops duplicates and resolves exclusions (inline code excludes other marks). */
 function markSet(marks: readonly MarkJSON[]): MarkJSON[] {
   if (marks.length === 0) return [];

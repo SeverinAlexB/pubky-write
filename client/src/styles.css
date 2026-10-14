@@ -1298,10 +1298,12 @@ button:disabled {
 
 .ruler-band {
   position: relative;
+  z-index: 5;
   flex: none;
   height: 16px;
   margin-top: 8px;
-  overflow: hidden;
+  /* The markers' grab areas reach a little above and below the ruler. */
+  overflow: clip visible;
 }
 
 /* Without rulers the editor area starts where the ruler would. */
@@ -1344,16 +1346,25 @@ button:disabled {
 .ruler-tick {
   stroke: var(--outline);
   stroke-width: 1;
+  pointer-events: none;
 }
 
 .ruler-label {
   fill: var(--text-secondary);
   font-size: 10px;
   text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
 }
 
+/* Indent markers and tab stops; they are grabbed by the larger invisible areas around them. */
 .ruler-marker {
   fill: var(--primary);
+  pointer-events: none;
+}
+
+.ruler-hit {
+  fill: transparent;
   cursor: ew-resize;
 }
 
@@ -1388,6 +1399,11 @@ button:disabled {
   white-space: nowrap;
   transform: translateX(8px);
   pointer-events: none;
+}
+
+/* A tab stop's position shows above the ruler, centred on the stop. */
+.ruler-tooltip.is-above {
+  transform: translate(-50%, -100%);
 }
 
 /* Toolbar */
@@ -1985,6 +2001,23 @@ button:disabled {
 .page-stack.is-pageless .page-content {
   min-height: var(--page-height);
   padding-bottom: var(--margin-bottom);
+}
+
+/*
+ * A tab character: as wide as the distance to its tab stop, set by the editor after layout
+ * (editor/tabLayout.ts); half an inch until then. The tab inside it takes no space.
+ */
+.page-content .tab-char {
+  display: inline-block;
+  width: 48px;
+  tab-size: 0;
+  text-indent: 0;
+  white-space: pre;
+}
+
+/* Tab characters typed into text before tabs were nodes advance to the next half inch. */
+.page-content {
+  tab-size: 48px;
 }
 
 /* Pushes the content after it to the next page. */

@@ -2,7 +2,18 @@ import { documentSchema, paragraphIndents, PT_PER_CM } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import { EditorState, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
-import { clampHandle, dragLabel, formatLength, rulerIndents, setIndentTransaction, snap, snapStep } from "./rulerDrag.ts";
+import {
+  changeTabStopsTransaction,
+  clampHandle,
+  dragLabel,
+  formatLength,
+  rulerIndents,
+  rulerTabStops,
+  setIndentTransaction,
+  snap,
+  snapStep,
+  tabStopLabel,
+} from "./rulerDrag.ts";
 
 const text = (value: string) => ({ type: "text", text: value });
 const paragraph = (value: string, attrs: Record<string, unknown> = {}) => ({ type: "paragraph", attrs, content: [text(value)] });
@@ -101,5 +112,54 @@ describe("setIndentTransaction", () => {
     // The paragraph's own indent is what the list does not already give it.
     expect(indentsOf(next)).toEqual([{ left: 36, firstLine: 0, right: 0 }]);
     expect(rulerIndents(next).left).toBe(72);
+  });
+});
+
+describe("tab stops on the ruler", () => {
+  const left = { pos: 170.08, kind: "left" } as const;
+  const right = { pos: 396.85, kind: "right" } as const;
+  const stopsOf = (state: EditorState) => {
+    const result: unknown[] = [];
+    state.doc.descendants((node) => {
+      if (node.type.name === "paragraph") result.push(node.attrs.tabStops);
+    });
+    return result;
+  };
+
+  it("labels positions as plain numbers in the ruler's unit", () => {
+    expect(tabStopLabel(8 * PT_PER_CM, "cm")).toBe("8.00");
+    expect(tabStopLabel(81, "in")).toBe("1.13");
+  });
+
+  it("shows the stops of the cursor's paragraph, or the first selected one", () => {
+    const content = [paragraph("One", { tabStops: [left] }), paragraph("Two", { tabStops: [right] })];
+    expect(rulerTabStops(stateWith(content, 7))).toEqual([right]);
+    expect(rulerTabStops(stateWith(content, 2, 7))).toEqual([left]);
+    expect(rulerTabStops(stateWith([paragraph("None")]))).toEqual([]);
+  });
+
+  it("adds, moves and removes a stop in every selected paragraph, each one undo step", () => {
+    const content = [paragraph("One", { tabStops: [left] }), paragraph("Two"), paragraph("Three")];
+    let state = stateWith(content, 2, 7);
+    state = state.apply(changeTabStopsTransaction(state, { add: right })!);
+    expect(stopsOf(state)).toEqual([[left, right], [right], null]);
+
+    // A move replaces the stop where it was; a paragraph without it just gets the new one.
+    const moved = { ...left, pos: 226.77 };
+    state = state.apply(changeTabStopsTransaction(state, { remove: left, add: moved })!);
+    expect(stopsOf(state)).toEqual([[moved, right], [moved, right], null]);
+
+    state = state.apply(changeTabStopsTransaction(state, { remove: right })!);
+    expect(stopsOf(state)).toEqual([[moved], [moved], null]);
+    state = state.apply(changeTabStopsTransaction(state, { remove: moved })!);
+    expect(stopsOf(state)).toEqual([null, null, null]);
+    // Nothing to change.
+    expect(changeTabStopsTransaction(state, { remove: moved })).toBeNull();
+  });
+
+  it("replaces a stop of another kind at the same position", () => {
+    let state = stateWith([paragraph("One", { tabStops: [left] })]);
+    state = state.apply(changeTabStopsTransaction(state, { add: { pos: 170.08, kind: "center" } })!);
+    expect(stopsOf(state)).toEqual([[{ pos: 170.08, kind: "center" }]]);
   });
 });

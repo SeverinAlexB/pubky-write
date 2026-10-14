@@ -11,6 +11,7 @@ import { Pagination } from "./pagination.ts";
 import { Search } from "./search.ts";
 import { followTocEntry } from "./pageElementCommands.ts";
 import { EditorTable, TableColumnResize } from "./tables.ts";
+import { TabKey, TabLayout } from "./tabLayout.ts";
 
 type EditorExtensionOptions = {
   /** Server version of the loaded document. */
@@ -43,6 +44,7 @@ export function editorExtensions({
     TableColumnResize,
     UndoRedo,
     Search,
+    TabLayout,
     Pagination,
     CommentAnchors.configure({ initial: comments, initiallyHidden: commentsHidden, onActivate: onCommentClick }),
     Extension.create({
@@ -74,24 +76,8 @@ export function editorExtensions({
       },
     }),
     TocLinks,
-    Extension.create({
-      name: "tabIndent",
-      // Lower than lists and tables, so Tab still nests list items and moves between cells.
-      priority: 50,
-      addKeyboardShortcuts() {
-        return {
-          // Like Docs, Tab never moves focus out of the document.
-          // In a list Tab only changes the list level, so a list item that cannot move stays put.
-          Tab: () => inList(this.editor) || this.editor.commands.changeIndent(1) || true,
-          "Shift-Tab": () => inList(this.editor) || this.editor.commands.changeIndent(-1) || true,
-        };
-      },
-    }),
+    TabKey,
   ];
-}
-
-function inList(editor: Editor): boolean {
-  return editor.isActive("listItem") || editor.isActive("taskItem");
 }
 
 export function clearFormatting(editor: Editor): boolean {

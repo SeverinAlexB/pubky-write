@@ -10,6 +10,7 @@ import {
   DroppedContent,
   finishDocument,
   textNode,
+  textWithTabs,
   type ImageStore,
   type ImportOptions,
   type ImportResult,
@@ -165,7 +166,7 @@ class MarkdownConverter {
     for (const token of tokens) {
       switch (token.type) {
         case "text":
-          result.push(...textNode(token.content, marks));
+          result.push(...textWithTabs(token.content, marks));
           break;
         case "softbreak":
           result.push(...textNode(" ", marks));
@@ -231,7 +232,7 @@ class MarkdownConverter {
   }
 }
 
-const isInline = (node: JSONContent) => node.type === "text" || node.type === "hardBreak";
+const isInline = (node: JSONContent) => node.type === "text" || node.type === "hardBreak" || node.type === "tab";
 
 /** A paragraph or heading with images in it becomes the text before, the image and the text after. */
 function splitAroundBlocks(node: JSONContent, content: JSONContent[]): JSONContent[] {

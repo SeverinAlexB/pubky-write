@@ -55,6 +55,7 @@ import {
   pageSizeMm,
   paperSizes,
   paragraphStyleDefinitions,
+  tabStopsOf,
   tocHeadings,
   tocTarget,
   type NumberFormat,
@@ -286,6 +287,7 @@ class DocxConverter {
       alignment: alignments[node.attrs.textAlign as keyof typeof alignments],
       ...(spacing(node) && { spacing: spacing(node) }),
       ...(!list && indentation(node) && { indent: indentation(node) }),
+      ...(tabStops(node) && { tabStops: tabStops(node) }),
       ...(quoted && { indent: { left: 720 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: "CCCCCC", space: 12 } } }),
       ...listOptions(list),
     };
@@ -388,6 +390,7 @@ class DocxConverter {
         new Paragraph({
           style: "FootnoteText",
           alignment: alignments[paragraph.attrs.textAlign as keyof typeof alignments],
+          ...(tabStops(paragraph) && { tabStops: tabStops(paragraph) }),
           children: await this.inline(paragraph),
         }),
       );
@@ -425,6 +428,7 @@ class DocxConverter {
           new Paragraph({
             alignment: alignments[child.attrs.textAlign as keyof typeof alignments],
             indent,
+            ...(tabStops(child) && { tabStops: tabStops(child) }),
             children: [new TextRun({ text: `${checked ? "☑" : "☐"} `, strike: strike || undefined }), ...runs],
           }),
         );
@@ -517,6 +521,8 @@ class DocxConverter {
     for (const node of children(parent)) {
       if (node.type.name === "hardBreak") {
         runs.push(new TextRun({ text: "", break: 1 }));
+      } else if (node.type.name === "tab") {
+        runs.push(new TextRun({ ...runOptions(node.marks, strike), children: [new Tab()] }));
       } else if (node.type.name === "image") {
         runs.push(await this.image(node));
       } else if (node.type.name === "pageField") {
@@ -577,6 +583,15 @@ function indentation(node: Node): IParagraphOptions["indent"] | undefined {
     ...(firstLine < 0 && { hanging: twips(-firstLine) }),
   };
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+const tabStopTypes = { left: TabStopType.LEFT, center: TabStopType.CENTER, right: TabStopType.RIGHT } as const;
+
+/** A paragraph's tab stops; both the editor and Word measure them from the left margin. */
+function tabStops(node: Node): IParagraphOptions["tabStops"] | undefined {
+  const stops = tabStopsOf(node.attrs);
+  if (stops.length === 0) return undefined;
+  return stops.map((stop) => ({ type: tabStopTypes[stop.kind], position: Math.round(stop.pos * TWIPS_PER_POINT) }));
 }
 
 /** Line spacing and the block's own space before and after; the rest comes from its Word style. */

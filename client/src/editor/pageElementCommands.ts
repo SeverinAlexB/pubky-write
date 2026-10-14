@@ -19,6 +19,7 @@ import { NodeSelection, Plugin, TextSelection, type EditorState, type Transactio
 import type { EditorView } from "@tiptap/pm/view";
 import { closeHistory } from "@tiptap/pm/history";
 import { documentFootnotes, layOutNow, pageIndexAt } from "./pagination.ts";
+import { TabKey, TabLayout } from "./tabLayout.ts";
 
 /** What is being edited: a page's header or footer, or footnote number index + 1. */
 export type RegionTarget =
@@ -94,7 +95,7 @@ export function createRegionEditor({ main, binding, element, className, onEscape
 
   const region: Editor = new Editor({
     element,
-    extensions: [...documentExtensions, regionBehaviour(main, binding.kind, onEscape)],
+    extensions: [...documentExtensions, TabLayout, TabKey, regionBehaviour(main, binding.kind, onEscape)],
     content: { type: "doc", content: stored ?? emptyRegion() },
     editorProps: {
       attributes: { class: `page-content page-region ${className}`, "aria-label": binding.label, role: "textbox", "aria-multiline": "true" },

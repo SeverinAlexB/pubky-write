@@ -135,6 +135,8 @@ function paragraphStyle(attrs: Record<string, unknown>): CSSProperties | undefin
 function inline(content: JSONContent[] | undefined): ReactNode[] {
   return (content ?? []).map((node, index) => {
     if (node.type === "hardBreak") return <br key={index} />;
+    // Thumbnails do not lay tabs out: each is half an inch wide.
+    if (node.type === "tab") return <span key={index} className="tab-char" />;
     if (node.type !== "text") return null;
     let result: ReactNode = node.text;
     for (const mark of node.marks ?? []) result = withMark(result, mark);

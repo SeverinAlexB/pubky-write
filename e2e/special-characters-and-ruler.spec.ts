@@ -272,17 +272,18 @@ test.describe("ruler", () => {
     const writable = await box(page.locator(".horizontal-ruler .ruler-writable"));
     const rulerBox = await box(ruler(page));
 
-    await page.mouse.move(writable.x - 10, rulerBox.y + 8);
+    // Away from the indent markers, which can be grabbed up to 8px around their shape.
+    await page.mouse.move(writable.x - 20, rulerBox.y + 8);
     await page.mouse.down();
-    await page.mouse.move(writable.x - 10 + CM, rulerBox.y + 8, { steps: 4 });
+    await page.mouse.move(writable.x - 20 + CM, rulerBox.y + 8, { steps: 4 });
     // 2.54 cm + 1 cm, snapped to a quarter centimetre.
     await expect(page.locator(".ruler-tooltip")).toHaveText("Left margin 3.50 cm");
     await page.mouse.up();
     await expect.poll(async () => (await box(editor(page).locator("p").first())).x - sheet.x).toBeCloseTo(3.5 * CM, 0);
 
-    await page.mouse.move(writable.x + writable.width + 10, rulerBox.y + 8);
+    await page.mouse.move(writable.x + writable.width + 20, rulerBox.y + 8);
     await page.mouse.down();
-    await page.mouse.move(writable.x + writable.width + 10 + 1.04 * CM, rulerBox.y + 8, { steps: 4 });
+    await page.mouse.move(writable.x + writable.width + 20 + 1.04 * CM, rulerBox.y + 8, { steps: 4 });
     await expect(page.locator(".ruler-tooltip")).toHaveText("Right margin 1.50 cm");
     await page.mouse.up();
 

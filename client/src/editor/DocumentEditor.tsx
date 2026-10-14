@@ -737,6 +737,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             geometry={geometry}
             zoom={effectiveZoom}
             unit={unit}
+            onToggleRuler={() => setRulerVisible((visible) => !visible)}
           />
         ) : (
           <div className="ruler-gap" />

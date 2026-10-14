@@ -17,6 +17,7 @@ import {
   Table,
   TableCell,
   TableRow,
+  Tab,
   TextRun,
   VerticalMergeType,
 } from "docx";
@@ -194,6 +195,14 @@ describe("markdownToDocument", () => {
     const { doc } = await markdownToDocument(toMarkdown(original), { storeImage: imageStore().storeImage });
     expect(outline(doc)).toEqual(outline(original));
     expect(marksOn(doc, "marks")).toEqual(["bold", "underline"]);
+  });
+
+  it("turns tab characters into tabs", async () => {
+    const { doc } = await markdownToDocument("Name\tRole\n\n&#9;Indented **bold\tbold**\n", { storeImage: imageStore().storeImage });
+    expect(doc.child(0).content.toJSON()).toEqual([{ type: "text", text: "Name" }, { type: "tab" }, { type: "text", text: "Role" }]);
+    expect(doc.child(1).textContent).toBe("\tIndented bold\tbold");
+    expect(findNode(doc, "tab")).toBeDefined();
+    expect(toMarkdown(doc)).toBe("Name\tRole\n\n&#9;Indented **bold\tbold**\n");
   });
 
   it("uses the requested paper size and makes an empty file one empty paragraph", async () => {
@@ -456,6 +465,58 @@ describe("docxToDocument", () => {
     // White pages have no background in Word and import as white.
     const white = await toDocx(Node.fromJSON(documentSchema, { type: "doc", content: [paragraph("White")] }), "White", async () => null);
     expect((await docxToDocument(white, { storeImage: imageStore().storeImage })).doc.attrs.pageColor).toBe("#ffffff");
+  });
+
+  it("keeps tab stops and tabs through an export and import, in the body and headers", async () => {
+    const stops = [
+      { pos: 170.1, kind: "left" },
+      { pos: 250, kind: "center" },
+      { pos: 396.85, kind: "right" },
+    ];
+    const tabbed = { type: "paragraph", attrs: { tabStops: stops }, content: [{ type: "text", text: "A" }, { type: "tab" }, { type: "text", text: "B" }] };
+    const original = Node.fromJSON(documentSchema, { type: "doc", attrs: { header: [tabbed] }, content: [tabbed] });
+    const word = await toDocx(original, "Tabs", async () => null);
+    const { doc } = await docxToDocument(word, { storeImage: imageStore().storeImage });
+    const body = doc.child(0);
+    expect(body.attrs.tabStops).toEqual(stops);
+    expect(body.content.toJSON()).toEqual(tabbed.content);
+    expect(regionText(documentSchema, doc.attrs.header)).toBe("A\tB");
+    expect((doc.attrs.header as { attrs: Record<string, unknown> }[])[0]!.attrs.tabStops).toEqual(stops);
+  });
+
+  it("reads Word's other tab stop kinds and tabs in runs", async () => {
+    const word = await Packer.toBuffer(
+      new Document({
+        sections: [
+          {
+            children: [
+              new Paragraph({
+                tabStops: [
+                  { type: "decimal", position: 2000 },
+                  { type: "bar", position: 3000 },
+                  { type: "clear", position: 4000 },
+                  { type: "end", position: 5000 },
+                ],
+                children: [new TextRun({ text: "x", bold: true }), new TextRun({ children: [new Tab(), "y"], bold: true })],
+              }),
+              new Paragraph({ children: [new TextRun({ children: [new Tab()] })] }),
+            ],
+          },
+        ],
+      }),
+    );
+    const { doc } = await docxToDocument(word, { storeImage: imageStore().storeImage });
+    expect(doc.child(0).attrs.tabStops).toEqual([
+      { pos: 100, kind: "right" },
+      { pos: 250, kind: "right" },
+    ]);
+    expect(doc.child(0).content.toJSON()).toEqual([
+      { type: "text", text: "x", marks: [{ type: "bold" }] },
+      { type: "tab", marks: [{ type: "bold" }] },
+      { type: "text", text: "y", marks: [{ type: "bold" }] },
+    ]);
+    // A paragraph with only a tab is kept.
+    expect(doc.child(1).textContent).toBe("\t");
   });
 
   it("rejects files that are not Word documents", async () => {

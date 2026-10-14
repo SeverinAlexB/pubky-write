@@ -25,10 +25,12 @@ import {
   paperSizes,
   paragraphStyleDefinitions,
   regionProblem,
+  storedTabStops,
   type ParagraphStyleId,
   type RegionContent,
 } from "@docs/shared";
 import type { JSONContent } from "@tiptap/core";
+import type { TabStopKind } from "@docs/shared";
 import JSZip from "jszip";
 import { xml2js } from "xml-js";
 import {
@@ -36,6 +38,7 @@ import {
   emptyParagraph,
   finishDocument,
   ImportError,
+  leafNode,
   repair,
   textNode,
   type ImageStore,
@@ -583,7 +586,7 @@ class DocxConverter {
           break;
         }
         case "tab":
-          result.push(...textNode("\t", marks));
+          if (!hidden && (!field || field.result)) result.push(leafNode("tab", marks));
           break;
         case "noBreakHyphen":
           result.push(...textNode("‑", marks));
@@ -810,7 +813,10 @@ function listItem(list: JSONContent, blocks: JSONContent[], checked?: boolean): 
   return { type: "listItem", content: blocks };
 }
 
-/** Alignment, line spacing, space before and after, and indentation from the paragraph's own properties. */
+/** Word's tab stop kinds; decimal stops line up like right stops, bar and clear stops are left out. */
+const tabStopKinds: Record<string, TabStopKind | undefined> = { left: "left", start: "left", center: "center", right: "right", end: "right", decimal: "right" };
+
+/** Alignment, line spacing, space before and after, indentation and tab stops from the paragraph's own properties. */
 function paragraphAttributes(properties: Element | undefined, style: ParagraphStyleId, inList: boolean): Record<string, unknown> {
   const attrs: Record<string, unknown> = {};
   const alignment = alignments[val(child(properties, "jc")) ?? ""];
@@ -834,6 +840,15 @@ function paragraphAttributes(properties: Element | undefined, style: ParagraphSt
     if (points !== definition[side]) attrs[side] = points;
   }
 
+  const stops = storedTabStops(
+    (child(properties, "tabs")?.children ?? []).flatMap((tab) => {
+      const kind = tabStopKinds[val(tab) ?? ""];
+      const pos = number(val(tab, "pos"));
+      return tab.name === "tab" && kind && pos !== undefined && pos >= 0 ? [{ pos: pos / TWIPS_PER_POINT, kind }] : [];
+    }),
+  );
+  if (stops) attrs.tabStops = stops;
+
   if (!inList) {
     const indentation = child(properties, "ind");
     const points = (twips: number | undefined) => (twips === undefined ? 0 : twips / TWIPS_PER_POINT);
@@ -856,7 +871,7 @@ function splitParagraph(textBlock: JSONContent, inline: JSONContent[]): JSONCont
   const blocks: JSONContent[] = [];
   let run: JSONContent[] = [];
   const flush = () => {
-    if (run.some((node) => node.type === "text")) blocks.push({ ...textBlock, content: run });
+    if (run.some((node) => node.type === "text" || node.type === "tab")) blocks.push({ ...textBlock, content: run });
     run = [];
   };
   for (const node of inline) {

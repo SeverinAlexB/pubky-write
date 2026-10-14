@@ -17,6 +17,7 @@ import { ParagraphFormat } from "./paragraphFormat.ts";
 import { headingLevels, ParagraphStyle } from "./paragraphStyles.ts";
 import { DocsTable, DocsTableCell, DocsTableHeader, DocsTableRow } from "./tables.ts";
 import { TableOfContents, TocEntry } from "./tableOfContents.ts";
+import { Tab, TabStops } from "./tabStops.ts";
 
 export const documentExtensions: AnyExtension[] = [
   StarterKit.configure({
@@ -58,6 +59,8 @@ export const documentExtensions: AnyExtension[] = [
   Footnote,
   TableOfContents,
   TocEntry,
+  TabStops,
+  Tab,
 ];
 
 export const documentSchema = getSchema(documentExtensions);

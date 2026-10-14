@@ -24,6 +24,7 @@ import {
 } from "./pageElementCommands.ts";
 import { documentFootnotes, pageLayoutOf, type PageLayout } from "./pagination.ts";
 import { HEADER_OFFSET, regionHTML } from "./regionRender.ts";
+import { layoutTabsIn } from "./tabLayout.ts";
 
 type PageElementsProps = {
   editor: Editor;
@@ -261,6 +262,10 @@ function StaticRegion({
       field.textContent = value === undefined ? "" : String(value);
     }
   }, [html, page, pageCount]);
+  // Tabs depend on the page's width too, so they are laid out after every render.
+  useLayoutEffect(() => {
+    if (element.current) layoutTabsIn([element.current]);
+  });
   return (
     <div
       ref={element}

@@ -33,8 +33,11 @@ type SearchMeta = Partial<SearchOptions> & { current?: number };
 
 export const defaultSearchOptions: SearchOptions = { query: "", caseSensitive: false, regex: false, ignoreDiacritics: true };
 
-/** Line breaks read as "\n" (so a regular expression can match them); other inline nodes as one placeholder character. */
-const leafText = (node: Node) => (node.type.name === "hardBreak" ? "\n" : "￼");
+/**
+ * Line breaks read as "\n" and tabs as "\t" (so a regular expression can match them); other inline
+ * nodes as one placeholder character.
+ */
+const leafText = (node: Node) => (node.type.name === "hardBreak" ? "\n" : node.type.name === "tab" ? "\t" : "￼");
 
 const combiningMarks = /\p{M}/gu;
 
