@@ -35,6 +35,8 @@ editor's user interface on 2026-10-13 (window 1440 × 900, en-GB locale).
 | [12-context-menu.md](12-context-menu.md) | Right-click menu |
 | [13-page-elements.md](13-page-elements.md) | Headers, footers, page numbers, footnotes, table of contents |
 | [14-special-characters-and-ruler.md](14-special-characters-and-ruler.md) | Special characters dialog, ruler dragging, Page setup dialog details |
+| [15-tab-stops.md](15-tab-stops.md) | Tab stops on the ruler |
+| [16-suggesting.md](16-suggesting.md) | Suggesting mode, suggestion cards, review |
 
 ## Priorities
 
@@ -75,3 +77,8 @@ New documents 10–14. 14 also amends the Page setup dialog described in 02.
   view. Top-level table of contents entries are bold and the block has no
   border. In the Page numbers dialog "Start at" comes before "Continue from
   previous section".
+
+### Round 3 (third capture session)
+
+New documents 15 (tab stops; user feedback: "I can't make new positions on the
+ruler") and 16 (suggesting mode).
