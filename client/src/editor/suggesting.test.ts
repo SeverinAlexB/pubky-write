@@ -26,6 +26,8 @@ function makeDoc(...paragraphs: string[]): Node {
 class Session {
   state: EditorState;
   context: SuggestContext = { author: "You", now: 1_000_000, group: null };
+  /** The suggestion the last edit made or extended (the active card). */
+  made: string | null = null;
 
   constructor(doc: Node, cursor = 1) {
     this.state = EditorState.create({ doc, selection: TextSelection.create(doc, cursor) });
@@ -37,6 +39,7 @@ class Session {
     const result = suggestTransaction(this.state, original, this.context);
     const applied = result?.tr ?? original;
     if (result) this.context = { ...this.context, group: result.group };
+    this.made = result?.made ?? null;
     this.state = this.state.apply(applied);
     return applied;
   }
@@ -196,6 +199,34 @@ describe("suggesting: typing and deleting", () => {
     expect(session.descriptions()).toEqual(["Delete: “world Second”"]);
     session.resolve("accept");
     expect(session.text).toBe("Hello line");
+  });
+});
+
+describe("suggesting: the suggestion being made", () => {
+  it("is the insertion, deletion or replacement the edit made or extended", () => {
+    const session = new Session(makeDoc("Hello world"), 6);
+    session.type("!");
+    const [inserted] = session.suggestions;
+    expect(session.made).toBe(inserted!.id);
+    session.select(13);
+    session.backspace();
+    const deleted = session.suggestions.find((suggestion) => suggestion.deleted === "d");
+    expect(session.made).toBe(deleted!.id);
+    session.type("D");
+    expect(session.made).toBe(deleted!.id);
+    expect(session.suggestions).toHaveLength(2);
+  });
+
+  it("is the format suggestion a formatting change made or extended, and none when it was undone", () => {
+    const session = new Session(makeDoc("Hello world"));
+    session.edit((state) => state.tr.addMark(7, 12, documentSchema.marks.bold!.create()));
+    const [format] = session.suggestions;
+    expect(session.made).toBe(format!.id);
+    session.edit((state) => state.tr.addMark(7, 12, documentSchema.marks.italic!.create()));
+    expect(session.made).toBe(format!.id);
+    session.edit((state) => state.tr.removeMark(7, 12, documentSchema.marks.italic!).removeMark(7, 12, documentSchema.marks.bold!));
+    expect(session.suggestions).toHaveLength(0);
+    expect(session.made).toBeNull();
   });
 });
 

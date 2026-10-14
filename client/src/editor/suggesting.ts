@@ -58,13 +58,25 @@ export type SuggestingState = {
   group: Group | null;
   suggestions: Suggestion[];
   activeId: string | null;
+  /**
+   * The active suggestion is the one being made (activated by an edit, not a click): it stays
+   * active while the cursor is in or next to it.
+   */
+  activeFollowsCursor: boolean;
 };
 
-type SuggestingMeta = Partial<Pick<SuggestingState, "mode" | "readOnly" | "group" | "activeId">>;
+type SuggestingMeta = Partial<Pick<SuggestingState, "mode" | "readOnly" | "group" | "activeId" | "activeFollowsCursor">>;
 
 export const suggestingKey = new PluginKey<SuggestingState>("suggesting");
 
-const emptyState: SuggestingState = { mode: "editing", readOnly: false, group: null, suggestions: [], activeId: null };
+const emptyState: SuggestingState = {
+  mode: "editing",
+  readOnly: false,
+  group: null,
+  suggestions: [],
+  activeId: null,
+  activeFollowsCursor: false,
+};
 
 export function getSuggesting(state: EditorState): SuggestingState {
   return suggestingKey.getState(state) ?? emptyState;
@@ -81,7 +93,8 @@ function suggestionTypes(schema: Schema): SuggestionTypes {
 }
 
 export type SuggestContext = { author: string; now: number; group: Group | null };
-export type SuggestResult = { tr: Transaction; group: Group | null };
+/** `made`: the suggestion the edit made or extended, which becomes the active one. */
+export type SuggestResult = { tr: Transaction; group: Group | null; made: string | null };
 
 /** Whether a transaction is applied as it is in Suggesting mode. */
 function passesThrough(tr: Transaction): boolean {
@@ -106,7 +119,7 @@ export function suggestTransaction(state: EditorState, tr: Transaction, context:
   if (!result) return null;
   copyTransactionState(tr, result.tr);
   result.tr.setMeta(REWRITTEN, true);
-  setSuggesting(result.tr, { group: result.group });
+  setSuggesting(result.tr, result.made ? { group: result.group, activeId: result.made, activeFollowsCursor: true } : { group: result.group });
   return result;
 }
 
@@ -212,7 +225,7 @@ function rewriteContent(state: EditorState, tr: Transaction, context: SuggestCon
     return out.mapping.map(pos - shift);
   };
   out.setSelection(mapSelection(tr.selection, out.doc, map));
-  return { tr: out, group };
+  return { tr: out, group, made: group?.id ?? null };
 }
 
 function mapSelection(selection: Selection, doc: Node, map: (pos: number) => number): Selection {
@@ -350,10 +363,15 @@ function rewriteFormat(state: EditorState, tr: Transaction, context: SuggestCont
   });
   const inverse = tr.mapping.invert();
   let created: SuggestionMeta | null = null;
-  const fresh = () => (created ??= { id: newSuggestionId(), author: context.author, createdAt: context.now });
-  recordTextFormat(state.doc, out, textRanges, tr.mapping, inverse, context.author, types, fresh);
-  recordBlockFormat(state.doc, out, blockRanges, inverse, context.author, fresh);
-  return { tr: out, group: context.group };
+  let made: string | null = null;
+  const record = (meta: SuggestionMeta) => {
+    made ??= meta.id;
+    return meta;
+  };
+  const fresh = () => record((created ??= { id: newSuggestionId(), author: context.author, createdAt: context.now }));
+  recordTextFormat(state.doc, out, textRanges, tr.mapping, inverse, context.author, types, fresh, record);
+  recordBlockFormat(state.doc, out, blockRanges, inverse, context.author, fresh, record);
+  return { tr: out, group: context.group, made };
 }
 
 function metaOf(value: SuggestionMeta): SuggestionMeta {
@@ -374,6 +392,7 @@ function recordTextFormat(
   author: string,
   types: SuggestionTypes,
   fresh: () => SuggestionMeta,
+  record: (meta: SuggestionMeta) => SuggestionMeta,
 ): void {
   const segments: { from: number; to: number; node: Node }[] = [];
   let existingMeta: SuggestionMeta | null = null;
@@ -405,7 +424,7 @@ function recordTextFormat(
     if (sameFormatting(before, formatMarks(current.marks))) {
       out.removeMark(newFrom, newTo, types.format);
     } else {
-      const meta = existing ? metaOf(existing.attrs as SuggestionMeta) : (existingMeta ?? fresh());
+      const meta = existing ? record(metaOf(existing.attrs as SuggestionMeta)) : existingMeta ? record(existingMeta) : fresh();
       out.addMark(newFrom, newTo, types.format.create({ ...meta, before }));
     }
   }
@@ -418,6 +437,7 @@ function recordBlockFormat(
   inverse: Mapping,
   author: string,
   fresh: () => SuggestionMeta,
+  record: (meta: SuggestionMeta) => SuggestionMeta,
 ): void {
   const seen = new Set<number>();
   const doc = out.doc;
@@ -440,7 +460,7 @@ function recordBlockFormat(
       if (sameJSON(before, after)) {
         if (out.doc.nodeAt(pos)?.attrs.suggestionFormat) out.setNodeAttribute(pos, "suggestionFormat", null);
       } else {
-        out.setNodeAttribute(pos, "suggestionFormat", { ...(existing ? metaOf(existing) : fresh()), before });
+        out.setNodeAttribute(pos, "suggestionFormat", { ...(existing ? record(metaOf(existing)) : fresh()), before });
       }
       return false;
     });
@@ -581,9 +601,18 @@ export const Suggesting = Extension.create<SuggestingOptions>({
               next = { ...next, suggestions: collectSuggestions(state.doc) };
             }
             const meta = tr.getMeta(suggestingKey) as SuggestingMeta | undefined;
-            if (meta) next = { ...next, ...meta };
-            if (next.activeId !== null && !next.suggestions.some((suggestion) => suggestion.id === next.activeId)) {
-              next = { ...next, activeId: null };
+            if (meta) {
+              // A suggestion activated by a click or a card stays active wherever the cursor goes.
+              const followsCursor = meta.activeFollowsCursor ?? (meta.activeId === undefined && next.activeFollowsCursor);
+              next = { ...next, ...meta, activeFollowsCursor: followsCursor };
+            }
+            if (next.activeId === null) return next;
+            const active = next.suggestions.find((suggestion) => suggestion.id === next.activeId);
+            if (!active) return { ...next, activeId: null, activeFollowsCursor: false };
+            // The suggestion being made stops being active when the cursor moves away from it.
+            if (next.activeFollowsCursor && meta?.activeId === undefined && (tr.selectionSet || tr.docChanged)) {
+              const { head } = state.selection;
+              if (head < active.from || head > active.to) return { ...next, activeId: null, activeFollowsCursor: false };
             }
             return next;
           },

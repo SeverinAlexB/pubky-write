@@ -133,6 +133,67 @@ test("typed text becomes a green insertion with an Add card", async ({ page }) =
   await expect(suggestionCards(page)).toHaveCount(1);
 });
 
+test("the \"You're suggesting\" snackbar is a 48px dark bar 16px from the bottom left", async ({ page }) => {
+  await threeLines(page);
+  await chooseMode(page, "Editing", "Suggesting");
+  const snackbar = page.locator(".snackbar");
+  await expect(snackbar).toHaveText("You're suggesting");
+  await expect(snackbar).toHaveCSS("background-color", "rgb(50, 50, 50)");
+  await expect(snackbar).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(snackbar).toHaveCSS("font-size", "14px");
+  await expect(snackbar).toHaveCSS("border-radius", "4px");
+  const box = (await snackbar.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(288);
+  expect(box.height).toBe(48);
+  expect(box.x).toBe(16);
+  expect(900 - (box.y + box.height)).toBe(16);
+});
+
+test("the suggestion being made is the active card while the cursor stays at it", async ({ page }) => {
+  await threeLines(page);
+  await chooseMode(page, "Editing", "Suggesting");
+  await endOfLine(page, 1);
+  const scroller = page.locator(".editor-scroll");
+  const scrollTop = await scroller.evaluate((element) => element.scrollTop);
+
+  await page.keyboard.type(" sug");
+  const active = margin(page).locator(".suggestion-card[aria-current]");
+  await expect(active).toHaveCount(1);
+  await expect(active).toHaveAccessibleName("Suggestion: Add: “sug”");
+  await expect(active.getByRole("button", { name: "Accept suggestion" })).toBeVisible();
+  await expect(editor(page).locator(".suggestion-active")).toHaveText(" sug");
+  // The document keeps the focus and does not scroll, so typing goes on.
+  await expect(editor(page)).toBeFocused();
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(scrollTop);
+  await page.keyboard.type("gested");
+  await expect(active).toHaveAccessibleName("Suggestion: Add: “suggested”");
+  await expect(editor(page).locator("p").first()).toHaveText("First item suggested");
+
+  // Moving within or next to it keeps it active; moving away makes it inactive.
+  await page.keyboard.press("ArrowLeft");
+  await selectionSynced(page);
+  await expect(active).toHaveCount(1);
+  await page.keyboard.press(`${mod}+ArrowDown`);
+  await selectionSynced(page);
+  await expect(active).toHaveCount(0);
+  await expect(editor(page).locator(".suggestion-active")).toHaveCount(0);
+
+  // Deleting and formatting activate their suggestion too.
+  await endOfLine(page, 2);
+  await page.keyboard.press("Backspace");
+  await expect(active).toHaveAccessibleName("Suggestion: Delete: “m”");
+  await endOfLine(page, 3);
+  await selectBack(page, "here".length);
+  await page.keyboard.press(`${mod}+b`);
+  await expect(active).toHaveAccessibleName("Suggestion: Format: bold");
+  await expect(editor(page)).toBeFocused();
+  await expect(suggestionCards(page)).toHaveCount(3);
+
+  // A click elsewhere in the document makes it inactive, as before.
+  await editor(page).locator("p").first().click({ position: { x: 2, y: 5 } });
+  await expect(active).toHaveCount(0);
+});
+
 test("deleted text stays, struck through in green, with a Delete card; Backspace skips it", async ({ page }) => {
   await threeLines(page);
   await chooseMode(page, "Editing", "Suggesting");
@@ -217,6 +278,9 @@ test("Review suggested edits steps through suggestions and accepts all in one un
   const review = page.getByRole("dialog", { name: "Suggested edits" });
   await expect(review).toBeVisible();
   await expect(review).toHaveCSS("width", "408px");
+  // The suggestion just made stays selected; Next wraps around to the first one.
+  await expect(card(page, "Format: bold")).toHaveAttribute("aria-current", "true");
+  await review.getByRole("button", { name: "Next" }).click();
   await expect(card(page, "Add: “suggested”")).toHaveAttribute("aria-current", "true");
 
   await review.getByRole("button", { name: "Next" }).click();
@@ -225,6 +289,34 @@ test("Review suggested edits steps through suggestions and accepts all in one un
   await expect(card(page, "Format: bold")).toHaveAttribute("aria-current", "true");
   await review.getByRole("button", { name: "Previous" }).click();
   await expect(card(page, "Delete: “Second item”")).toHaveAttribute("aria-current", "true");
+
+  // A full-width outlined dropdown, 40px tall.
+  const viewButton = review.getByRole("button", { name: "Show suggested edits" });
+  const reviewBox = (await review.boundingBox())!;
+  const viewBox = (await viewButton.boundingBox())!;
+  expect(viewBox.height).toBe(40);
+  expect(viewBox.x).toBe(reviewBox.x + 16);
+  expect(viewBox.width).toBe(reviewBox.width - 32);
+  await expect(viewButton).toHaveCSS("border-radius", "4px");
+  await expect(viewButton).toHaveCSS("border-top-width", "1px");
+  await expect(viewButton).toHaveCSS("font-size", "14px");
+  const arrowBox = (await viewButton.locator(".icon").last().boundingBox())!;
+  expect(viewBox.x + viewBox.width - (arrowBox.x + arrowBox.width)).toBeLessThanOrEqual(12);
+
+  // Split buttons 36px tall, the ▾ part 28px wide after a 1px divider, in a right-aligned row.
+  for (const [main, more] of [
+    ["Reject", "More reject options"],
+    ["Accept", "More accept options"],
+  ] as const) {
+    const mainButton = review.getByRole("button", { name: main, exact: true });
+    const moreButton = review.getByRole("button", { name: more });
+    expect((await mainButton.locator("..").boundingBox())!.height).toBe(36);
+    await expect(mainButton).toHaveCSS("font-size", "14px");
+    expect((await moreButton.boundingBox())!.width).toBe(28);
+    await expect(moreButton.locator("..")).toHaveCSS("border-left-width", "1px");
+  }
+  const acceptMore = (await review.getByRole("button", { name: "More accept options" }).boundingBox())!;
+  expect(reviewBox.x + reviewBox.width - (acceptMore.x + acceptMore.width)).toBe(16);
 
   // The previews are read-only and without suggestion styling.
   await review.getByRole("button", { name: "Show suggested edits" }).click();
@@ -254,6 +346,9 @@ test("Review suggested edits steps through suggestions and accepts all in one un
 
 test("Reject and Accept act on the selected suggestion; Ctrl+⌘O Ctrl+⌘U opens the card", async ({ page }) => {
   await threeSuggestions(page);
+  // Away from the suggestion just made, so the card starts at the first suggestion.
+  await page.keyboard.press(`${mod}+ArrowUp`);
+  await expect(margin(page).locator("[aria-current]")).toHaveCount(0);
   await page.keyboard.press(`${chordModifiers}+KeyO`);
   await page.keyboard.press(`${chordModifiers}+KeyU`);
   const review = page.getByRole("dialog", { name: "Suggested edits" });

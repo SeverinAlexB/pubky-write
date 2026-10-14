@@ -404,6 +404,7 @@ outline and the live word count, and prints the time to open it, the time until
 the pages settle and frame times while typing on pages 1 and 50. Set
 `PERF_CPU_THROTTLE=4` to emulate a slower computer and
 `PERF_PROFILE=<file>.cpuprofile` to record a CPU profile of typing on page 50.
+`PERF_MODE=suggesting` types in Suggesting mode.
 
 ## Limitations
 

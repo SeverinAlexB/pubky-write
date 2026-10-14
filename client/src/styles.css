@@ -3220,16 +3220,19 @@ body.is-column-resizing * {
   position: relative;
 }
 
+/* The view dropdown spans the card. */
 .review-view-button {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
-  height: 32px;
-  padding: 0 4px 0 12px;
+  justify-content: space-between;
+  width: 100%;
+  height: 40px;
+  padding: 0 8px 0 12px;
   border: 1px solid var(--outline);
-  border-radius: 8px;
+  border-radius: 4px;
   background: none;
   font-size: 14px;
+  text-align: left;
 }
 
 .review-view-button:hover {
@@ -3277,13 +3280,19 @@ body.is-column-resizing * {
 
 .split-button .menu {
   display: flex;
-  border-left: 1px solid currentColor;
+  border-left: 1px solid var(--outline);
+}
+
+.split-button.is-filled .menu {
+  border-left-color: rgb(255 255 255 / 50%);
 }
 
 .split-button-arrow {
   display: inline-flex;
   align-items: center;
-  padding: 0 8px 0 4px;
+  justify-content: center;
+  width: 28px;
+  padding: 0 2px 0 0;
   border-radius: 0 18px 18px 0;
 }
 
@@ -3617,13 +3626,19 @@ body.is-column-resizing * {
 .snackbar {
   position: fixed;
   z-index: 50;
-  bottom: 24px;
-  left: 24px;
-  padding: 14px 16px;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  min-width: 288px;
+  max-width: calc(100vw - 32px);
+  min-height: 48px;
+  padding: 6px 16px;
   border-radius: 4px;
-  background: #303030;
-  color: #f2f2f2;
+  background: #323232;
+  color: #fff;
   font-size: 14px;
+  line-height: 20px;
   box-shadow: var(--menu-shadow);
 }
 

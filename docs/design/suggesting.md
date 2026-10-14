@@ -101,8 +101,12 @@ Suggestion cards are entries of the comment margin (`CommentMargin.tsx`) with ke
 out and stacked with comment cards by `commentLayout.ts`. The suggestions plugin
 (`suggesting.ts`) keeps the list from `collectSuggestions` (recomputed only for transactions that
 can affect suggestions, so documents without suggestions cost nothing while typing), the active
-suggestion id (set by clicking suggested text or a card) and draws the active suggestion's 1px
-border as inline decorations. A suggested paragraph break is shown as a green ¶ (struck through
+suggestion id and draws the active suggestion's 1px border as inline decorations. Clicking
+suggested text or a card activates its suggestion. Every rewritten edit activates the suggestion
+it made or extended (`made` in the rewrite result) with `activeFollowsCursor` set: that suggestion
+stays active only while the selection head is within its `from`–`to`, so moving the cursor away
+deactivates it (a click elsewhere does too). Activation is plugin state only: it neither moves
+the focus nor scrolls; the margin aligns the active card with its text. A suggested paragraph break is shown as a green ¶ (struck through
 for a deleted break) at the end of the paragraph before it, a widget decoration that is not part
 of the document.
 

@@ -148,6 +148,7 @@ async function measureTyping(page: Page, count: number) {
 
 /** Slows the CPU down by this factor (Chrome DevTools throttling), e.g. PERF_CPU_THROTTLE=4 for a slower laptop. */
 const cpuThrottle = Number(process.env.PERF_CPU_THROTTLE ?? 1);
+const editorMode = process.env.PERF_MODE || null;
 
 test("@perf a 60-page document opens, paginates and types quickly", async ({ page, request }) => {
   const created = await (await request.post("/api/documents", { data: {} })).json();
@@ -174,10 +175,15 @@ test("@perf a 60-page document opens, paginates and types quickly", async ({ pag
   }
 
   // The outline and the live word count are open, as the heaviest everyday setup.
-  await page.addInitScript(() => {
-    localStorage.setItem("docs.outlineOpen", "true");
-    localStorage.setItem("docs.wordCountVisible", "true");
-  });
+  // PERF_MODE=suggesting types in Suggesting mode (every keystroke becomes part of a suggestion).
+  await page.addInitScript(
+    ({ id, mode }) => {
+      localStorage.setItem("docs.outlineOpen", "true");
+      localStorage.setItem("docs.wordCountVisible", "true");
+      if (mode) localStorage.setItem(`docs.mode.${id}`, mode);
+    },
+    { id: created.id as string, mode: editorMode },
+  );
   if (cpuThrottle > 1) {
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpuThrottle });
@@ -231,7 +237,7 @@ test("@perf a 60-page document opens, paginates and types quickly", async ({ pag
     writeFileSync(process.env.PERF_PROFILE!, JSON.stringify(profile));
   }
 
-  const report = { cpuThrottle, comments: commentRanges.length, opening, typingOnPage1: page1, typingOnPage50: page50 };
+  const report = { cpuThrottle, mode: editorMode ?? "editing", comments: commentRanges.length, opening, typingOnPage1: page1, typingOnPage50: page50 };
   console.log(JSON.stringify(report, null, 2));
   test.info().annotations.push({ type: "perf", description: JSON.stringify(report) });
 });

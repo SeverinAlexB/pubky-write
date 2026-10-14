@@ -782,6 +782,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     },
     equalityFn: (a, b) => b !== null && a.suggestions === b.suggestions && a.activeId === b.activeId,
   });
+  // The suggestion being made becomes active by itself (see suggesting.ts); one card is active at a time.
+  useEffect(() => {
+    if (suggestionState.activeId !== null && getCommentAnchors(editor.state).activeId !== null) {
+      editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: null }));
+    }
+  }, [editor, suggestionState.activeId]);
   // Suggestion cards are shown with the suggestions, not in the previews.
   const marginSuggestions = display === "suggestions" ? suggestionState.suggestions : [];
   // The margin is there while there is something to show in it; Viewing mode shows only the document.
