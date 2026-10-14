@@ -404,6 +404,7 @@ test("the live word count appears after enabling it, updates while typing and is
   await page.keyboard.press("Shift+ArrowLeft");
   await page.keyboard.press("Shift+ArrowLeft");
   await page.keyboard.press("Shift+ArrowLeft");
+  await selectionSynced(page);
   await expect(chip).toHaveText("1 of 5 words");
 
   await chip.click();
