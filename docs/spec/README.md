@@ -102,3 +102,6 @@ ruler") and 16 (suggesting mode).
 ### Round 4 (fourth capture session)
 
 New documents 17–19. 18 amends 07 (multiple tabs instead of one).
+
+- 16 (round 4 amendment): structural suggestions — objects, table structure,
+  image changes, and headers/footers/footnotes in Suggesting mode.

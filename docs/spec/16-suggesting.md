@@ -106,3 +106,41 @@ under the toolbar at the right (408px wide, like the find bar) with:
 - Suggestions survive reload; Viewing mode shows the accepted result
   read-only.
 - Word export/import round-trips insertions and deletions as tracked changes.
+
+## Structural suggestions (amendment, round 4)
+
+In Suggesting mode these edits also become suggestions instead of being
+applied directly:
+
+- **Inserting** an image, table, page break, column break, horizontal line,
+  table of contents, footnote, or a list (turning paragraphs into a list):
+  the inserted object is shown with a 2px dashed outline in the suggestion
+  colour (text inside an inserted table or footnote is shown as inserted
+  text). Card: "Add: Image", "Add: Table", "Add: Page break", "Add: Column
+  break", "Add: Horizontal line", "Add: Table of contents", "Add: Footnote",
+  "Format: bulleted list" / "Format: numbered list".
+- **Deleting** any of these objects keeps them visible with a 50% opacity
+  overlay striped in the suggestion colour (images, tables) or struck through
+  (breaks, lines); card "Delete: Image", etc.
+- **Table structure**: inserting or deleting rows and columns becomes a
+  suggestion (inserted rows/columns outlined, deleted ones struck through).
+  Cell merges and splits are applied directly (not suggestions).
+- **Image changes** (size, wrap mode, rotation, crop) become "Format: image"
+  suggestions; rejecting restores the previous values.
+- **Headers, footers and footnote text**: edits made while in Suggesting mode
+  become suggestions there too, with their cards shown in the comment margin
+  next to the header/footer/footnote area while it is being edited, and in
+  Review suggested edits at all times.
+
+Accepting or rejecting works as for text suggestions; Accept all / Reject all
+include these. Word export writes inserted/deleted tables, rows and images as
+tracked changes where the format allows.
+
+### Acceptance
+
+- In Suggesting mode, inserting an image shows a dashed outline and an "Add:
+  Image" card; rejecting removes the image.
+- Deleting a table row in Suggesting mode strikes it through with a "Delete:
+  Table row" card; accepting removes the row.
+- Typing in the header in Suggesting mode produces a suggestion with a card;
+  accepting it makes it normal header text.
