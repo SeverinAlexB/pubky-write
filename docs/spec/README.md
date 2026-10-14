@@ -30,6 +30,11 @@ editor's user interface on 2026-10-13 (window 1440 × 900, en-GB locale).
 | [07-outline.md](07-outline.md) | Tabs and outline sidebar |
 | [08-version-history.md](08-version-history.md) | Version history mode |
 | [09-visual-language.md](09-visual-language.md) | Colours, shapes, typography of the UI |
+| [10-home.md](10-home.md) | Document list, templates band, import |
+| [11-tables-and-images.md](11-tables-and-images.md) | Table insertion, appearance, menus; image selection and resizing |
+| [12-context-menu.md](12-context-menu.md) | Right-click menu |
+| [13-page-elements.md](13-page-elements.md) | Headers, footers, page numbers, footnotes, table of contents |
+| [14-special-characters-and-ruler.md](14-special-characters-and-ruler.md) | Special characters dialog, ruler dragging, Page setup dialog details |
 
 ## Priorities
 
@@ -58,3 +63,7 @@ criteria pass in an end-to-end test and the existing tests still pass.
 - 08: The version history panel runs the full window height on `#f1f4f8`, has
   a full-width outlined "All versions" box, and shows the selected version as
   a white card.
+
+### Round 2 (second capture session)
+
+New documents 10–14. 14 also amends the Page setup dialog described in 02.
