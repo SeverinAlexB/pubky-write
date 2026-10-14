@@ -353,6 +353,7 @@ test("word count shows pages, words and characters, for the selection too", asyn
   await expect(editor(page)).toBeFocused();
 
   for (let step = 0; step < 4; step++) await page.keyboard.press("Shift+ArrowLeft");
+  await selectionSynced(page);
   await menuBarItem(page, "Tools").click();
   await page.getByRole("menuitem", { name: "Word count" }).click();
   await expect(dialog.getByRole("row", { name: /^Words/ })).toContainText("1 of 4");

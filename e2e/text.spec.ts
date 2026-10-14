@@ -1,6 +1,6 @@
 // Acceptance criteria of docs/spec/04-text-and-paragraphs.md.
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { createDocument, editor, menuBarItem, mod, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, menuBarItem, mod, waitUntilSaved, selectionSynced } from "./helpers.ts";
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -130,6 +130,7 @@ test("space before and after follows the style, can be toggled and set in Custom
   // Custom spacing applies to every paragraph in the selection.
   await body.click();
   await page.keyboard.press("Shift+ArrowDown");
+  await selectionSynced(page);
   await spacingButton.click();
   await page.getByRole("menuitem", { name: "Custom spacing…" }).click();
   const dialog = page.getByRole("dialog", { name: "Custom spacing" });
@@ -179,6 +180,7 @@ test("superscript, subscript, strikethrough and capitalisation survive a reload"
 
   // Select "make this title case" and change it.
   for (let i = 0; i < "make this title case".length; i++) await page.keyboard.press("Shift+ArrowLeft");
+  await selectionSynced(page);
   await chooseFormat(page, "Text", "Capitalisation", "Title Case");
   await expect(editor(page).locator("p")).toHaveText("E = mc2 H2O gone Make This Title Case");
   await chooseFormat(page, "Text", "Capitalisation", "UPPERCASE");

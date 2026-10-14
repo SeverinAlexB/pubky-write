@@ -398,6 +398,7 @@ test("selecting text shows the floating Add comment pill", async ({ page }) => {
   await page.keyboard.type("x");
   await expect(actions).toBeHidden();
   await page.keyboard.press("Shift+ArrowLeft");
+  await selectionSynced(page);
   await expect(actions).toBeVisible();
   await page.keyboard.press("ArrowRight");
   await expect(actions).toBeHidden();
