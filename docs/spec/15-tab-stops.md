@@ -46,9 +46,14 @@ specified in 01 and here.
 
 ## Effect on text
 
-- Pressing Tab in a paragraph (outside lists and tables, at a position that is
-  not the start of the paragraph) inserts a tab character instead of
-  indenting. At the start of a paragraph, Tab keeps indenting (02/04).
+- Pressing Tab anywhere in a paragraph outside lists and tables — including
+  at the very start of a paragraph or on an empty line — inserts a tab
+  character, which moves the following text to the next tab stop. Tab never
+  changes the paragraph's indent; indenting is done with ⌘+] / ⌘+[ or the
+  Increase/Decrease indent buttons. With a selection that spans more than one
+  paragraph, Tab replaces nothing and does nothing (P2: Docs-like behaviour is
+  not required here).
+- Shift+Tab outside lists and tables does nothing (it does not outdent).
 - A tab character advances to the next stop to the right of the current text
   position: left stop — text starts at the stop; right stop — text ends at the
   stop; centre stop — text is centred on the stop. Without stops (or after the
@@ -66,5 +71,7 @@ specified in 01 and here.
   14 cm.
 - Dragging the stop shows "8.00" in the tooltip at 8 cm; dragging it off the
   ruler removes it.
-- Tab at the start of a paragraph still indents; Tab after text inserts a tab.
+- On a new empty line with a left stop at 6 cm, pressing Tab and typing "X"
+  puts "X" at 6 cm; the paragraph's left indent is unchanged. The same holds
+  at the start of a line that already has text.
 - Indent markers can be grabbed anywhere within 8px of their shape.

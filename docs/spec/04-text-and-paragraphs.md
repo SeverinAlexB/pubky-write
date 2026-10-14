@@ -57,9 +57,9 @@ outside the list they step by 1. Allowed range 1–400.
 
 ## Indentation
 
-- Increase indent (⌘+], or Tab outside lists and tables) moves the paragraph's
-  left indent by 1.27 cm (0.5 in, 48px). Decrease indent (⌘+[, Shift+Tab)
-  moves it back, not below 0.
+- Increase indent (⌘+]) moves the paragraph's left indent by 1.27 cm (0.5 in,
+  48px). Decrease indent (⌘+[) moves it back, not below 0. Outside lists and
+  tables, Tab inserts a tab character (see 15) and does not indent.
 - In a list, Tab and Shift+Tab change the list level instead.
 - In a table, Tab and Shift+Tab move between cells.
 

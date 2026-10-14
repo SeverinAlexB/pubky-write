@@ -87,3 +87,11 @@ ruler") and 16 (suggesting mode).
 
 - 16: The suggestion being made is the active card automatically; snackbar
   size; review card dropdown full width and 40px, split buttons 36px.
+
+### Round 3 user feedback
+
+- 15/04: Tab inserts a tab character everywhere outside lists and tables,
+  including at the start of a paragraph and on an empty line; it never changes
+  the indent. Shift+Tab outside lists/tables does nothing. (User report: "When I
+  set a stop on a new line and then tab, it moves the page start, not to the
+  tab stop.")
