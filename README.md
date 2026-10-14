@@ -33,6 +33,28 @@ npm run build
 npm start          # http://localhost:3001
 ```
 
+## Backups
+
+```bash
+npm run backup
+```
+
+This writes `backups/<timestamp>/` with a copy of the database (`docs.sqlite`) and
+the `uploads/` directory, and deletes all but the 20 newest backups. The database
+is copied with SQLite's `VACUUM INTO`, which reads one consistent snapshot, so it
+is safe to run while the server is running. `DATA_DIR` and `BACKUP_DIR` override
+the `data/` and `backups/` directories.
+
+To restore a backup:
+
+1. Stop the server.
+2. Move the current `data/` directory aside, for example to `data.old/`.
+3. Copy the backup into place:
+   `cp -R backups/<timestamp> data` (a fresh `data/` with `docs.sqlite` and
+   `uploads/`). Do not copy `docs.sqlite-wal` or `docs.sqlite-shm` files from the
+   old directory: they belong to the old database.
+4. Start the server and check your documents, then delete `data.old/`.
+
 ## Features
 
 - **Document list:** create, open, rename, delete, search titles and contents,

@@ -14,7 +14,8 @@
     "typecheck": "tsc -p shared && tsc -p server && tsc -p client",
     "test": "vitest run",
     "e2e": "playwright test",
-    "perf": "playwright test --config playwright.perf.config.ts"
+    "perf": "playwright test --config playwright.perf.config.ts",
+    "backup": "npm run backup -w server"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
