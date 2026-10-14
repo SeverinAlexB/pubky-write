@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createDocument, editor, lineEnd, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, lineEnd, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 /** Saves what was typed and waits past the e2e server's session gap, so the next edit starts a new version. */
 async function endVersion(page: Page): Promise<void> {
@@ -78,7 +78,7 @@ test("version history mode replaces the header and toolbar with a top bar and li
 
   // The menu item and the shortcut open it too.
   await page.getByRole("button", { name: "Back" }).click();
-  await page.getByRole("button", { name: "File" }).click();
+  await menuBarItem(page, "File").click();
   await page.getByRole("menuitem", { name: "Version history" }).hover();
   await page.getByRole("menuitem", { name: "See version history" }).click();
   await expect(panel(page)).toBeVisible();
@@ -287,7 +287,7 @@ test("Make a copy creates a new document from a version", async ({ page }) => {
 
 test("versions can be named and filtered to named versions", async ({ page }) => {
   await createThreeVersions(page);
-  await page.getByRole("button", { name: "File" }).click();
+  await menuBarItem(page, "File").click();
   await page.getByRole("menuitem", { name: "Version history" }).hover();
   await page.getByRole("menuitem", { name: "Name current version" }).click();
   await page.getByRole("textbox", { name: "Version name" }).fill("Final");

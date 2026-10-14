@@ -70,7 +70,9 @@ To restore a backup:
   blocks, horizontal lines, undo and redo, zoom (presets, typed or Fit).
 - **Menus and toolbar:** a File / Edit / View / Insert / Format / Tools menu
   bar with submenus and keyboard navigation, and a toolbar whose controls move
-  into a "More" row when the window is narrow. Menu items for features that
+  into a "More" row when the window is narrow. Both follow the WAI-ARIA menubar
+  and toolbar patterns: each is one Tab stop, ← → move within it, and Escape
+  returns to the document. Alt+F10 moves from the document to the toolbar. Menu items for features that
   are not built yet are shown disabled; they call the optional actions listed
   in `client/src/editor/actions.ts`.
 - **Pages:** the document is shown as separate pages of its paper size with a

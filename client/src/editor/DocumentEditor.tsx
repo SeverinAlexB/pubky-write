@@ -16,6 +16,7 @@ import { Link, useNavigate } from "react-router";
 import { api, ApiError } from "../api.ts";
 import { Icon } from "../components/Icon.tsx";
 import { lazyComponent } from "../components/lazyComponent.tsx";
+import { focusToolbar } from "../components/useRovingToolbar.ts";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { shortcut } from "../components/shortcuts.ts";
 import type { EditorActions } from "./actions.ts";
@@ -224,6 +225,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   // Shortcuts that work anywhere on the page, overriding the browser's own find.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Alt+F10 moves to the toolbar, as in other editors (the document uses Tab for indentation).
+      if (event.altKey && event.key === "F10" && !handlers.current.historyOpen) {
+        event.preventDefault();
+        focusToolbar(document.querySelector<HTMLElement>('.editor-app [role="toolbar"]'));
+        return;
+      }
       if (!(event.metaKey || event.ctrlKey)) return;
       const pressed = `${event.altKey ? "Alt+" : ""}${event.shiftKey ? "Shift+" : ""}${event.code}`;
       // Version history mode is read-only: the editor's shortcuts do nothing there.

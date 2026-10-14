@@ -1,7 +1,7 @@
 import { listPresetAt } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { MenuList, type MenuEntry, type MenuItem } from "../components/MenuList.tsx";
 import { shortcut } from "../components/shortcuts.ts";
 import { useDismiss } from "../components/useDismiss.ts";
@@ -34,13 +34,18 @@ function selectMenuState({ editor }: { editor: Editor }) {
 }
 
 /**
- * File, Edit, View, Insert, Format and Tools. Once a menu is open, hovering another
- * label switches to it, and ← → move between menus.
+ * File, Edit, View, Insert, Format and Tools, following the WAI-ARIA menubar pattern. The bar is
+ * one Tab stop: ← → (and Home, End) move between the menus, ↓ Enter or Space open one, and
+ * Escape returns to the document. Once a menu is open, hovering another label switches to it,
+ * and ← → move between menus.
  */
 export function MenuBar({ editor, actions, view }: MenuBarProps) {
   const state = useEditorState({ editor, selector: selectMenuState });
   const [open, setOpen] = useState<{ index: number; fromKeyboard: boolean } | null>(null);
+  // The menu that is in the Tab order: the last one focused.
+  const [focusIndex, setFocusIndex] = useState(0);
   const root = useRef<HTMLElement>(null);
+  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const close = useCallback(() => setOpen(null), []);
   useDismiss(root, open !== null, close);
 
@@ -52,16 +57,48 @@ export function MenuBar({ editor, actions, view }: MenuBarProps) {
     { label: "Format", entries: formatMenu(editor, actions, state) },
     { label: "Tools", entries: toolsMenu(actions) },
   ];
-  const step = (direction: 1 | -1) =>
-    setOpen((current) => current && { index: (current.index + direction + menus.length) % menus.length, fromKeyboard: true });
+  const wrap = (index: number) => (index + menus.length) % menus.length;
+  /** Moves keyboard focus to a menu's label, if focus is in the menu bar (not in the document). */
+  const focusMenu = (index: number) => {
+    if (!root.current?.contains(document.activeElement)) return;
+    setFocusIndex(index);
+    buttons.current[index]?.focus();
+  };
+  const step = (direction: 1 | -1) => {
+    if (!open) return;
+    const index = wrap(open.index + direction);
+    setOpen({ index, fromKeyboard: true });
+    focusMenu(index);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    // An open menu handles the keys itself.
+    if (open || event.altKey || event.metaKey || event.ctrlKey) return;
+    const target = { ArrowRight: wrap(index + 1), ArrowLeft: wrap(index - 1), Home: 0, End: menus.length - 1 }[event.key];
+    if (target !== undefined) {
+      event.preventDefault();
+      focusMenu(target);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setOpen({ index, fromKeyboard: true });
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      editor.commands.focus();
+    }
+  };
 
   return (
-    <nav className="menubar" aria-label="Menu bar" ref={root}>
+    <nav className="menubar" role="menubar" aria-label="Menu bar" ref={root}>
       {menus.map((menu, index) => (
-        <div key={menu.label} className="menu">
+        <div key={menu.label} className="menu" role="none">
           <button
+            ref={(element) => {
+              buttons.current[index] = element;
+            }}
             type="button"
+            role="menuitem"
             className="menu-button"
+            tabIndex={index === focusIndex ? 0 : -1}
             aria-haspopup="menu"
             aria-expanded={open?.index === index}
             onMouseDown={(event) => event.preventDefault()}
@@ -69,6 +106,8 @@ export function MenuBar({ editor, actions, view }: MenuBarProps) {
               setOpen((current) => (current?.index === index ? null : { index, fromKeyboard: event.detail === 0 }))
             }
             onMouseEnter={() => setOpen((current) => current && { index, fromKeyboard: false })}
+            onFocus={() => setFocusIndex(index)}
+            onKeyDown={(event) => onKeyDown(event, index)}
           >
             {menu.label}
           </button>

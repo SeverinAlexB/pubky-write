@@ -1,6 +1,6 @@
 // Acceptance criteria of docs/spec/04-text-and-paragraphs.md.
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { createDocument, editor, mod, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, menuBarItem, mod, waitUntilSaved } from "./helpers.ts";
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -15,7 +15,7 @@ function menu(page: Page, name: string) {
 
 /** Opens Format, walks the submenus and clicks the last item. */
 async function chooseFormat(page: Page, ...path: string[]): Promise<void> {
-  await page.getByRole("button", { name: "Format", exact: true }).click();
+  await menuBarItem(page, "Format").click();
   let parent = menu(page, "Format");
   for (const [index, label] of path.entries()) {
     const item = parent
@@ -33,7 +33,7 @@ async function chooseFormat(page: Page, ...path: string[]): Promise<void> {
 
 /** Opens Format and hovers through the submenus, leaving the last one open. */
 async function chooseFormatHover(page: Page, ...path: string[]): Promise<void> {
-  await page.getByRole("button", { name: "Format", exact: true }).click();
+  await menuBarItem(page, "Format").click();
   let parent = menu(page, "Format");
   for (const label of path) {
     await parent.getByRole("menuitem", { name: label, exact: true }).hover();
@@ -438,7 +438,7 @@ test("a page break is inserted with ⌘+Enter or Insert > Break and starts a new
   await expect(pageBreak).toHaveCount(1);
   await expect(editor(page).locator("p")).toHaveText(["Page one", "Page two"]);
 
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await menuBarItem(page, "Insert").click();
   await menu(page, "Insert").getByRole("menuitem", { name: "Break" }).hover();
   await menu(page, "Break").getByRole("menuitem", { name: /^Page break/ }).click();
   await expect(pageBreak).toHaveCount(2);

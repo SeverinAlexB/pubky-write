@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createDocument, editor, lineEnd, lineStart, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, lineEnd, lineStart, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 test("font, font size, line spacing and indent are kept", async ({ page }) => {
   await createDocument(page);
@@ -7,8 +7,8 @@ test("font, font size, line spacing and indent are kept", async ({ page }) => {
 
   await page.getByRole("button", { name: "Font", exact: true }).click();
   await page.getByRole("menuitemcheckbox", { name: "Georgia" }).click();
-  await page.getByRole("textbox", { name: "Font size" }).fill("18");
-  await page.getByRole("textbox", { name: "Font size" }).press("Enter");
+  await page.getByRole("combobox", { name: "Font size" }).fill("18");
+  await page.getByRole("combobox", { name: "Font size" }).press("Enter");
   await editor(page).click();
   await page.keyboard.type("Large serif text");
   await page.keyboard.press(`${mod}+Shift+.`); // next size up from 18 is 24
@@ -203,7 +203,7 @@ test("the Find and replace dialog has its controls in order and ignores diacriti
   await expect(editor(page).locator(".search-match")).toHaveCount(0);
 
   // Edit > Find and replace opens the same dialog.
-  await page.getByRole("button", { name: "Edit" }).click();
+  await menuBarItem(page, "Edit").click();
   await page.getByRole("menuitem", { name: "Find and replace" }).click();
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
@@ -351,7 +351,7 @@ test("word count shows pages, words and characters, for the selection too", asyn
   await expect(editor(page)).toBeFocused();
 
   for (let step = 0; step < 4; step++) await page.keyboard.press("Shift+ArrowLeft");
-  await page.getByRole("button", { name: "Tools" }).click();
+  await menuBarItem(page, "Tools").click();
   await page.getByRole("menuitem", { name: "Word count" }).click();
   await expect(dialog.getByRole("row", { name: /^Words/ })).toContainText("1 of 4");
   await expect(dialog.getByRole("row", { name: /^Characters excluding/ })).toContainText("4 of 15");

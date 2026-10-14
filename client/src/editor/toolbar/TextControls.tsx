@@ -125,6 +125,7 @@ export function FontSizeControl({ editor, size }: { editor: Editor; size: number
       <div className="menu" ref={root}>
         <input
           className="font-size-input"
+          role="combobox"
           aria-label="Font size"
           data-tooltip="Font size"
           aria-expanded={open}

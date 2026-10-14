@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { chooseStyle, createDocument, editor, mod, selectionSynced } from "./helpers.ts";
+import { chooseStyle, createDocument, editor, menuBarItem, mod, selectionSynced } from "./helpers.ts";
 
 function sidebar(page: Page) {
   return page.getByRole("complementary", { name: "Tabs and outlines" });
@@ -56,10 +56,10 @@ test("the collapsed button opens the sidebar, which re-centres the page and is r
   await page.reload();
   await expect(sidebar(page)).toBeHidden();
 
-  await page.getByRole("button", { name: "View" }).click();
+  await menuBarItem(page, "View").click();
   await page.getByRole("menuitem", { name: "Expand tabs and outlines sidebar" }).click();
   await expect(sidebar(page)).toBeVisible();
-  await page.getByRole("button", { name: "View" }).click();
+  await menuBarItem(page, "View").click();
   await page.getByRole("menuitem", { name: "Collapse tabs and outlines sidebar" }).click();
   await expect(sidebar(page)).toBeHidden();
 });

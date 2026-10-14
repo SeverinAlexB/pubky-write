@@ -12,6 +12,11 @@ export async function createDocument(page: Page): Promise<void> {
   await expect(editor(page)).toBeVisible();
 }
 
+/** A menu in the editor's menu bar (File, Edit, View, Insert, Format, Tools). */
+export function menuBarItem(page: Page, name: string) {
+  return page.getByRole("menubar", { name: "Menu bar" }).getByRole("menuitem", { name, exact: true });
+}
+
 export function editor(page: Page) {
   return page.getByLabel("Document content");
 }
@@ -28,7 +33,7 @@ export async function chooseStyle(page: Page, style: string): Promise<void> {
 
 /** Chooses File > Download > `format`. */
 export async function chooseDownload(page: Page, format: string): Promise<void> {
-  await page.getByRole("button", { name: "File" }).click();
+  await menuBarItem(page, "File").click();
   await page.getByRole("menuitem", { name: "Download" }).hover();
   await page.getByRole("menuitem", { name: format }).click();
 }

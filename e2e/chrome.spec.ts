@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createDocument, editor, mod, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, menuBarItem, mod, waitUntilSaved } from "./helpers.ts";
 
 /** Shortcut text as the app writes it on this platform (see client/src/components/shortcuts.ts). */
 function shortcut(mac: string): string {
@@ -121,7 +121,7 @@ test("the colour palettes have the 80 standard swatches", async ({ page }) => {
 test("font size steps through the standard sizes and accepts a typed size", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();
-  const size = page.getByRole("textbox", { name: "Font size" });
+  const size = page.getByRole("combobox", { name: "Font size" });
   await expect(size).toHaveValue("11");
 
   await page.getByRole("button", { name: named("Increase font size", "⌘+Shift+full stop") }).click();
@@ -182,7 +182,7 @@ test("Format > Paragraph styles lists the styles as plain menu text; only the St
 }) => {
   await createDocument(page);
   await editor(page).click();
-  await page.getByRole("button", { name: "Format", exact: true }).click();
+  await menuBarItem(page, "Format").click();
   await menu(page, "Format").getByRole("menuitem", { name: "Paragraph styles" }).hover();
   const styles = menu(page, "Paragraph styles");
   await expect(styles.locator(":scope > li > button")).toHaveText([
@@ -217,15 +217,15 @@ test("menus switch on hover, open submenus with hover and →, and close with Es
   await createDocument(page);
   await editor(page).click();
 
-  await page.getByRole("button", { name: "File", exact: true }).click();
+  await menuBarItem(page, "File").click();
   await expect(menu(page, "File")).toBeVisible();
-  await page.getByRole("button", { name: "Edit", exact: true }).hover();
+  await menuBarItem(page, "Edit").hover();
   await expect(menu(page, "Edit")).toBeVisible();
   await expect(menu(page, "File")).toBeHidden();
   await expect(menu(page, "Edit").getByRole("menuitem", { name: "Cut" })).toBeDisabled();
   await expect(menu(page, "Edit").getByRole("menuitem", { name: "Cut" })).toContainText(shortcut("⌘X"));
 
-  await page.getByRole("button", { name: "Format", exact: true }).hover();
+  await menuBarItem(page, "Format").hover();
   await menu(page, "Format").getByRole("menuitem", { name: "Text", exact: true }).hover();
   await expect(menu(page, "Text").getByRole("menuitem", { name: "Strikethrough" })).toContainText(shortcut("⌘+Shift+X"));
   await page.keyboard.press("Escape");
@@ -235,7 +235,7 @@ test("menus switch on hover, open submenus with hover and →, and close with Es
   // Keyboard: ↓ highlights Text, → opens its submenu at Bold, ← closes it again.
   await page.keyboard.type("Keys");
   await page.keyboard.press(`${mod}+a`);
-  await page.getByRole("button", { name: "Format", exact: true }).click();
+  await menuBarItem(page, "Format").click();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowRight");
   await expect(menu(page, "Text")).toBeVisible();
@@ -248,7 +248,7 @@ test("menus switch on hover, open submenus with hover and →, and close with Es
   await expect(editor(page).locator("strong")).toHaveText("Keys");
 
   // → on an item without a submenu moves to the next menu.
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await menuBarItem(page, "Insert").click();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
@@ -266,7 +266,7 @@ test("menus list their items in order without omitted ones", async ({ page }) =>
         .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))),
     );
 
-  await page.getByRole("button", { name: "File", exact: true }).click();
+  await menuBarItem(page, "File").click();
   await items("File").toEqual([
     "New",
     "Open",
@@ -288,7 +288,7 @@ test("menus list their items in order without omitted ones", async ({ page }) =>
   await expect(menu(page, "File").getByRole("menuitem", { name: "Page setup" })).toBeEnabled();
   await expect(menu(page, "File").getByRole("menuitem", { name: "Details" })).toBeDisabled();
 
-  await page.getByRole("button", { name: "Edit", exact: true }).hover();
+  await menuBarItem(page, "Edit").hover();
   await items("Edit").toEqual([
     "Undo",
     "Redo",
@@ -303,7 +303,7 @@ test("menus list their items in order without omitted ones", async ({ page }) =>
     "Find and replace",
   ]);
 
-  await page.getByRole("button", { name: "Insert", exact: true }).hover();
+  await menuBarItem(page, "Insert").hover();
   await items("Insert").toEqual([
     "Image",
     "Table",
@@ -317,7 +317,7 @@ test("menus list their items in order without omitted ones", async ({ page }) =>
   await menu(page, "Insert").getByRole("menuitem", { name: "Symbols" }).hover();
   await items("Symbols").toEqual(["Special characters", "Emoji"]);
 
-  await page.getByRole("button", { name: "Tools", exact: true }).hover();
+  await menuBarItem(page, "Tools").hover();
   await items("Tools").toEqual(["Word count", "Preferences"]);
 
   for (const omitted of [
@@ -390,7 +390,7 @@ test("zoom offers Fit, presets and typed values", async ({ page }) => {
 test("Insert > Table inserts the size picked in the grid", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();
-  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await menuBarItem(page, "Insert").click();
   await menu(page, "Insert").getByRole("menuitem", { name: "Table" }).hover();
   await page.getByRole("button", { name: "3 x 2" }).hover();
   await expect(page.getByRole("group", { name: "Table" })).toContainText("3 x 2");
@@ -406,7 +406,7 @@ test("File > Make a copy opens a copy with the same content", async ({ page }) =
   await waitUntilSaved(page);
   const original = page.url();
 
-  await page.getByRole("button", { name: "File", exact: true }).click();
+  await menuBarItem(page, "File").click();
   await menu(page, "File").getByRole("menuitem", { name: "Make a copy" }).click();
   await expect(page).not.toHaveURL(original);
   await expect(page.getByLabel("Rename")).toHaveValue("Copy of Untitled document");
@@ -432,7 +432,7 @@ test("paint format copies formatting to the next selection", async ({ page }) =>
 test("Hide the menus collapses the header", async ({ page }) => {
   await createDocument(page);
   await page.getByRole("button", { name: named("Hide the menus", "⌘+Shift+F") }).click();
-  await expect(page.getByRole("navigation", { name: "Menu bar" })).toBeHidden();
+  await expect(page.getByRole("menubar", { name: "Menu bar" })).toBeHidden();
   await page.keyboard.press(`${mod}+Shift+f`);
-  await expect(page.getByRole("navigation", { name: "Menu bar" })).toBeVisible();
+  await expect(page.getByRole("menubar", { name: "Menu bar" })).toBeVisible();
 });

@@ -1,10 +1,11 @@
 import { listPresetAt } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import type { ReactNode } from "react";
+import { useCallback, useRef, type ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";
 import { Menu } from "../../components/Menu.tsx";
 import { usePopover } from "../../components/usePopover.ts";
+import { useRovingToolbar } from "../../components/useRovingToolbar.ts";
 import { withShortcut } from "../../components/shortcuts.ts";
 import type { EditorActions } from "../actions.ts";
 import { clearFormatting, selectedFontFamily, selectedFontSize } from "../extensions.ts";
@@ -58,6 +59,9 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     },
   });
   const paintFormat = usePaintFormat(editor);
+  // One Tab stop; ← → move between the controls and Escape returns to the document.
+  const toolbar = useRef<HTMLDivElement>(null);
+  useRovingToolbar(toolbar, useCallback(() => editor.commands.focus(), [editor]));
   const run = () => editor.chain().focus();
 
   const items: ReactNode[] = [
@@ -207,7 +211,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
   const overflow = items.slice(visibleCount);
 
   return (
-    <div className="toolbar" role="toolbar" aria-label="Formatting">
+    <div className="toolbar" role="toolbar" aria-label="Formatting" ref={toolbar}>
       <div className="toolbar-items" ref={bar}>
         {items.slice(0, visibleCount).map((item, index) => (
           <div key={index} className="toolbar-item">

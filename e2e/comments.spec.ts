@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { createDocument, editor, lineEnd, lineStart, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, lineEnd, lineStart, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 /** Types `text`, then selects `word` (its last occurrence) with the keyboard. */
 async function typeAndSelect(page: Page, text: string, word: string): Promise<void> {
@@ -70,7 +70,7 @@ async function expectBeside(cardLocator: Locator, highlight: Locator): Promise<v
 }
 
 async function chooseCommentsMenu(page: Page, item: string): Promise<void> {
-  await page.getByRole("button", { name: "View" }).click();
+  await menuBarItem(page, "View").click();
   await page.getByRole("menuitem", { name: "Comments" }).hover();
   await page.getByRole("menuitem", { name: item }).or(page.getByRole("menuitemcheckbox", { name: item })).click();
 }
@@ -289,8 +289,8 @@ test("editing a comment and a reply persists after reload, and replies can be de
   await expect(thread.locator(".comment-body")).toHaveCount(3);
 
   await thread.getByRole("button", { name: "More options", exact: true }).click();
-  await expect(page.getByRole("menuitem")).toHaveText(["Edit", "Delete", "Get link to this comment"]);
-  await page.getByRole("menuitem", { name: "Edit" }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Edit", "Delete", "Get link to this comment"]);
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit" }).click();
   const field = thread.getByLabel("Edit comment");
   await expect(field).toHaveValue("Original text");
   await expect(field).toBeFocused();
@@ -302,7 +302,7 @@ test("editing a comment and a reply persists after reload, and replies can be de
   const firstReply = thread.locator(".comment-message.is-reply").first();
   await firstReply.hover();
   await firstReply.getByRole("button", { name: "More options for this reply" }).click();
-  await page.getByRole("menuitem", { name: "Edit" }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit" }).click();
   await thread.getByLabel("Edit comment").fill("An edited reply");
   await thread.getByLabel("Edit comment").press(`${mod}+Enter`);
   await expect(thread.locator(".comment-body")).toHaveText(["Edited text\nwith a second line", "An edited reply", "Another reply"]);

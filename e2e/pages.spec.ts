@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createDocument, editor, mod, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, menuBarItem, mod, waitUntilSaved } from "./helpers.ts";
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -35,13 +35,13 @@ async function scrollToTop(page: Page) {
 }
 
 async function openPageSetup(page: Page) {
-  await page.getByRole("button", { name: "File", exact: true }).click();
+  await menuBarItem(page, "File").click();
   await page.getByRole("menuitem", { name: "Page setup" }).click();
   return page.getByRole("dialog", { name: "Page setup" });
 }
 
 async function chooseView(page: Page, item: string) {
-  await page.getByRole("button", { name: "View", exact: true }).click();
+  await menuBarItem(page, "View").click();
   await page.getByRole("menuitemcheckbox", { name: item }).click();
 }
 
@@ -191,7 +191,7 @@ test("View > Show ruler and Show print layout toggle and persist", async ({ page
   await expect(editor(page)).toContainText("After");
   await expect(page.locator(".ruler-band")).toHaveCount(0);
   await expect(page.locator(".page-stack")).toHaveClass(/is-pageless/);
-  await page.getByRole("button", { name: "View", exact: true }).click();
+  await menuBarItem(page, "View").click();
   await expect(page.getByRole("menuitemcheckbox", { name: "Show ruler" })).toHaveAttribute("aria-checked", "false");
   await page.keyboard.press("Escape");
 

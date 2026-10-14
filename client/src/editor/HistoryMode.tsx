@@ -192,7 +192,8 @@ export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, on
         </div>
 
         <div className="history-body">
-          <div className="editor-scroll history-scroll" ref={fit.ref}>
+          {/* Focusable, so the read-only preview can be scrolled with the keyboard. */}
+          <div className="editor-scroll history-scroll" ref={fit.ref} tabIndex={0} role="region" aria-label="Selected version">
             <div className="page-column" hidden={!comparison}>
               <div className="page-stack" style={{ zoom: effectiveZoom }}>
                 {/* One sheet per page, drawn by the pagination plugin. */}
