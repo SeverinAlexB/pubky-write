@@ -281,6 +281,32 @@ test.describe("keyboard shortcuts dialog", () => {
       await expect(dialog.getByRole("heading", { name: group })).toBeVisible();
     }
     await expect(dialog.getByRole("searchbox", { name: "Search" })).toBeFocused();
+    // A filled 40px pill with the icon at the left; focused, a 2px primary outline.
+    const pill = dialog.locator(".shortcuts-search");
+    const pillStyle = await pill.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, height: style.height, border: style.borderTopStyle, outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}` };
+    });
+    expect(pillStyle).toEqual({ background: "rgb(241, 244, 248)", height: "40px", border: "none", outline: "solid 2px rgb(11, 87, 208)" });
+    const pillBox = (await pill.boundingBox())!;
+    const iconBox = (await pill.locator("svg").first().boundingBox())!;
+    expect(iconBox.x - pillBox.x).toBeLessThan(24);
+    await dialog.getByRole("button", { name: "Close dialogue" }).focus();
+    await expect(pill).toHaveCSS("outline-style", "none");
+    // Section headers in the text colour, 14px medium, 16px above and 8px below.
+    const header = dialog.getByRole("heading", { name: "Text formatting" });
+    const headerStyle = await header.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { color: style.color, size: style.fontSize, weight: style.fontWeight, top: style.marginTop, bottom: style.marginBottom };
+    });
+    expect(headerStyle).toEqual({ color: "rgb(31, 31, 31)", size: "14px", weight: "500", top: "16px", bottom: "8px" });
+    // 44px rows with a 1px divider between them.
+    const section = dialog.getByRole("region", { name: "Text formatting" });
+    const sectionRows = section.getByRole("row");
+    expect(Math.round((await sectionRows.nth(0).boundingBox())!.height)).toBe(44);
+    await expect(sectionRows.nth(0)).toHaveCSS("border-top-style", "none");
+    await expect(sectionRows.nth(1)).toHaveCSS("border-top", "1px solid rgb(225, 227, 225)");
+    await dialog.getByRole("searchbox", { name: "Search" }).focus();
     await page.keyboard.type("bold");
     const rows = dialog.getByRole("row");
     await expect(rows).toHaveCount(1);

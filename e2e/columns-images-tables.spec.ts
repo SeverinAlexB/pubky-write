@@ -103,6 +103,29 @@ test("two columns flow the text down each column and then to the next page, with
   expect(Math.round((await dialog.boundingBox())!.width)).toBe(398);
   await expect(dialog.getByLabel("Number of columns")).toHaveValue("2");
   await expect(dialog.getByLabel("Spacing (centimetres)")).toHaveValue("1.27");
+  // Three rows: the label at the left, its 100×32px control right-aligned.
+  const rows = dialog.locator(".column-options-field");
+  await expect(rows).toHaveCount(3);
+  const controls = [dialog.getByLabel("Number of columns"), dialog.getByLabel("Spacing (centimetres)"), dialog.locator(".column-options-check")];
+  const dialogBox = (await dialog.boundingBox())!;
+  const rights = [];
+  for (const [index, label] of ["Number of columns", "Spacing (centimetres)", "Line between columns"].entries()) {
+    const row = rows.nth(index);
+    const labelText = row.locator(":scope > span").first();
+    await expect(labelText).toHaveText(label);
+    await expect(labelText).toHaveCSS("font-size", "14px");
+    const labelBox = (await labelText.boundingBox())!;
+    const controlBox = (await controls[index].boundingBox())!;
+    expect(Math.round(controlBox.width)).toBe(100);
+    expect(Math.round(controlBox.height)).toBe(32);
+    expect(labelBox.x - dialogBox.x).toBeLessThan(40);
+    expect(Math.abs(labelBox.y + labelBox.height / 2 - (controlBox.y + controlBox.height / 2))).toBeLessThanOrEqual(2);
+    rights.push(Math.round(controlBox.x + controlBox.width));
+  }
+  expect(new Set(rights).size).toBe(1);
+  expect(dialogBox.x + dialogBox.width - rights[0]).toBeLessThan(40);
+  const checkBox = (await dialog.getByLabel("Line between columns").boundingBox())!;
+  expect(Math.round(checkBox.x + checkBox.width)).toBe(rights[0]);
   await dialog.getByLabel("Line between columns").check();
   await dialog.getByRole("button", { name: "Apply" }).click();
 

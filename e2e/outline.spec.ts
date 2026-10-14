@@ -73,7 +73,9 @@ test("the sidebar shows the tab and the headings nested by level, with a guide l
   await expect(tab).toHaveCSS("background-color", "rgb(211, 227, 253)");
   await expect(tab).toHaveCSS("height", "40px");
   await expect(tab).toHaveCSS("border-radius", "20px");
-  await expect(sidebar(page)).toContainText("Headings that you add to the document will appear here.");
+  // A tab without headings shows no outline and no hint.
+  await expect(sidebar(page)).not.toContainText("Headings that you add");
+  await expect(outlineItems(page)).toHaveCount(0);
 
   await editor(page).click();
   await typeParagraph(page, "Title", "Annual report");

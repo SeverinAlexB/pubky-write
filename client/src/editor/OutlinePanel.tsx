@@ -370,13 +370,8 @@ function TabOutline({
   indent: number;
   onJump: (heading: OutlineHeading) => void;
 }) {
-  if (headings.length === 0) {
-    return (
-      <p className="outline-empty" style={{ marginLeft: 12 + indent }}>
-        Headings that you add to the document will appear here.
-      </p>
-    );
-  }
+  // A tab without headings shows no outline (and no hint).
+  if (headings.length === 0) return null;
   const topLevel = Math.min(...headings.map((heading) => heading.level));
   return (
     <ol className="outline-list" aria-label="Outline" style={{ marginLeft: 12 + indent }}>

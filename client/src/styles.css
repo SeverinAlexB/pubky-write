@@ -600,22 +600,39 @@ button:disabled {
   width: min(398px, 90vw);
 }
 
+/* Three rows: the label at the left, its control right-aligned (100×32px). */
 .column-options-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
 .column-options-field {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   font-size: 14px;
 }
 
-.column-options-line {
-  margin-top: 16px;
-  font-size: 14px;
+.column-options-field .select-field,
+.column-options-check {
+  box-sizing: border-box;
+  width: 100px;
+  height: 32px;
+}
+
+.column-options-check {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.column-options-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
 }
 
 /* Format > Columns: the current preset is outlined in the primary colour. */
@@ -4304,13 +4321,6 @@ body.is-column-resizing * {
   border-radius: 50%;
 }
 
-.outline-empty {
-  margin: 12px 0 0 12px;
-  color: var(--text-tertiary);
-  font-size: 14px;
-  line-height: 20px;
-}
-
 /* The outline under the tab, with a guide line along its left. */
 .outline-list {
   margin: 8px 0 0 12px;
@@ -5238,11 +5248,12 @@ body.is-column-resizing * {
   flex: none;
   align-items: center;
   gap: 8px;
-  height: 48px;
+  height: 40px;
   margin-bottom: 8px;
   padding: 0 16px;
-  border-radius: 24px;
-  background: #e9eef6;
+  border: 0;
+  border-radius: 20px;
+  background: #f1f4f8;
   color: var(--text-secondary);
 }
 
@@ -5258,7 +5269,7 @@ body.is-column-resizing * {
   outline: 0;
   background: none;
   color: var(--text);
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .shortcuts-list {
@@ -5268,10 +5279,11 @@ body.is-column-resizing * {
 }
 
 .shortcuts-list h3 {
-  margin: 16px 0 4px;
+  margin: 16px 0 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--primary);
+  line-height: 20px;
+  color: #1f1f1f;
 }
 
 .shortcuts-list table {
@@ -5279,15 +5291,24 @@ body.is-column-resizing * {
   border-collapse: collapse;
 }
 
+/* 44px rows with a 1px divider between them. */
+.shortcuts-list tr {
+  height: 44px;
+}
+
+.shortcuts-list tr + tr {
+  border-top: 1px solid #e1e3e1;
+}
+
 .shortcuts-list th {
-  padding: 6px 0;
+  padding: 0;
   font-size: 14px;
   font-weight: 400;
   text-align: left;
 }
 
 .shortcuts-list td {
-  padding: 6px 0;
+  padding: 0;
   text-align: right;
   white-space: nowrap;
 }

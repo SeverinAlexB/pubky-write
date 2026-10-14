@@ -118,11 +118,13 @@ export function ColumnOptionsDialog({ initial, onApply, onCancel }: ColumnOption
               onChange={(event) => setSpacing(event.target.value)}
             />
           </label>
+          <label className="column-options-field">
+            <span>Line between columns</span>
+            <span className="column-options-check">
+              <input type="checkbox" checked={line} disabled={columns === 1} onChange={(event) => setLine(event.target.checked)} />
+            </span>
+          </label>
         </div>
-        <label className="side-panel-check column-options-line">
-          <input type="checkbox" checked={line} disabled={columns === 1} onChange={(event) => setLine(event.target.checked)} />
-          Line between columns
-        </label>
         <div className="dialog-actions">
           <button type="button" className="button-secondary" onClick={onCancel}>
             Cancel
