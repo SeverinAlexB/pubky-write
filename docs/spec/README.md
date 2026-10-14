@@ -82,3 +82,8 @@ New documents 10–14. 14 also amends the Page setup dialog described in 02.
 
 New documents 15 (tab stops; user feedback: "I can't make new positions on the
 ruler") and 16 (suggesting mode).
+
+### Round 3 corrections
+
+- 16: The suggestion being made is the active card automatically; snackbar
+  size; review card dropdown full width and 40px, split buttons 36px.

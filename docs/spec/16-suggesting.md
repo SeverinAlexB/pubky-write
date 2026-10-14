@@ -18,7 +18,9 @@ avatar as comments (06).
   - Suggesting — "Edits become suggestions"
   - Viewing — "Read or print final document"
 - Switching to Suggesting shows a dark snackbar "You're suggesting" at the
-  bottom left of the window for 4 seconds. Shortcut: ⌘+Option+Shift+X toggles
+  bottom left of the window for 4 seconds (snackbar: `#323232` background,
+  white 14px text, radius 4px, at least 288px wide, 48px tall, 16px from the
+  window's left and bottom edges). Shortcut: ⌘+Option+Shift+X toggles
   Suggesting / Editing; ⌘+Option+Shift+Z sets Editing (P2: also Viewing via
   ⌘+Option+Shift+C).
 - Viewing mode: the document is read-only, shows the result as if all
@@ -59,6 +61,10 @@ avatar as comments (06).
     insertion)
   - Format: <list of changes, e.g. "bold, font"> (and for list items also a
     line "Format bullet: …")
+- The suggestion being made becomes the **active card** automatically: right
+  after typing, deleting or formatting in Suggesting mode, the card of that
+  suggestion is active (white, accept/reject visible, its text bordered) for
+  as long as the cursor stays in or next to it.
 - The active card is white with a shadow and shows, in the header row at the
   right, "Accept suggestion" (a check mark, primary colour) and "Reject
   suggestion" (×) icon buttons, plus the "Reply" field (replies are stored as
@@ -76,10 +82,12 @@ under the toolbar at the right (408px wide, like the find bar) with:
 - Title "Suggested edits", then "Previous" (chevron up) and "Next" (chevron
   down) icon buttons that select the previous/next suggestion and scroll to it,
   and "Close" (×).
-- A dropdown showing the current view: "Show suggested edits", "Preview accept
+- A full-width outlined dropdown (40px tall, radius 4px, 14px text, ▾ at the
+  right) showing the current view: "Show suggested edits", "Preview accept
   all", "Preview reject all" (the previews show the document as if all were
   accepted/rejected, read-only, without suggestion styling).
-- A row with two split buttons: "Reject" (outlined) with "More reject options"
+- A right-aligned row with two split buttons, 36px tall with 14px text (the ▾
+  part 28px wide, separated by a 1px divider): "Reject" (outlined) with "More reject options"
   ▾ (menu: "Reject all (N)") and "Accept" (filled) with "More accept options"
   ▾ (menu: "Accept all (N)"). Reject/Accept act on the selected suggestion
   and move to the next.
