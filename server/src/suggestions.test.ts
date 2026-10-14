@@ -72,6 +72,78 @@ describe("Word export and import of suggestions", () => {
   });
 });
 
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
+const cell = (value: string, attrs: Record<string, unknown> = {}) => ({
+  type: "tableCell",
+  attrs,
+  content: [{ type: "paragraph", content: [text(value)] }],
+});
+
+/** An inserted image, a deleted and an inserted table row, an inserted page break, a deleted footnote and a suggestion in the header. */
+const structural = () =>
+  Node.fromJSON(documentSchema, {
+    type: "doc",
+    attrs: { header: [{ type: "paragraph", content: [text("Draft", [{ type: "suggestionInsert", attrs: meta("h") }])] }] },
+    content: [
+      { type: "paragraph", content: [text("Intro")] },
+      { type: "image", attrs: { src: "/uploads/a.png", width: 20, height: 20, suggestionInsert: meta("i") } },
+      {
+        type: "table",
+        content: [
+          { type: "tableRow", attrs: { suggestionDelete: meta("r") }, content: [cell("Old"), cell("Row")] },
+          { type: "tableRow", content: [cell("Kept"), cell("Cells")] },
+          { type: "tableRow", attrs: { suggestionInsert: meta("n") }, content: [cell("New"), cell("Row")] },
+        ],
+      },
+      { type: "pageBreak", attrs: { suggestionInsert: meta("p") } },
+      {
+        type: "paragraph",
+        content: [
+          text("Claim"),
+          { type: "footnote", attrs: { content: [{ type: "paragraph", content: [text("Source")] }] }, marks: [{ type: "suggestionDelete", attrs: meta("f") }] },
+        ],
+      },
+    ],
+  });
+
+describe("Word export and import of structural suggestions", () => {
+  it("writes inserted and deleted rows, images, breaks, footnotes and header text as tracked changes", async () => {
+    const zip = await JSZip.loadAsync(await toDocx(structural(), "Doc", async () => PNG));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    // Rows: w:ins / w:del in the row properties, their text inserted or deleted too.
+    expect(xml).toMatch(/<w:trPr><w:del w:id="\d+" w:author="You" w:date="[^"]+"\/><\/w:trPr>.*?<w:delText xml:space="preserve">Old<\/w:delText>/);
+    expect(xml).toMatch(/<w:trPr><w:ins w:id="\d+" w:author="You" w:date="[^"]+"\/><\/w:trPr>.*?<w:ins [^>]*><w:r>.*?<w:t xml:space="preserve">New<\/w:t>/);
+    // The image's run in w:ins, and its paragraph mark inserted with it.
+    expect(xml).toMatch(/<w:pPr><w:rPr><w:ins [^>]*\/><\/w:rPr><\/w:pPr><w:ins w:id="\d+" w:author="You" w:date="[^"]+"><w:r>(<w:rPr\/>)?<w:drawing>/);
+    expect(xml).toMatch(/<w:ins [^>]*><w:r><w:br w:type="page"\/><\/w:r><\/w:ins>/);
+    expect(xml).toMatch(/<w:del [^>]*><w:r><w:rPr><w:rStyle w:val="FootnoteReference"\/><\/w:rPr><w:footnoteReference w:id="1"\/><\/w:r><\/w:del>/);
+    const header = await zip.file(/word\/header\d*\.xml/)[0]!.async("string");
+    expect(header).toMatch(/<w:ins [^>]*><w:r>.*?<w:t xml:space="preserve">Draft<\/w:t>/);
+    const footnotes = await zip.file("word/footnotes.xml")!.async("string");
+    expect(footnotes).toMatch(/<w:delText xml:space="preserve">Source<\/w:delText>/);
+  });
+
+  it("reads them back as the same suggestions", async () => {
+    const data = await toDocx(structural(), "Doc", async () => PNG);
+    const { doc } = await docxToDocument(new Uint8Array(data), { storeImage: async () => "/uploads/b.png" });
+    const imported = Node.fromJSON(documentSchema, doc.toJSON());
+    expect(descriptions(imported)).toEqual([
+      "Add: “Draft”",
+      "Add: Image",
+      "Delete: Table row",
+      "Add: Table row",
+      "Add: Page break",
+      "Delete: Footnote",
+    ]);
+    const [header] = collectSuggestions(imported);
+    expect(header!.region?.key).toBe("header");
+    // The image's own paragraph mark does not become a paragraph break around it.
+    expect(imported.child(0).textContent).toBe("Intro");
+    expect(imported.child(1).type.name).toBe("image");
+    expect(imported.child(2).type.name).toBe("table");
+  });
+});
+
 describe("suggestions on the server", () => {
   let db: Database;
   let app: ReturnType<typeof createApp>;

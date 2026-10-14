@@ -695,6 +695,8 @@ function layoutBoxes(
     if (!(element instanceof HTMLElement)) continue;
     // Images behind or in front of text are placed freely and take no room.
     if (node.type.name === "image" && (node.attrs.wrap === "behind" || node.attrs.wrap === "front")) continue;
+    // A suggested object hidden by Viewing mode or a preview (a deleted page break) takes no room and breaks nothing.
+    if ((node.attrs.suggestionInsert || node.attrs.suggestionDelete) && element.getClientRects().length === 0) continue;
     const rect = element.getBoundingClientRect();
     const table = node.type.spec.tableRole === "table";
     boxes.push({

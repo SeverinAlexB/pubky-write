@@ -4,6 +4,7 @@ import type { EditorState, Transaction } from "@tiptap/pm/state";
 import type { MenuEntry } from "../components/MenuList.tsx";
 import type { EditorActions } from "./actions.ts";
 import { insertTitleRow, pinHeaderRows, pinState, unpinHeaderRows } from "./tableExtras.ts";
+import { applyDirectly } from "./suggesting.ts";
 import { distributeColumns, distributeRows, measureRowHeights, sortTable } from "./tables.ts";
 
 /** `pinned`: the cursor is in a pinned row, so the menus offer Unpin header rows. */
@@ -23,8 +24,10 @@ type Command = (state: EditorState, dispatch?: (tr: Transaction) => void) => boo
 
 function commands(editor: Editor) {
   const run = () => editor.chain().focus();
-  const apply = (command: Command) => {
-    command(editor.state, editor.view.dispatch);
+  /** Merging, splitting and sorting change cells and rows directly, also in Suggesting mode. */
+  const direct = () => run().command(({ tr }) => Boolean(applyDirectly(tr)));
+  const apply = (command: Command, directly = false) => {
+    command(editor.state, (tr) => editor.view.dispatch(directly ? applyDirectly(tr) : tr));
     editor.commands.focus();
   };
   return {
@@ -37,10 +40,10 @@ function commands(editor: Editor) {
     deleteTable: () => run().deleteTable().run(),
     distributeRows: () => apply(distributeRows(measureRowHeights(editor.view))),
     distributeColumns: () => apply(distributeColumns),
-    mergeCells: () => run().mergeCells().run(),
-    unmergeCells: () => run().splitCell().run(),
-    sortAscending: () => apply(sortTable("ascending")),
-    sortDescending: () => apply(sortTable("descending")),
+    mergeCells: () => direct().mergeCells().run(),
+    unmergeCells: () => direct().splitCell().run(),
+    sortAscending: () => apply(sortTable("ascending"), true),
+    sortDescending: () => apply(sortTable("descending"), true),
     pinHeaderRows: () => apply(pinHeaderRows),
     unpinHeaderRows: () => apply(unpinHeaderRows),
     insertTitleRow: () => apply(insertTitleRow),

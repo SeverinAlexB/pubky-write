@@ -36,6 +36,8 @@ type PageElementsProps = {
   onRegionEditor?: (editor: Editor | null) => void;
   /** Options > Page numbers… */
   onPageNumbers?: (position: "header" | "footer") => void;
+  /** A click on a suggestion in the header, footer or footnote being edited (its id), or elsewhere in it. */
+  onActivateSuggestion?: (id: string | null) => void;
 };
 
 type PageElementsState = {
@@ -43,6 +45,8 @@ type PageElementsState = {
   geometry: PageGeometry;
   settings: PageElementSettings;
   footnotes: RegionContent[];
+  /** Per footnote: "insert" or "delete" when its reference is a suggestion, else "". */
+  footnoteSuggestions: string;
 };
 
 function selectState({ editor }: { editor: Editor }): PageElementsState {
@@ -52,6 +56,11 @@ function selectState({ editor }: { editor: Editor }): PageElementsState {
     geometry: pageGeometry(pageSetupOf(doc)),
     settings: pageElementsOf(doc),
     footnotes: documentFootnotes(editor.state).map((footnote) => footnote.node.attrs.content as RegionContent),
+    footnoteSuggestions: documentFootnotes(editor.state)
+      .map(({ node }) =>
+        node.marks.some((mark) => mark.type.name === "suggestionDelete") ? "delete" : node.marks.some((mark) => mark.type.name === "suggestionInsert") ? "insert" : "",
+      )
+      .join(","),
   };
 }
 
@@ -61,6 +70,7 @@ function sameState(a: PageElementsState, b: PageElementsState | null): boolean {
   const geometryKeys = Object.keys(a.geometry) as (keyof PageGeometry)[];
   return (
     a.layout === b.layout &&
+    a.footnoteSuggestions === b.footnoteSuggestions &&
     geometryKeys.every((key) => a.geometry[key] === b.geometry[key]) &&
     keys.every((key) => a.settings[key] === b.settings[key]) &&
     a.footnotes.length === b.footnotes.length &&
@@ -68,8 +78,9 @@ function sameState(a: PageElementsState, b: PageElementsState | null): boolean {
   );
 }
 
-export function PageElements({ editor, target, onTargetChange, onRegionEditor, onPageNumbers }: PageElementsProps) {
-  const { layout, geometry, settings, footnotes } = useEditorState({ editor, selector: selectState, equalityFn: sameState });
+export function PageElements({ editor, target, onTargetChange, onRegionEditor, onPageNumbers, onActivateSuggestion }: PageElementsProps) {
+  const { layout, geometry, settings, footnotes, footnoteSuggestions } = useEditorState({ editor, selector: selectState, equalityFn: sameState });
+  const footnoteSuggestion = footnoteSuggestions.split(",");
   const layer = useRef<HTMLDivElement>(null);
   const editingHeader = target && target.kind !== "footnote" ? target : null;
 
@@ -154,6 +165,7 @@ export function PageElements({ editor, target, onTargetChange, onRegionEditor, o
           <div
             key={`${kind}-${page}`}
             className={`page-region-slot is-${kind}${editing ? " is-editing" : ""}`}
+            data-region-key={binding.key}
             style={{ ...counters, top }}
             onMouseDown={(event) => {
               // While a header or footer is edited, clicking another page's copy edits that one.
@@ -171,6 +183,7 @@ export function PageElements({ editor, target, onTargetChange, onRegionEditor, o
                 className=""
                 at={editingHeader.at}
                 onRegionEditor={onRegionEditor}
+                onActivateSuggestion={onActivateSuggestion}
                 onExit={() => {
                   onTargetChange?.(null);
                   editor.view.focus();
@@ -195,7 +208,11 @@ export function PageElements({ editor, target, onTargetChange, onRegionEditor, o
           >
             <div className="footnote-separator" />
             {notes.map((index) => (
-              <div key={index} className="footnote-entry" data-footnote-index={index}>
+              <div
+                key={index}
+                className={`footnote-entry${footnoteSuggestion[index] ? ` is-suggested-${footnoteSuggestion[index]}` : ""}`}
+                data-footnote-index={index}
+              >
                 <sup className="footnote-number">{index + 1}</sup>
                 {target?.kind === "footnote" && target.index === index ? (
                   <RegionEditor
@@ -204,6 +221,7 @@ export function PageElements({ editor, target, onTargetChange, onRegionEditor, o
                     className="footnote-text"
                     at={target.at}
                     onRegionEditor={onRegionEditor}
+                    onActivateSuggestion={onActivateSuggestion}
                     onExit={() => {
                       onTargetChange?.(null);
                       focusAfterFootnote(editor, index);
@@ -283,20 +301,28 @@ type RegionEditorProps = {
   className: string;
   at?: { x: number; y: number };
   onRegionEditor?: (editor: Editor | null) => void;
+  onActivateSuggestion?: (id: string | null) => void;
   onExit: () => void;
 };
 
 /** The editor of the header, footer or footnote being edited, created in place. */
-function RegionEditor({ main, binding, className, at, onRegionEditor, onExit }: RegionEditorProps) {
+function RegionEditor({ main, binding, className, at, onRegionEditor, onActivateSuggestion, onExit }: RegionEditorProps) {
   const host = useRef<HTMLDivElement>(null);
-  const handlers = useRef({ onExit, onRegionEditor });
-  handlers.current = { onExit, onRegionEditor };
+  const handlers = useRef({ onExit, onRegionEditor, onActivateSuggestion });
+  handlers.current = { onExit, onRegionEditor, onActivateSuggestion };
 
   // Created while React commits, so keys typed right after the command that opened it land in it.
   useLayoutEffect(() => {
     const element = host.current;
     if (!element) return;
-    const region = createRegionEditor({ main, binding, element, className, onEscape: () => handlers.current.onExit() });
+    const region = createRegionEditor({
+      main,
+      binding,
+      element,
+      className,
+      onEscape: () => handlers.current.onExit(),
+      onActivateSuggestion: handlers.current.onActivateSuggestion && ((id) => handlers.current.onActivateSuggestion?.(id)),
+    });
     handlers.current.onRegionEditor?.(region);
     placeRegionCursor(region, at);
     return () => {

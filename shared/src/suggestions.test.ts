@@ -95,6 +95,69 @@ describe("suggestions in the schema", () => {
   });
 });
 
+describe("structural suggestion attributes in the schema", () => {
+  const image = { type: "image", attrs: { src: "/uploads/a.png" } };
+  const table = { type: "table", content: [{ type: "tableRow", content: [{ type: "tableCell", content: [{ type: "paragraph" }] }] }] };
+
+  it("loads objects saved before them with no suggestions", () => {
+    const old = Node.fromJSON(documentSchema, { type: "doc", content: [image, table, { type: "pageBreak" }, { type: "horizontalRule" }] });
+    old.descendants((node) => {
+      if (node.isTextblock) return false;
+      expect(node.attrs.suggestionInsert ?? null).toBeNull();
+      expect(node.attrs.suggestionDelete ?? null).toBeNull();
+      return true;
+    });
+    expect(old.child(0).attrs.suggestionFormat).toBeNull();
+    expect(hasSuggestions(old)).toBe(false);
+  });
+
+  it("round-trips them through JSON and HTML attributes", () => {
+    const doc = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        { ...image, attrs: { ...image.attrs, suggestionInsert: meta("i"), suggestionFormat: { ...meta("f"), before: { width: 10, crop: null } } } },
+        { type: "pageBreak", attrs: { suggestionDelete: meta("p") } },
+      ],
+    });
+    expect(Node.fromJSON(documentSchema, JSON.parse(JSON.stringify(doc.toJSON()))).eq(doc)).toBe(true);
+    expect(hasSuggestions(doc)).toBe(true);
+  });
+
+  it("rejects malformed values in steps, as the server validates them", () => {
+    const doc = Node.fromJSON(documentSchema, { type: "doc", content: [image, { type: "paragraph" }] });
+    const bad = [
+      { stepType: "attr", pos: 0, attr: "suggestionInsert", value: { id: "", author: "You", createdAt: 1 } },
+      { stepType: "attr", pos: 0, attr: "suggestionDelete", value: "yes" },
+      { stepType: "attr", pos: 0, attr: "suggestionFormat", value: { ...meta("x"), before: { onclick: "x" } } },
+      { stepType: "attr", pos: 0, attr: "suggestionFormat", value: { ...meta("x"), before: { width: [1] } } },
+    ];
+    for (const json of bad) {
+      expect(() => {
+        const result = Step.fromJSON(documentSchema, json).apply(doc);
+        if (result.failed) throw new Error(result.failed);
+        result.doc!.check();
+      }, JSON.stringify(json)).toThrow();
+    }
+    const good = Step.fromJSON(documentSchema, { stepType: "attr", pos: 0, attr: "suggestionInsert", value: meta("x") }).apply(doc);
+    expect(good.failed).toBeNull();
+    expect(() => good.doc!.check()).not.toThrow();
+  });
+
+  it("strips them from pasted content and leaves deleted objects out of the accepted result", () => {
+    const doc = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        { ...image, attrs: { ...image.attrs, suggestionDelete: meta("d") } },
+        { type: "paragraph", content: [text("Kept")] },
+      ],
+    });
+    expect(hasSuggestions(documentSchema.topNodeType.create(null, stripSuggestions(doc.slice(0, doc.content.size)).content))).toBe(false);
+    const accepted = acceptedDocument(doc);
+    expect(accepted.childCount).toBe(1);
+    expect(toMarkdown(doc)).toBe("Kept\n");
+  });
+});
+
 describe("collectSuggestions and describeSuggestion", () => {
   it("lists every suggestion in document order with its description", () => {
     const suggestions = collectSuggestions(sample());

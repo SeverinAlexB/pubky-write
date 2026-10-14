@@ -23,8 +23,8 @@ export const PageBreak = Node.create({
     return [{ tag: 'div[data-type="page-break"]' }];
   },
 
-  renderHTML() {
-    return ["div", { "data-type": "page-break", class: "page-break", role: "separator", "aria-label": "Page break" }];
+  renderHTML({ HTMLAttributes }) {
+    return ["div", { ...HTMLAttributes, "data-type": "page-break", class: "page-break", role: "separator", "aria-label": "Page break" }];
   },
 
   addCommands() {

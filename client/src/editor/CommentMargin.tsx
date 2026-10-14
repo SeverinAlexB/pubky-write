@@ -79,20 +79,33 @@ type CommentMarginProps = CommentHandlers &
     threads: CommentThread[];
     /** The suggestions shown as cards, in document order. */
     suggestions: Suggestion[];
+    /** The header, footer or footnote being edited, whose suggestions' cards follow its lines. */
+    regionEditor?: Editor | null;
+    /** The top (in the window) of a header's, footer's or footnote's suggestion. */
+    regionTop?: (suggestion: Suggestion) => number | null;
     activeSuggestion: string | null;
     suggestionReplies: Record<string, CommentMessage[]>;
   };
 
-export function CommentMargin({ editor, threads, suggestions, activeSuggestion, suggestionReplies, ...handlers }: CommentMarginProps) {
+export function CommentMargin({
+  editor,
+  threads,
+  suggestions,
+  regionEditor = null,
+  regionTop,
+  activeSuggestion,
+  suggestionReplies,
+  ...handlers
+}: CommentMarginProps) {
   const { anchors, activeId, draft } = useCommentAnchors(editor);
   const visible = marginThreads(threads, anchors, activeId);
   const margin = useRef<HTMLElement>(null);
   const cards = useRef(new Map<CardKey, HTMLElement>());
   const [tops, setTops] = useState<Map<CardKey, number>>(new Map());
 
-  const entries: { key: CardKey; pos: number }[] = [
+  const entries: { key: CardKey; pos: number; suggestion?: Suggestion }[] = [
     ...visible.map(({ thread, anchor }) => ({ key: thread.id as CardKey, pos: anchor.from })),
-    ...suggestions.map((suggestion) => ({ key: `s:${suggestion.id}` as CardKey, pos: suggestion.from })),
+    ...suggestions.map((suggestion) => ({ key: `s:${suggestion.id}` as CardKey, pos: suggestion.from, suggestion })),
   ].sort((a, b) => a.pos - b.pos);
   if (draft) {
     const index = entries.findIndex((entry) => entry.pos > draft.from);
@@ -106,15 +119,16 @@ export function CommentMargin({ editor, threads, suggestions, activeSuggestion, 
     const element = margin.current;
     if (!element || editor.isDestroyed) return;
     const marginTop = element.getBoundingClientRect().top;
-    const boxes = entries.map(({ key, pos }) => ({
+    const boxes = entries.map(({ key, pos, suggestion }) => ({
       key,
-      anchorTop: lineTop(editor, pos) - marginTop,
+      // A header's, footer's or footnote's suggestion is beside its line in that region.
+      anchorTop: ((suggestion?.region && regionTop?.(suggestion)) ?? lineTop(editor, pos)) - marginTop,
       height: cards.current.get(key)?.offsetHeight ?? 0,
     }));
     const next = layoutCards(boxes, activeKey);
     setTops((previous) => (sameTops(previous, next) ? previous : next));
     // The callback changes whenever the cards or their anchors do.
-  }, [editor, layoutKey]);
+  }, [editor, layoutKey, regionEditor]);
 
   useLayoutEffect(measure, [measure]);
 
@@ -128,14 +142,16 @@ export function CommentMargin({ editor, threads, suggestions, activeSuggestion, 
     if (margin.current) observer.observe(margin.current);
     for (const card of cards.current.values()) observer.observe(card);
     editor.on("transaction", schedule);
+    regionEditor?.on("transaction", schedule);
     window.addEventListener("resize", schedule);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
       editor.off("transaction", schedule);
+      regionEditor?.off("transaction", schedule);
       window.removeEventListener("resize", schedule);
     };
-  }, [editor, measure]);
+  }, [editor, regionEditor, measure]);
 
   const cardRef = (key: CardKey) => (element: HTMLElement | null) => {
     if (element) cards.current.set(key, element);
@@ -370,15 +386,17 @@ function DescriptionLine({ line }: { line: SuggestionDescription }) {
       “<em>{text}</em>”
     </>
   );
+  // Objects are named, not quoted: "Add: Image".
+  const part = (text: string, object?: boolean) => (object ? text : quote(text));
   switch (line.action) {
     case "Add":
-      return <p className="suggestion-description">Add: {quote(line.inserted)}</p>;
+      return <p className="suggestion-description">Add: {part(line.inserted, line.insertedObject)}</p>;
     case "Delete":
-      return <p className="suggestion-description">Delete: {quote(line.deleted)}</p>;
+      return <p className="suggestion-description">Delete: {part(line.deleted, line.deletedObject)}</p>;
     case "Replace":
       return (
         <p className="suggestion-description">
-          Replace: {quote(line.deleted)} with {quote(line.inserted)}
+          Replace: {part(line.deleted, line.deletedObject)} with {part(line.inserted, line.insertedObject)}
         </p>
       );
     default:

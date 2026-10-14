@@ -169,6 +169,26 @@ it("copyTabContent gives suggestions new ids, the same new id for every part of 
   expect(content[0]!.content![0]!.marks![0]!.attrs!.id).toBe("s1");
 });
 
+it("copyTabContent gives object and footnote suggestions new ids too", () => {
+  const meta = (id: string) => ({ id, author: "You", createdAt: 1 });
+  const content: JSONContent[] = [
+    { type: "image", attrs: { src: "/a.png", suggestionInsert: meta("s1") } },
+    {
+      type: "paragraph",
+      content: [
+        {
+          type: "footnote",
+          attrs: { content: [{ type: "paragraph", content: [{ type: "text", text: "x", marks: [{ type: "suggestionDelete", attrs: meta("s2") }] }] }] },
+        },
+      ],
+    },
+  ];
+  let next = 0;
+  const copy = copyTabContent(content, () => `n${++next}`);
+  expect(JSON.stringify(copy).match(/"id":"[^"]+"/g)).toEqual(['"id":"n1"', '"id":"n2"']);
+  expect(content[0]!.attrs!.suggestionInsert.id).toBe("s1");
+});
+
 describe("version history with tabs", () => {
   it("finds no edits between a version from before tabs and the same content in its tab", () => {
     const old = doc(paragraph("hello"));

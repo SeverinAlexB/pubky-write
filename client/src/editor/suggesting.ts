@@ -6,20 +6,25 @@ import {
   blockFormat,
   collectSuggestions,
   formatMarks,
+  isSuggestedObject,
   joinable,
   newSuggestionId,
+  objectSuggestion,
+  regionHasSuggestions,
+  regionKeys,
   sameJSON,
   stripSuggestions,
   SUGGESTION_AUTHOR,
   type BreakSuggestion,
   type FormatSuggestion,
+  type ImageFormatSuggestion,
   type MarkJSON,
   type Suggestion,
   type SuggestionMeta,
 } from "@docs/shared";
 import { Extension, type Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import { ChangeSet } from "@tiptap/pm/changeset";
+import { ChangeSet, type Change, type TokenEncoder } from "@tiptap/pm/changeset";
 import type { Mark, MarkType, Node, Schema, Slice } from "@tiptap/pm/model";
 import { EditorState, NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import {
@@ -47,6 +52,13 @@ export const SUGGESTION_COMMAND = "suggestionCommand";
 const REWRITTEN = "suggestionRewritten";
 /** -1 or 1 on deletions whose direction is known (Backspace or Delete), for placing the cursor. */
 const DELETE_DIRECTION = "suggestionDeleteDirection";
+/** Set on edits that are applied as they are even in Suggesting mode (merging and splitting cells, sorting a table). */
+export const SUGGESTION_DIRECT = "suggestionDirect";
+
+/** Marks a transaction to be applied directly, not as a suggestion. */
+export function applyDirectly(tr: Transaction): Transaction {
+  return tr.setMeta(SUGGESTION_DIRECT, true);
+}
 
 type Group = { id: string; createdAt: number; time: number };
 
@@ -104,6 +116,7 @@ function passesThrough(tr: Transaction): boolean {
     tr.getMeta("addToHistory") === false ||
     tr.getMeta(SUGGESTION_COMMAND) === true ||
     tr.getMeta(REWRITTEN) === true ||
+    tr.getMeta(SUGGESTION_DIRECT) === true ||
     tr.steps.every((step) => step instanceof DocAttrStep)
   );
 }
@@ -114,14 +127,26 @@ function passesThrough(tr: Transaction): boolean {
  */
 export function suggestTransaction(state: EditorState, tr: Transaction, context: SuggestContext): SuggestResult | null {
   if (passesThrough(tr) || tr.before !== state.doc) return null;
-  const replaces = tr.steps.some((step) => step instanceof ReplaceStep);
+  // Changing an image's attributes replaces the leaf node with a changed copy: a format change.
+  const replaces = tr.steps.some((step, index) => step instanceof ReplaceStep && !isLeafMarkupChange(tr.docs[index]!, step));
   const wraps = tr.steps.some((step) => step instanceof ReplaceAroundStep);
+  // Dragging a placed image to another paragraph moves it; that is applied as it is.
+  if (replaces && isImageMove(state.doc, tr)) return null;
   const result = replaces && !wraps ? rewriteContent(state, tr, context) : !replaces ? rewriteFormat(state, tr, context) : null;
   if (!result) return null;
   copyTransactionState(tr, result.tr);
   result.tr.setMeta(REWRITTEN, true);
   setSuggesting(result.tr, result.made ? { group: result.group, activeId: result.made, activeFollowsCursor: true } : { group: result.group });
   return result;
+}
+
+/** A step that replaces a leaf object (an image) by one of the same type: only its attributes change. */
+function isLeafMarkupChange(doc: Node, step: ReplaceStep): boolean {
+  const { slice } = step;
+  if (slice.openStart !== 0 || slice.openEnd !== 0 || slice.content.childCount !== 1) return false;
+  const before = doc.nodeAt(step.from);
+  const after = slice.content.firstChild!;
+  return !!before && before.isLeaf && isSuggestedObject(before) && step.to - step.from === before.nodeSize && after.type === before.type;
 }
 
 /** One part of a composite edit. `map` maps positions of the state the edit started from to `tr`'s document. */
@@ -178,22 +203,80 @@ function isSuggestionType(type: MarkType): boolean {
 
 const listTypes = new Set(["bulletList", "orderedList", "taskList", "listItem", "taskItem"]);
 
-/** Whether `from`–`to` holds only inline content (in textblocks that allow suggestion marks) and list structure. */
-function inlineRange(doc: Node, from: number, to: number, insert: MarkType): boolean {
+/**
+ * Whether `from`–`to` holds only what suggestions can express: inline content (in textblocks
+ * that allow suggestion marks), list structure and whole objects (images, tables, table rows and
+ * cells, breaks, horizontal lines, tables of contents).
+ */
+function suggestableRange(doc: Node, from: number, to: number, insert: MarkType): boolean {
   if (to <= from) return true;
   let ok = true;
   doc.nodesBetween(from, to, (node, pos) => {
     if (!ok || node.isInline) return false;
+    const end = pos + node.nodeSize;
+    if (isSuggestedObject(node) && pos >= from && end <= to) return false;
     if (node.isTextblock) {
       if (!node.type.allowsMarkType(insert) || !("suggestionBreak" in node.attrs)) ok = false;
       return false;
     }
     // Ancestors around the whole range, and list structure.
-    if ((pos < from && pos + node.nodeSize > to) || listTypes.has(node.type.name)) return true;
+    if ((pos < from && end > to) || listTypes.has(node.type.name)) return true;
     ok = false;
     return false;
   });
   return ok;
+}
+
+/** Whether `from`–`to` is nothing but whole objects (a table row, the cells of a column…). */
+function objectsOnly(doc: Node, from: number, to: number): boolean {
+  if (to <= from) return true;
+  let ok = true;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!ok) return false;
+    const end = pos + node.nodeSize;
+    if (isSuggestedObject(node) && pos >= from && end <= to) return false;
+    if (pos < from && end > to && !node.isTextblock) return true;
+    ok = false;
+    return false;
+  });
+  return ok;
+}
+
+/** Whether `from`–`to` holds a whole object (or a footnote reference). */
+function hasObject(doc: Node, from: number, to: number): boolean {
+  if (to <= from) return false;
+  let found = false;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (found) return false;
+    if ((isSuggestedObject(node) && pos >= from && pos + node.nodeSize <= to) || node.type.name === "footnote") found = true;
+    return !found;
+  });
+  return found;
+}
+
+/** The object around `pos` that is itself a pending insertion by `author` (a table being added), if any. */
+function pendingObjectAround(doc: Node, pos: number, author: string): SuggestionMeta | null {
+  const $pos = doc.resolve(pos);
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    const inserted = objectSuggestion($pos.node(depth), "insert");
+    if (inserted && inserted.author === author) return metaOf(inserted);
+  }
+  return null;
+}
+
+/** A transaction that deletes one image and inserts the same picture elsewhere (dragging it). */
+function isImageMove(doc: Node, tr: Transaction): boolean {
+  if (tr.steps.length !== 2 || !tr.steps.every((step) => step instanceof ReplaceStep)) return false;
+  const [removal, insertion] = tr.steps as ReplaceStep[];
+  const removed = removal!.slice.size === 0 ? doc.nodeAt(removal!.from) : null;
+  const inserted = insertion!.slice.content.childCount === 1 ? insertion!.slice.content.firstChild : null;
+  return (
+    removed?.type.name === "image" &&
+    removal!.to - removal!.from === removed.nodeSize &&
+    inserted?.type.name === "image" &&
+    insertion!.from === insertion!.to &&
+    inserted.attrs.src === removed.attrs.src
+  );
 }
 
 type ChangeRecord = {
@@ -210,25 +293,59 @@ type ChangeRecord = {
   steps: number;
 };
 
+/**
+ * Compares characters and inline nodes only: block tokens never match, so a diff cannot keep an
+ * empty paragraph that a new table replaced as the paragraph in its first cell.
+ */
+const blockTokensDiffer: TokenEncoder<unknown> = {
+  encodeCharacter: (char) => char,
+  encodeNodeStart: (node) => (node.isInline ? node.type.name : {}),
+  encodeNodeEnd: () => ({}),
+  compareTokens: (a, b) => a === b,
+};
+
+/** The changes of a transaction, in ranges suggestions can express, or null. */
+function suggestableChanges(state: EditorState, tr: Transaction, insert: MarkType): readonly Change[] | null {
+  const suggestable = (changes: readonly Change[]) =>
+    changes.every(
+      (change) => suggestableRange(state.doc, change.fromA, change.toA, insert) && suggestableRange(tr.doc, change.fromB, change.toB, insert),
+    );
+  const changes = ChangeSet.create(state.doc).addSteps(tr.doc, tr.mapping.maps, null).changes;
+  if (suggestable(changes)) return changes;
+  // The diff may have matched structure across an inserted or deleted object.
+  const coarse = ChangeSet.create(state.doc, undefined, blockTokensDiffer).addSteps(tr.doc, tr.mapping.maps, null).changes;
+  return suggestable(coarse) ? coarse : null;
+}
+
 function rewriteContent(state: EditorState, tr: Transaction, context: SuggestContext): SuggestResult | null {
   const types = suggestionTypes(state.schema);
-  const changes = ChangeSet.create(state.doc).addSteps(tr.doc, tr.mapping.maps, null).changes;
-  if (changes.length === 0) return null;
-  for (const change of changes) {
-    if (!inlineRange(state.doc, change.fromA, change.toA, types.insert) || !inlineRange(tr.doc, change.fromB, change.toB, types.insert)) {
-      return null;
-    }
-  }
+  const changes = suggestableChanges(state, tr, types.insert);
+  if (!changes || changes.length === 0) return null;
 
   const out = state.tr;
   let group = context.group;
+  let made: string | null = null;
   const records: ChangeRecord[] = [];
+  // Changes of whole objects in one edit (the cells of an inserted column) are one suggestion.
+  let objectMeta: SuggestionMeta | null = null;
   for (const change of changes) {
     const from = out.mapping.map(change.fromA, 1);
     const to = out.mapping.map(change.toA, 1);
-    const meta = chooseSuggestion(out.doc, from, to, group, context, types);
+    const structural = objectsOnly(state.doc, change.fromA, change.toA) && objectsOnly(tr.doc, change.fromB, change.toB);
+    // Inside an object that is itself being suggested (a new table), edits are part of its insertion.
+    const pending = pendingObjectAround(out.doc, from, context.author);
+    // An inserted or deleted object is a suggestion of its own, not joined with the edits around it.
+    const objects = !pending && (hasObject(state.doc, change.fromA, change.toA) || hasObject(tr.doc, change.fromB, change.toB));
+    const meta: SuggestionMeta =
+      pending ??
+      ((structural && objectMeta) ||
+        (objects ? { id: newSuggestionId(), author: context.author, createdAt: context.now } : chooseSuggestion(out.doc, from, to, group, context, types)));
+    if (structural || objects) objectMeta = meta;
     const start = out.steps.length;
-    if (to > from) markDeleted(out, from, to, meta, context.author, types);
+    if (to > from) {
+      if (pending) out.delete(from, to);
+      else markDeleted(out, from, to, meta, context.author, types);
+    }
     const afterDeletion = out.mapping.slice(start);
     const deletedFrom = afterDeletion.map(from, -1);
     const deletedTo = afterDeletion.map(to, 1);
@@ -243,10 +360,12 @@ function rewriteContent(state: EditorState, tr: Transaction, context: SuggestCon
         insertedFrom = newStart;
         insertedTo = newEnd;
       });
-      markInserted(out, insertedFrom, insertedTo, meta, types);
+      markInserted(out, insertedFrom, insertedTo, meta, types, pending !== null);
     }
     records.push({ ...change, deletedFrom, deletedTo, insertedFrom, insertedTo, steps: out.steps.length });
-    group = { id: meta.id, createdAt: meta.createdAt, time: context.now };
+    made = meta.id;
+    // Typing after an inserted object starts a new suggestion.
+    group = objects ? null : { id: meta.id, createdAt: meta.createdAt, time: context.now };
   }
 
   const direction = tr.getMeta(DELETE_DIRECTION) as -1 | 1 | undefined;
@@ -266,7 +385,7 @@ function rewriteContent(state: EditorState, tr: Transaction, context: SuggestCon
     return out.mapping.map(pos - shift);
   };
   out.setSelection(mapSelection(tr.selection, out.doc, map));
-  return { tr: out, group, made: group?.id ?? null };
+  return { tr: out, group, made };
 }
 
 function mapSelection(selection: Selection, doc: Node, map: (pos: number) => number): Selection {
@@ -291,6 +410,10 @@ function chooseSuggestion(
   const ids = new Set<string>();
   const addMarks = (node: Node | null | undefined) => {
     for (const mark of node?.marks ?? []) if (mark.type === types.insert || mark.type === types.delete) ids.add(mark.attrs.id);
+    for (const kind of ["insert", "delete"] as const) {
+      const object = node && !node.isInline ? objectSuggestion(node, kind) : null;
+      if (object) ids.add(object.id);
+    }
   };
   const addBreak = (node: Node | null | undefined) => {
     const brk = node?.attrs.suggestionBreak as BreakSuggestion | null | undefined;
@@ -303,7 +426,7 @@ function chooseSuggestion(
   addMarks($to.nodeAfter);
   if (to > from) {
     doc.nodesBetween(from, to, (node) => {
-      if (node.isInline) addMarks(node);
+      if (node.isInline || isSuggestedObject(node)) addMarks(node);
       else if (node.isTextblock) addBreak(node);
       return !node.isInline;
     });
@@ -326,12 +449,13 @@ function chooseSuggestion(
 }
 
 /**
- * Marks `from`–`to` as deleted. Pending insertions by the same author (text and paragraph breaks)
- * are removed instead; text that is already deleted keeps its suggestion.
+ * Marks `from`–`to` as deleted. Pending insertions by the same author (text, paragraph breaks and
+ * objects) are removed instead; content that is already deleted keeps its suggestion.
  */
 function markDeleted(out: Transaction, from: number, to: number, meta: SuggestionMeta, author: string, types: SuggestionTypes): void {
   const removals: { from: number; to: number }[] = [];
   const marked: { from: number; to: number }[] = [];
+  const objects: number[] = [];
   const breaks: number[] = [];
   const joins: number[] = [];
   out.doc.nodesBetween(from, to, (node, pos) => {
@@ -340,6 +464,12 @@ function markDeleted(out: Transaction, from: number, to: number, meta: Suggestio
       const inserted = types.insert.isInSet(node.marks);
       if (inserted && inserted.attrs.author === author) removals.push(range);
       else if (!types.delete.isInSet(node.marks)) marked.push(range);
+      return false;
+    }
+    if (isSuggestedObject(node) && pos >= from && pos + node.nodeSize <= to) {
+      const inserted = objectSuggestion(node, "insert");
+      if (inserted && inserted.author === author) removals.push({ from: pos, to: pos + node.nodeSize });
+      else if (!objectSuggestion(node, "delete")) objects.push(pos);
       return false;
     }
     // The boundary before a textblock whose content starts inside the range is deleted.
@@ -351,14 +481,23 @@ function markDeleted(out: Transaction, from: number, to: number, meta: Suggestio
     return true;
   });
   for (const range of marked) out.addMark(range.from, range.to, types.delete.create(meta));
+  for (const pos of objects) out.setNodeAttribute(pos, "suggestionDelete", { ...meta });
   for (const pos of breaks) out.setNodeAttribute(pos, "suggestionBreak", { kind: "delete", ...meta });
+  const removed = new Set(removals.map((range) => range.from));
   for (const pos of joins) {
     const end = previousTextblockEnd(out.doc, pos);
-    if (end !== null && joinable(out.doc, end, pos + 1)) removals.push({ from: end, to: pos + 1 });
+    if (end !== null && joinable(out.doc, end, pos + 1, removed)) removals.push({ from: end, to: pos + 1 });
     else out.setNodeAttribute(pos, "suggestionBreak", null);
   }
-  removals.sort((a, b) => b.from - a.from);
-  for (const range of removals) out.delete(range.from, range.to);
+  // Removed objects can lie inside a join's range: delete each position once.
+  removals.sort((a, b) => a.from - b.from);
+  const merged: { from: number; to: number }[] = [];
+  for (const range of removals) {
+    const last = merged[merged.length - 1];
+    if (last && range.from <= last.to) last.to = Math.max(last.to, range.to);
+    else merged.push({ ...range });
+  }
+  for (const range of merged.reverse()) out.delete(range.from, range.to);
 }
 
 /** The end of the content of the textblock before the one at `pos`. */
@@ -367,14 +506,27 @@ function previousTextblockEnd(doc: Node, pos: number): number | null {
   return found ? found.$from.end() : null;
 }
 
-/** Marks freshly inserted content as an insertion; textblocks starting inside it are suggested paragraph breaks. */
-function markInserted(out: Transaction, from: number, to: number, meta: SuggestionMeta, types: SuggestionTypes): void {
+/**
+ * Marks freshly inserted content as an insertion: its inline content gets the mark, whole objects
+ * the attribute, and textblocks starting inside it are suggested paragraph breaks. Inside an object
+ * that is itself a pending insertion only the marks are added.
+ */
+function markInserted(out: Transaction, from: number, to: number, meta: SuggestionMeta, types: SuggestionTypes, inPending = false): void {
   out.removeMark(from, to, types.delete);
   out.removeMark(from, to, types.format);
   out.addMark(from, to, types.insert.create(meta));
   out.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.isInline) return false;
+    if (isSuggestedObject(node) && pos >= from) {
+      if (!inPending) {
+        out.setNodeAttribute(pos, "suggestionInsert", { ...meta });
+        if (node.attrs.suggestionDelete) out.setNodeAttribute(pos, "suggestionDelete", null);
+        if (node.attrs.suggestionFormat) out.setNodeAttribute(pos, "suggestionFormat", null);
+      }
+      return false;
+    }
     if (!node.isTextblock) return true;
-    if (pos >= from && pos < to && "suggestionBreak" in node.attrs) {
+    if (!inPending && pos >= from && pos < to && "suggestionBreak" in node.attrs) {
       out.setNodeAttribute(pos, "suggestionBreak", { kind: "insert", ...meta });
     }
     return false;
@@ -397,6 +549,10 @@ function rewriteFormat(state: EditorState, tr: Transaction, context: SuggestCont
     } else if (step instanceof AttrStep) {
       const pos = after.map(step.pos, 1);
       blockRanges.push([pos, pos + 1]);
+    } else if (step instanceof ReplaceStep) {
+      // A leaf object's new attributes (isLeafMarkupChange).
+      const pos = after.map(step.from, 1);
+      blockRanges.push([pos, pos + 1]);
     } else if (step instanceof ReplaceAroundStep) {
       const mapping = tr.mapping.slice(index);
       blockRanges.push([mapping.map(step.from, -1), mapping.map(step.to, 1)]);
@@ -412,6 +568,7 @@ function rewriteFormat(state: EditorState, tr: Transaction, context: SuggestCont
   const fresh = () => record((created ??= { id: newSuggestionId(), author: context.author, createdAt: context.now }));
   recordTextFormat(state.doc, out, textRanges, tr.mapping, inverse, context.author, types, fresh, record);
   recordBlockFormat(state.doc, out, blockRanges, inverse, context.author, fresh, record);
+  recordImageFormat(state.doc, out, blockRanges, inverse, context.author, fresh, record);
   return { tr: out, group: context.group, made };
 }
 
@@ -508,23 +665,71 @@ function recordBlockFormat(
   }
 }
 
+/** An image's attributes without its suggestions: what a "Format: image" suggestion restores. */
+function imageAttributes(node: Node): Record<string, unknown> {
+  const { suggestionInsert: _insert, suggestionDelete: _delete, suggestionFormat: _format, ...attrs } = node.attrs;
+  return attrs;
+}
+
+/** Records changes of images' size, wrapping, rotation, crop… as "Format: image" suggestions holding the values before. */
+function recordImageFormat(
+  oldDoc: Node,
+  out: Transaction,
+  ranges: [number, number][],
+  inverse: Mapping,
+  author: string,
+  fresh: () => SuggestionMeta,
+  record: (meta: SuggestionMeta) => SuggestionMeta,
+): void {
+  const seen = new Set<number>();
+  const doc = out.doc;
+  for (const [from, to] of ranges) {
+    doc.nodesBetween(Math.max(0, from), Math.min(to, doc.content.size), (node, pos) => {
+      if (node.type.name !== "image") return !node.isTextblock;
+      if (seen.has(pos)) return false;
+      seen.add(pos);
+      const old = oldDoc.nodeAt(inverse.map(pos, 1));
+      if (old?.type.name !== "image") return false;
+      // An image that is itself a pending insertion is changed directly.
+      const inserted = objectSuggestion(old, "insert");
+      if (inserted && inserted.author === author) return false;
+      const existing = old.attrs.suggestionFormat as ImageFormatSuggestion | null;
+      const before = existing?.before ?? imageAttributes(old);
+      const after = imageAttributes(node);
+      const changed = Object.keys(after).some((key) => !sameJSON(before[key] ?? null, after[key] ?? null));
+      if (!changed) {
+        if (node.attrs.suggestionFormat) out.setNodeAttribute(pos, "suggestionFormat", null);
+      } else {
+        // The values before the first change, for the attributes that changed since.
+        const kept = Object.fromEntries(Object.keys(after).filter((key) => key in before).map((key) => [key, before[key] ?? null]));
+        out.setNodeAttribute(pos, "suggestionFormat", { ...(existing ? record(metaOf(existing)) : fresh()), before: kept });
+      }
+      return false;
+    });
+  }
+}
+
 /** Whether a transaction may add, change or remove suggestions (so the list must be read again). */
 function touchesSuggestions(tr: Transaction): boolean {
   if (tr.getMeta(REWRITTEN) || tr.getMeta(SUGGESTION_COMMAND)) return true;
   return tr.steps.some((step) => {
     if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) return isSuggestionType(step.mark.type);
-    if (step instanceof AttrStep) return step.attr.startsWith("suggestion");
+    if (step instanceof AttrStep) return step.attr.startsWith("suggestion") || (step.attr === "content" && regionHasSuggestions(step.value));
+    // Header and footer content with suggestions.
+    if (step instanceof DocAttrStep) return (regionKeys as readonly string[]).includes(step.attr) && regionHasSuggestions(step.value);
     if (step instanceof ReplaceStep || step instanceof ReplaceAroundStep) return sliceHasSuggestions(step.slice);
     return false;
   });
 }
 
+const suggestionAttributes = ["suggestionFormat", "suggestionBreak", "suggestionInsert", "suggestionDelete"];
+
 function sliceHasSuggestions(slice: Slice): boolean {
   let found = false;
   slice.content.descendants((node) => {
     if (found) return false;
-    if (node.isInline) found = node.marks.some((mark) => isSuggestionType(mark.type));
-    else if (node.isTextblock && (node.attrs.suggestionFormat || node.attrs.suggestionBreak)) found = true;
+    if (node.isInline) found = node.marks.some((mark) => isSuggestionType(mark.type)) || (node.type.name === "footnote" && regionHasSuggestions(node.attrs.content));
+    else found = suggestionAttributes.some((name) => !!node.attrs[name]);
     return !found;
   });
   return found;
@@ -547,7 +752,20 @@ export function suggestionAt(state: EditorState, pos: number): string | null {
   }
   const block = $pos.parent;
   const format = block.attrs.suggestionFormat as FormatSuggestion | null | undefined;
-  return format?.id ?? null;
+  if (format) return format.id;
+  // An object at or around the position: a clicked image, a cell of a suggested row or table.
+  const objectId = (node: Node | null | undefined) => {
+    if (!node || !isSuggestedObject(node)) return null;
+    const meta = objectSuggestion(node, "insert") ?? objectSuggestion(node, "delete") ?? (node.attrs.suggestionFormat as SuggestionMeta | null);
+    return meta?.id ?? null;
+  };
+  const after = objectId($pos.nodeAfter);
+  if (after) return after;
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    const id = objectId($pos.node(depth));
+    if (id) return id;
+  }
+  return null;
 }
 
 /**
@@ -650,10 +868,13 @@ export const Suggesting = Extension.create<SuggestingOptions>({
             if (next.activeId === null) return next;
             const active = next.suggestions.find((suggestion) => suggestion.id === next.activeId);
             if (!active) return { ...next, activeId: null, activeFollowsCursor: false };
-            // The suggestion being made stops being active when the cursor moves away from it.
-            if (next.activeFollowsCursor && meta?.activeId === undefined && (tr.selectionSet || tr.docChanged)) {
+            // The suggestion being made stops being active when the cursor moves away from it (a
+            // header's or footnote's suggestion follows the cursor of its own editor).
+            if (next.activeFollowsCursor && !active.region && meta?.activeId === undefined && (tr.selectionSet || tr.docChanged)) {
               const { head } = state.selection;
-              if (head < active.from || head > active.to) return { ...next, activeId: null, activeFollowsCursor: false };
+              // Right after an inserted object the cursor is at the start of the next paragraph.
+              const after = active.nodes.length > 0 ? active.to + 1 : active.to;
+              if (head < active.from || head > after) return { ...next, activeId: null, activeFollowsCursor: false };
             }
             return next;
           },
@@ -670,8 +891,16 @@ export const Suggesting = Extension.create<SuggestingOptions>({
                   decorations.push(Decoration.inline(range.from, range.to, { class: "suggestion-active" }));
                 }
               }
-              // A mark at the end of the paragraph before a suggested paragraph break.
-              for (const { pos, kind } of suggestion.breaks) {
+              // Inserted, deleted and reformatted objects: node views draw their own DOM, so the
+              // classes come from decorations rather than the attributes.
+              for (const { pos, size, kind } of suggestion.nodes) {
+                const active = suggestion.id === activeId ? " suggestion-active" : "";
+                decorations.push(Decoration.node(pos, pos + size, { class: `suggestion-node-${kind}${active}` }));
+              }
+              // A mark at the end of the paragraph before a suggested paragraph break. An object put
+              // in place of an empty paragraph is outlined itself; its break needs no mark.
+              const objectOnly = suggestion.insertedObjects.length > 0 && !suggestion.inserted && !suggestion.deleted;
+              for (const { pos, kind } of objectOnly ? [] : suggestion.breaks) {
                 const active = suggestion.id === activeId ? " suggestion-active" : "";
                 decorations.push(
                   Decoration.widget(pos, () => breakMark(kind, active), { side: 1, key: `${kind}${suggestion.id}${active}`, marks: [] }),

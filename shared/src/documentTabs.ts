@@ -253,10 +253,14 @@ export function copyTabContent(content: JSONContent[], newId: () => string): JSO
     value && typeof value === "object" && "id" in value ? { ...(value as Record<string, unknown>), id: mapped((value as { id: unknown }).id) } : value;
   const copy = (node: JSONContent): JSONContent => {
     const result: JSONContent = { ...node };
-    if (node.attrs && ("suggestionFormat" in node.attrs || "suggestionBreak" in node.attrs)) {
-      result.attrs = { ...node.attrs };
-      if (node.attrs.suggestionFormat) result.attrs.suggestionFormat = withId(node.attrs.suggestionFormat);
-      if (node.attrs.suggestionBreak) result.attrs.suggestionBreak = withId(node.attrs.suggestionBreak);
+    if (node.attrs) {
+      for (const name of ["suggestionFormat", "suggestionBreak", "suggestionInsert", "suggestionDelete"]) {
+        if (node.attrs[name]) result.attrs = { ...(result.attrs ?? node.attrs), [name]: withId(node.attrs[name]) };
+      }
+      // A footnote's text.
+      if (node.type === "footnote" && Array.isArray(node.attrs.content)) {
+        result.attrs = { ...(result.attrs ?? node.attrs), content: (node.attrs.content as JSONContent[]).map(copy) };
+      }
     }
     if (node.marks) {
       result.marks = node.marks.map((mark) => (mark.type.startsWith("suggestion") && mark.attrs ? { ...mark, attrs: withId(mark.attrs) as Record<string, unknown> } : mark));

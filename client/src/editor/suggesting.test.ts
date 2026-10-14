@@ -279,7 +279,7 @@ describe("suggesting: formatting", () => {
       return result!;
     });
     expect(session.state.doc.child(0).type.name).toBe("bulletList");
-    expect(session.descriptions()).toEqual(["Format bullet: Bulleted list"]);
+    expect(session.descriptions()).toEqual(["Format: bulleted list"]);
     session.resolve("reject");
     expect(session.state.doc.child(0).type.name).toBe("paragraph");
     expect(session.text).toBe("Item");
@@ -331,13 +331,11 @@ describe("accepting and rejecting", () => {
 });
 
 describe("transactions that pass through", () => {
-  it("leaves undo, collab and structural transactions alone", () => {
+  it("leaves undo and collab transactions alone", () => {
     const state = EditorState.create({ doc: makeDoc("Hello") });
     const context: SuggestContext = { author: "You", now: 0, group: null };
     expect(suggestTransaction(state, state.tr.insertText("x", 1).setMeta("addToHistory", false), context)).toBeNull();
     expect(suggestTransaction(state, state.tr.insertText("x", 1).setMeta("history$", { redo: false }), context)).toBeNull();
-    const rule = state.tr.insert(0, documentSchema.nodes.horizontalRule!.create());
-    expect(suggestTransaction(state, rule, context)).toBeNull();
   });
 });
 

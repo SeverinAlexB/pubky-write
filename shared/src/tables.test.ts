@@ -41,7 +41,7 @@ describe("table and image attributes", () => {
     const doc = Node.fromJSON(documentSchema, oldDocument);
     expect(() => doc.check()).not.toThrow();
     const [tableNode, image] = [doc.child(0), doc.child(1)];
-    expect(tableNode.attrs).toEqual({ borderColor: null, borderWidth: null });
+    expect(tableNode.attrs).toEqual({ borderColor: null, borderWidth: null, suggestionInsert: null, suggestionDelete: null });
     expect(tableNode.child(0).attrs.height).toBeNull();
     expect(tableNode.child(1).child(0).attrs.backgroundColor).toBeNull();
     expect(image.attrs).toMatchObject({ width: null, height: null });
@@ -67,7 +67,7 @@ describe("table and image attributes", () => {
     expect(() => doc.check()).not.toThrow();
     const reloaded = Node.fromJSON(documentSchema, JSON.parse(JSON.stringify(doc.toJSON())));
     expect(reloaded.eq(doc)).toBe(true);
-    expect(reloaded.child(0).attrs).toEqual({ borderColor: "#ff0000", borderWidth: 1.5 });
+    expect(reloaded.child(0).attrs).toEqual({ borderColor: "#ff0000", borderWidth: 1.5, suggestionInsert: null, suggestionDelete: null });
     expect(reloaded.child(0).child(0).attrs.height).toBe(40);
     expect(reloaded.child(0).child(0).child(0).attrs).toMatchObject({ colwidth: [200], backgroundColor: "#fff2cc" });
     expect(reloaded.child(1).attrs).toMatchObject({ width: 320, height: 100 });

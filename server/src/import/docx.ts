@@ -13,10 +13,11 @@
 //   the page number start, PAGE and NUMPAGES fields, and footnotes.
 //
 // Endnotes, even-page headers, comments, equations, text boxes, charts and embedded objects are
-// dropped and reported. Tracked changes in the body become suggestions: insertions (w:ins, w:moveTo),
-// deletions (w:del, w:moveFrom), run format changes (w:rPrChange) and inserted or deleted paragraph
-// marks (suggested paragraph breaks). In headers, footers and footnotes, which have no suggestions,
-// insertions are kept and deletions left out.
+// dropped and reported. Tracked changes in the body, headers, footers and footnotes become
+// suggestions: insertions (w:ins, w:moveTo), deletions (w:del, w:moveFrom), run format changes
+// (w:rPrChange), inserted or deleted paragraph marks (suggested paragraph breaks), inserted or
+// deleted table rows (w:trPr) and cells (w:cellIns, w:cellDel), and images, breaks and footnote
+// references inside w:ins or w:del.
 import {
   bulletPresets,
   documentSchema,
@@ -477,6 +478,7 @@ class DocxConverter {
     const list = style.startsWith("h") ? null : this.listOf(properties, styleId);
     const level = list ? (number(val(child(child(properties, "numPr") ?? this.styleNumbering(styleId), "ilvl"))) ?? 0) : 0;
     const attrs = paragraphAttributes(properties, style, list !== null);
+    const previousBreak = this.pendingBreak;
     if (this.pendingBreak) attrs.suggestionBreak = this.pendingBreak;
     this.pendingBreak = this.paragraphMarkRevision(properties);
     const textBlock: JSONContent = style.startsWith("h")
@@ -484,6 +486,11 @@ class DocxConverter {
       : { type: "paragraph", attrs: { ...attrs, ...(style !== "normal" && { paragraphStyle: style }) } };
 
     const blocks = splitParagraph(textBlock, inline);
+    // A paragraph of nothing but an inserted or deleted image or break (as the export writes them):
+    // its paragraph mark belongs to the object, not to the text around it.
+    if (blocks.length > 0 && blocks.every((block) => block.attrs?.suggestionInsert || block.attrs?.suggestionDelete)) {
+      this.pendingBreak = previousBreak;
+    }
     const pageBreakBefore = toggle(child(properties, "pageBreakBefore")) ? [{ kind: "block" as const, node: { type: "pageBreak" } }] : [];
 
     if (list) return [...pageBreakBefore, { kind: "item", list, level: Math.min(level, MAX_INDENT), blocks }];
@@ -640,28 +647,38 @@ class DocxConverter {
         case "cr":
           result.push(
             element.attributes.type === "page"
-              ? { type: "pageBreak" }
+              ? { type: "pageBreak", attrs: this.inlineObjectRevision(context) }
               : element.attributes.type === "column"
-                ? { type: "columnBreak" }
+                ? { type: "columnBreak", attrs: this.inlineObjectRevision(context) }
                 : { type: "hardBreak" },
           );
           break;
         case "drawing":
         case "pict":
-          result.push(...(await this.drawing(element)));
+          result.push(...this.withObjectRevision(await this.drawing(element), context));
           break;
         case "AlternateContent": {
           const choice = child(element, "Choice") ?? child(element, "Fallback");
           const drawing = choice && (find(choice, "drawing") ?? find(choice, "pict"));
-          if (drawing) result.push(...(await this.drawing(drawing)));
+          if (drawing) result.push(...this.withObjectRevision(await this.drawing(drawing), context));
           break;
         }
         case "object":
           this.dropped.add("Embedded objects");
           break;
-        case "footnoteReference":
-          result.push(...(await this.footnoteReference(element.attributes.id)));
+        case "footnoteReference": {
+          // An inserted or deleted footnote keeps the suggestion on its reference.
+          const tracked = context.marks.filter((mark) => mark.type === "suggestionInsert" || mark.type === "suggestionDelete");
+          const references = await this.footnoteReference(element.attributes.id);
+          // Its text was inserted or deleted with it (as the export writes it): part of the same suggestion.
+          const kind = tracked[0]?.type;
+          result.push(
+            ...references.map((node) =>
+              kind ? { ...node, marks: tracked, attrs: { ...node.attrs, content: (node.attrs!.content as JSONContent[]).map((block) => withoutMark(block, kind)) } } : node,
+            ),
+          );
           break;
+        }
         case "endnoteReference":
           this.dropped.add("Endnotes");
           break;
@@ -689,9 +706,8 @@ class DocxConverter {
     return [{ type: "footnote", attrs: { content } }];
   }
 
-  /** A suggestion mark for a Word revision (w:ins, w:del, w:rPrChange); none outside the body. */
+  /** A suggestion mark for a Word revision (w:ins, w:del, w:rPrChange), in the body, headers, footers and footnotes. */
   private revisionMark(type: string, element: Element, extra: Record<string, unknown> = {}): MarkJSON | null {
-    if (this.part !== "body") return null;
     return { type, attrs: { ...this.revision(element, type === "suggestionFormat" ? "format" : "change"), ...extra } };
   }
 
@@ -703,10 +719,41 @@ class DocxConverter {
     return attributes;
   }
 
+  /**
+   * The `suggestionInsert` or `suggestionDelete` attribute of a row or cell from its revision, or
+   * null. Each object is a suggestion of its own; the text in it joins that suggestion.
+   */
+  private objectRevision(inserted: Element | undefined, deleted: Element | undefined): Record<string, unknown> | null {
+    const revision = deleted ?? inserted;
+    if (!revision) return null;
+    const attributes = revisionAttributes(revision);
+    attributes.id = `${attributes.id}o${++this.objectCount}`;
+    this.lastRevision = { key: `change|${attributes.author}|${attributes.createdAt}`, id: attributes.id };
+    return deleted ? { suggestionDelete: attributes } : { suggestionInsert: attributes };
+  }
+
+  /** Objects made so far, for ids of their own. */
+  private objectCount = 0;
+
+  /** The attributes of an image or break inside w:ins or w:del: a suggestion of its own. */
+  private inlineObjectRevision(context: InlineContext): Record<string, unknown> | undefined {
+    const deleted = context.marks.find((mark) => mark.type === "suggestionDelete");
+    const inserted = context.marks.find((mark) => mark.type === "suggestionInsert");
+    const mark = deleted ?? inserted;
+    if (!mark) return undefined;
+    const attributes = { ...mark.attrs, id: `${String(mark.attrs?.id)}o${++this.objectCount}` };
+    return deleted ? { suggestionDelete: attributes } : { suggestionInsert: attributes };
+  }
+
+  private withObjectRevision(nodes: JSONContent[], context: InlineContext): JSONContent[] {
+    const revision = this.inlineObjectRevision(context);
+    return revision ? nodes.map((node) => ({ ...node, attrs: { ...node.attrs, ...revision } })) : nodes;
+  }
+
   /** A suggested format change, from the run properties before a tracked change (w:rPrChange). */
   private formatRevision(properties: Element | undefined, context: InlineContext, style: ParagraphStyleId): MarkJSON[] {
     const change = child(properties, "rPrChange");
-    if (!change || this.part !== "body") return [];
+    if (!change) return [];
     const formatting = (marks: MarkJSON[]) => marks.filter((mark) => !mark.type.startsWith("suggestion"));
     const before = formatting(this.runMarks(child(change, "rPr"), context, style));
     const after = formatting(this.runMarks(properties, context, style));
@@ -717,7 +764,6 @@ class DocxConverter {
 
   /** A paragraph whose paragraph mark was inserted or deleted: the break after it is a suggestion. */
   private paragraphMarkRevision(properties: Element | undefined): Record<string, unknown> | null {
-    if (this.part !== "body") return null;
     const runProperties = child(properties, "rPr");
     const inserted = child(runProperties, "ins") ?? child(runProperties, "moveTo");
     const deleted = child(runProperties, "del") ?? child(runProperties, "moveFrom");
@@ -816,6 +862,8 @@ class DocxConverter {
     for (const row of element.children.filter((candidate) => candidate.name === "tr")) {
       const rowProperties = child(row, "trPr");
       const header = toggle(child(rowProperties, "tblHeader")) === true;
+      // An inserted or deleted row (w:trPr/w:ins, w:del).
+      const rowRevision = this.objectRevision(child(rowProperties, "ins"), child(rowProperties, "del"));
       let column = number(val(child(rowProperties, "gridBefore"))) ?? 0;
       const cells: JSONContent[] = [];
       for (const cell of row.children.filter((candidate) => candidate.name === "tc")) {
@@ -826,11 +874,14 @@ class DocxConverter {
         if (merge && val(merge) !== "restart" && origin) {
           origin.attrs!.rowspan = (origin.attrs!.rowspan as number) + 1;
         } else {
+          // An inserted or deleted cell (a column), read before its text so they share a suggestion.
+          const cellRevision = rowRevision ? {} : this.objectRevision(child(properties, "cellIns"), child(properties, "cellDel"));
           const content = await this.blocks(cell.children);
           const widths = grid.slice(column, column + colspan) as number[];
           const node: JSONContent = {
             type: header ? "tableHeader" : "tableCell",
             attrs: {
+              ...cellRevision,
               colspan,
               rowspan: 1,
               ...(hasGrid && widths.length === colspan && { colwidth: widths.map((width) => Math.round(width / 15)) }),
@@ -845,7 +896,7 @@ class DocxConverter {
         }
         column += colspan;
       }
-      rows.push({ type: "tableRow", content: cells });
+      rows.push({ type: "tableRow", ...(rowRevision && { attrs: rowRevision }), content: cells });
     }
     return rows.length > 0 ? { type: "table", content: rows } : null;
   }
@@ -952,6 +1003,18 @@ function paragraphAttributes(properties: Element | undefined, style: ParagraphSt
     for (const key of ["indentLeft", "indentFirstLine", "indentRight"] as const) if (indents[key] !== 0) attrs[key] = indents[key];
   }
   return attrs;
+}
+
+/** Content without one kind of suggestion mark. */
+function withoutMark(node: JSONContent, type: string): JSONContent {
+  const result: JSONContent = { ...node };
+  if (node.marks) {
+    const marks = node.marks.filter((mark) => mark.type !== type);
+    if (marks.length > 0) result.marks = marks;
+    else delete result.marks;
+  }
+  if (node.content) result.content = node.content.map((child) => withoutMark(child, type));
+  return result;
 }
 
 /** Every Word revision becomes its own suggestion, with the revision's author and date. */

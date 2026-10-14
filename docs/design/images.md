@@ -96,6 +96,8 @@ attributes). Without the editor's width, the preview always floats wrapped image
 - **Image options** (360px side panel): collapsible sections; number fields apply on Enter or when
   they lose focus, sliders while they move (one undo step per drag).
 - **Replace image**: uploads or takes a URL and changes only `src`.
+- In Suggesting mode inserting and deleting an image, and every change of its attributes above
+  (except dragging it to another paragraph), are suggestions (see [suggesting.md](suggesting.md)).
 
 ## Exports and import
 

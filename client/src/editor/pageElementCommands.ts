@@ -13,6 +13,7 @@ import {
   type RegionKey,
   type TocStyle,
   findTab,
+  SUGGESTION_AUTHOR,
   tabAtPos,
   type TocRange,
 } from "@docs/shared";
@@ -27,6 +28,7 @@ import { PasteCleanup } from "./paste.ts";
 import { currentTab } from "./documentTabs.ts";
 import { documentFootnotes, layOutNow, pageIndexAt, tabFootnotes } from "./pagination.ts";
 import { TabKey, TabLayout } from "./tabLayout.ts";
+import { getSuggesting, setSuggesting, Suggesting, type EditorMode } from "./suggesting.ts";
 
 /** What is being edited: a page's header or footer, or footnote number index + 1. */
 export type RegionTarget =
@@ -42,6 +44,11 @@ export type RegionBinding = {
   /** The stored content: null for a header that has none yet, undefined when the content is gone. */
   read: (state: EditorState) => RegionContent | null | undefined;
   write: (tr: Transaction, content: RegionContent) => Transaction | null;
+  /**
+   * Whether edits are applied directly even in Suggesting mode: the text of a footnote that is
+   * itself a suggested insertion is part of that insertion.
+   */
+  editsDirectly?: (state: EditorState) => boolean;
 };
 
 export function headerBinding(kind: "header" | "footer", page: number, differentFirstPage: boolean): RegionBinding {
@@ -71,6 +78,12 @@ export function footnoteBinding(index: number, tabId: string): RegionBinding {
       const footnote = tab && tabFootnotes(tr.doc, tab)[index];
       return footnote ? tr.setNodeAttribute(footnote.pos, "content", content) : null;
     },
+    editsDirectly: (state) => {
+      const tab = findTab(state.doc, tabId);
+      const footnote = tab && tabFootnotes(state.doc, tab)[index];
+      const inserted = footnote?.node.marks.find((mark) => mark.type.name === "suggestionInsert");
+      return inserted?.attrs.author === SUGGESTION_AUTHOR;
+    },
   };
 }
 
@@ -94,27 +107,55 @@ type RegionEditorOptions = {
   element: HTMLElement;
   className: string;
   onEscape: () => void;
+  /** A click on a suggestion in the region (its id) or elsewhere in it (null). */
+  onActivateSuggestion?: (id: string | null) => void;
 };
+
+/** The region's mode: the main editor's, except where its edits are part of a suggested insertion. */
+function regionMode(main: Editor, binding: RegionBinding): EditorMode {
+  const { mode } = getSuggesting(main.state);
+  return mode === "suggesting" && binding.editsDirectly?.(main.state) ? "editing" : mode;
+}
 
 /**
  * Creates the editor for a header, footer or footnote. Its changes become transactions on the
  * main editor; changes of the main document (undo, redo, restore) are copied back.
  */
-export function createRegionEditor({ main, binding, element, className, onEscape }: RegionEditorOptions): Editor {
+export function createRegionEditor({ main, binding, element, className, onEscape, onActivateSuggestion }: RegionEditorOptions): Editor {
   let stored = binding.read(main.state) ?? null;
   let group = 0;
   let lastChange = 0;
+  /** The active suggestion as last agreed between the two editors (see docs/design/suggesting.md). */
+  let active: string | null = null;
+  const activate = onActivateSuggestion ?? ((id: string | null) => main.view.dispatch(setSuggesting(main.state.tr, { activeId: id })));
 
   const region: Editor = new Editor({
     element,
-    extensions: [...documentExtensions, TabLayout, TabKey, Autoformat, PasteCleanup, regionBehaviour(main, binding.kind, onEscape)],
+    extensions: [
+      ...documentExtensions,
+      TabLayout,
+      TabKey,
+      Autoformat,
+      PasteCleanup,
+      // In Suggesting mode the region's edits become suggestions in its content, like the body's.
+      Suggesting.configure({ initialMode: regionMode(main, binding), onActivate: activate }),
+      regionBehaviour(main, binding.kind, onEscape),
+    ],
     content: { type: "doc", content: stored ?? emptyRegion() },
     enableInputRules: false,
     editorProps: {
       attributes: { class: `page-content page-region ${className}`, "aria-label": binding.label, role: "textbox", "aria-multiline": "true" },
     },
     onTransaction: ({ transaction }) => {
-      if (!transaction.docChanged || transaction.getMeta(fromMain)) return;
+      if (transaction.getMeta(fromMain)) return;
+      // The suggestion being made in the region is the active card.
+      const regionActive = getSuggesting(region.state).activeId;
+      const activeChanged = regionActive !== active;
+      active = regionActive;
+      if (!transaction.docChanged) {
+        if (activeChanged) main.view.dispatch(setSuggesting(main.state.tr, { activeId: regionActive, activeFollowsCursor: false }));
+        return;
+      }
       const content = region.state.doc.content.toJSON() as RegionContent;
       const now = Date.now();
       // An automatic change (autoformat.ts) is an undo step of its own, as in the main editor.
@@ -123,6 +164,7 @@ export function createRegionEditor({ main, binding, element, className, onEscape
       const tr = binding.write(main.state.tr, content);
       if (!tr) return;
       stored = content;
+      if (activeChanged) setSuggesting(tr, { activeId: regionActive, activeFollowsCursor: false });
       main.view.dispatch(tr.setMeta("composition", group));
     },
   });
@@ -130,9 +172,19 @@ export function createRegionEditor({ main, binding, element, className, onEscape
   const onMainTransaction = () => {
     if (region.isDestroyed) return;
     const content = binding.read(main.state);
-    if (content === undefined || content === stored) return;
-    stored = content;
-    replaceRegionContent(region, content ?? emptyRegion());
+    if (content !== undefined && content !== stored) {
+      stored = content;
+      replaceRegionContent(region, content ?? emptyRegion());
+    }
+    // The mode and the active suggestion follow the main editor's.
+    const mode = regionMode(main, binding);
+    const mainActive = getSuggesting(main.state).activeId;
+    const own = getSuggesting(region.state);
+    const regionActive = own.suggestions.some((suggestion) => suggestion.id === mainActive) ? mainActive : null;
+    if (own.mode !== mode || own.activeId !== regionActive) {
+      active = regionActive;
+      region.view.dispatch(setSuggesting(region.state.tr, { mode, group: own.mode === mode ? own.group : null, activeId: regionActive }).setMeta(fromMain, true));
+    }
   };
   main.on("transaction", onMainTransaction);
   region.on("destroy", () => main.off("transaction", onMainTransaction));
@@ -151,7 +203,8 @@ function replaceRegionContent(region: Editor, content: RegionContent): void {
     endA += overlap;
     endB += overlap;
   }
-  region.view.dispatch(region.state.tr.replace(start, endA, target.slice(start, endB)).setMeta(fromMain, true));
+  // Not an edit of the region: Suggesting mode lets it through as it is.
+  region.view.dispatch(region.state.tr.replace(start, endA, target.slice(start, endB)).setMeta(fromMain, true).setMeta("addToHistory", false));
 }
 
 declare module "@tiptap/core" {

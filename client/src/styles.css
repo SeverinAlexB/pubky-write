@@ -3416,7 +3416,152 @@ body.is-column-resizing * {
   box-shadow: 0 0 0 1px #35713a;
 }
 
+/*
+ * Suggested objects (images, tables, rows, columns, breaks, lines, tables of contents). The editor
+ * marks them with decorations (.suggestion-node-*), static copies (version history) with their
+ * data attributes.
+ */
+.page-content :is(.suggestion-node-insert, [data-suggestion-insert]):not(tr, td, th) {
+  outline: 2px dashed #35713a;
+  outline-offset: 2px;
+}
+
+/* Rows and columns: each of their cells is outlined. */
+.page-content :is(tr.suggestion-node-insert, tr[data-suggestion-insert]) > :is(td, th),
+.page-content :is(td, th):is(.suggestion-node-insert, [data-suggestion-insert]) {
+  outline: 2px dashed #35713a;
+  outline-offset: -2px;
+}
+
+/* Text in an inserted table is inserted text. */
+.page-content :is(.suggestion-node-insert, [data-suggestion-insert]) :is(td, th, .toc-entry) {
+  color: #35713a;
+}
+
+/* Deleted images and tables: a 50% overlay striped in the suggestion colour. */
+.page-content :is(.image-frame, .tableWrapper):is(.suggestion-node-delete, [data-suggestion-delete]) {
+  position: relative;
+}
+
+.page-content :is(.image-frame, .tableWrapper, .toc):is(.suggestion-node-delete, [data-suggestion-delete])::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: repeating-linear-gradient(-45deg, #35713a 0 3px, transparent 3px 9px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.page-content img[data-suggestion-delete] {
+  opacity: 0.5;
+  outline: 2px solid #35713a;
+}
+
+.page-content .toc:is(.suggestion-node-delete, [data-suggestion-delete]) {
+  position: relative;
+}
+
+/* Deleted rows and columns: their text struck through, the cells striped. */
+.page-content :is(tr.suggestion-node-delete, tr[data-suggestion-delete]) > :is(td, th),
+.page-content :is(td, th):is(.suggestion-node-delete, [data-suggestion-delete]),
+.page-content table:is(.suggestion-node-delete, [data-suggestion-delete]) :is(td, th),
+.page-content .toc:is(.suggestion-node-delete, [data-suggestion-delete]) .toc-entry {
+  color: #35713a;
+  text-decoration: line-through;
+}
+
+.page-content :is(tr.suggestion-node-delete, tr[data-suggestion-delete]) > :is(td, th),
+.page-content :is(td, th):is(.suggestion-node-delete, [data-suggestion-delete]) {
+  background-image: repeating-linear-gradient(-45deg, rgb(53 113 58 / 25%) 0 3px, transparent 3px 9px);
+}
+
+/* Breaks and lines: drawn in the suggestion colour, named, and struck through when deleted. */
+.page-content :is(.page-break, .column-break):is(.suggestion-node-insert, .suggestion-node-delete, [data-suggestion-insert], [data-suggestion-delete]),
+.page-content hr:is(.suggestion-node-insert, .suggestion-node-delete, [data-suggestion-insert], [data-suggestion-delete]) {
+  position: relative;
+  border-top: 2px dashed #35713a;
+  outline: none;
+}
+
+.page-content :is(.page-break, .column-break):is(.suggestion-node-delete, [data-suggestion-delete]),
+.page-content hr:is(.suggestion-node-delete, [data-suggestion-delete]) {
+  border-top-style: solid;
+  opacity: 0.6;
+}
+
+.page-content :is(.page-break, .column-break):is(.suggestion-node-insert, .suggestion-node-delete, [data-suggestion-insert], [data-suggestion-delete])::before {
+  content: "Page break";
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  padding: 0 6px;
+  transform: translateX(-50%);
+  background: #fff;
+  color: #35713a;
+  font: 11px/16px Arial, Helvetica, sans-serif;
+  white-space: nowrap;
+}
+
+.page-content .column-break:is(.suggestion-node-insert, .suggestion-node-delete, [data-suggestion-insert], [data-suggestion-delete])::before {
+  content: "Column break";
+}
+
+.page-content :is(.page-break, .column-break):is(.suggestion-node-delete, [data-suggestion-delete])::before {
+  text-decoration: line-through;
+}
+
+/* The active suggestion's objects get the 1px border too. */
+.page-content :is(.suggestion-node-insert, .suggestion-node-delete, .suggestion-node-format).suggestion-active:not(tr, td, th) {
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px #35713a;
+}
+
+/* A footnote that is a suggested insertion or deletion: its text too. */
+.footnote-entry.is-suggested-insert .footnote-text {
+  color: #35713a;
+}
+
+.footnote-entry.is-suggested-delete .footnote-text {
+  color: #35713a;
+  text-decoration: line-through;
+}
+
 /* Viewing mode and Preview accept all: the document as if every suggestion were accepted. */
+.suggestions-accepted .page-content :is(.suggestion-node-delete, [data-suggestion-delete]),
+.suggestions-rejected .page-content :is(.suggestion-node-insert, [data-suggestion-insert]),
+.suggestions-accepted .footnote-entry.is-suggested-delete,
+.suggestions-rejected .footnote-entry.is-suggested-insert {
+  display: none;
+}
+
+.suggestions-accepted .page-content :is(.suggestion-node-insert, [data-suggestion-insert]),
+.suggestions-rejected .page-content :is(.suggestion-node-delete, [data-suggestion-delete]),
+.suggestions-accepted .page-content :is(.suggestion-node-insert, [data-suggestion-insert]) :is(td, th),
+.suggestions-rejected .page-content :is(.suggestion-node-delete, [data-suggestion-delete]) :is(td, th),
+.suggestions-accepted .page-content :is(tr, td, th):is(.suggestion-node-insert, [data-suggestion-insert]) > :is(td, th),
+.suggestions-rejected .page-content :is(tr, td, th):is(.suggestion-node-delete, [data-suggestion-delete]) > :is(td, th),
+.suggestions-accepted .footnote-entry .footnote-text,
+.suggestions-rejected .footnote-entry .footnote-text {
+  outline: none;
+  color: inherit;
+  text-decoration: inherit;
+  background-image: none;
+  box-shadow: none;
+}
+
+.suggestions-rejected .page-content :is(.suggestion-node-delete, [data-suggestion-delete])::after,
+.suggestions-rejected .page-content :is(.suggestion-node-delete, .suggestion-node-insert, [data-suggestion-delete], [data-suggestion-insert])::before,
+.suggestions-accepted .page-content :is(.suggestion-node-delete, .suggestion-node-insert, [data-suggestion-delete], [data-suggestion-insert])::before {
+  content: none;
+}
+
+.suggestions-accepted .page-content :is(.page-break, .column-break, hr):is(.suggestion-node-insert, [data-suggestion-insert]),
+.suggestions-rejected .page-content :is(.page-break, .column-break, hr):is(.suggestion-node-delete, [data-suggestion-delete]) {
+  border-top-color: #9aa0a6;
+  border-top-width: 1px;
+  opacity: 1;
+}
 .suggestions-accepted .page-content .suggestion-delete,
 .suggestions-rejected .page-content .suggestion-insert,
 .suggestions-accepted .page-content .suggestion-break,

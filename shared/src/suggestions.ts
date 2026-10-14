@@ -4,11 +4,12 @@
 // Inserted, deleted and reformatted text carries one of three marks; paragraph format changes and
 // suggested paragraph breaks are attributes of paragraphs and headings. Every part of one
 // suggestion has the same id.
-import { Extension, Mark as TiptapMark, mergeAttributes } from "@tiptap/core";
+import { Extension, Mark as TiptapMark, mergeAttributes, type JSONContent } from "@tiptap/core";
 import { Fragment, Mark, Slice, type MarkType, type Node, type Schema } from "@tiptap/pm/model";
 import { liftListItem, wrapInList } from "@tiptap/pm/schema-list";
 import { EditorState, TextSelection, type Command } from "@tiptap/pm/state";
 import { Transform } from "@tiptap/pm/transform";
+import { regionKeys, type RegionContent, type RegionKey } from "./pageElements.ts";
 
 export type SuggestionMeta = { id: string; author: string; createdAt: number };
 export type SuggestionMarkName = "suggestionInsert" | "suggestionDelete" | "suggestionFormat";
@@ -23,6 +24,70 @@ export type BlockFormat = { type: string; attrs: Record<string, unknown>; list: 
 
 export type FormatSuggestion = SuggestionMeta & { before: BlockFormat };
 export type BreakSuggestion = SuggestionMeta & { kind: "insert" | "delete" };
+/** An image's attributes (without the suggestion ones) before a suggested change of its size, wrapping, rotation, crop… */
+export type ImageFormatSuggestion = SuggestionMeta & { before: Record<string, unknown> };
+
+/**
+ * Blocks that are inserted or deleted whole as a suggestion: attributes `suggestionInsert` and
+ * `suggestionDelete` (`null` or a `SuggestionMeta`). Table rows and cells too, for suggested rows
+ * and columns. Footnote references are inline and use the marks like text.
+ */
+export const suggestedObjectTypes = [
+  "image",
+  "table",
+  "tableRow",
+  "tableCell",
+  "tableHeader",
+  "pageBreak",
+  "columnBreak",
+  "horizontalRule",
+  "tableOfContents",
+] as const;
+const objectTypeNames = new Set<string>(suggestedObjectTypes);
+
+/** How a card names an inserted or deleted object ("Add: Image"). */
+const objectLabels: Record<string, string> = {
+  image: "Image",
+  table: "Table",
+  tableRow: "Table row",
+  tableCell: "Table column",
+  tableHeader: "Table column",
+  pageBreak: "Page break",
+  columnBreak: "Column break",
+  horizontalRule: "Horizontal line",
+  tableOfContents: "Table of contents",
+  footnote: "Footnote",
+};
+
+/** Image attributes a "Format: image" suggestion may restore. */
+const imageFormatKeys = new Set([
+  "src",
+  "alt",
+  "title",
+  "width",
+  "height",
+  "wrap",
+  "wrapMargin",
+  "positioning",
+  "offsetX",
+  "offsetY",
+  "rotation",
+  "crop",
+  "recolor",
+  "transparency",
+  "brightness",
+  "contrast",
+]);
+
+export function isSuggestedObject(node: Node): boolean {
+  return objectTypeNames.has(node.type.name);
+}
+
+/** The pending insertion or deletion of a whole object, if any. */
+export function objectSuggestion(node: Node, kind: "insert" | "delete"): SuggestionMeta | null {
+  const value = node.attrs[kind === "insert" ? "suggestionInsert" : "suggestionDelete"] as SuggestionMeta | null | undefined;
+  return value ?? null;
+}
 
 /** The author of every suggestion while there is one user. */
 export const SUGGESTION_AUTHOR = "You";
@@ -156,11 +221,64 @@ function validateBreakSuggestion(value: unknown): void {
   if (!isMeta(value) || (kind !== "insert" && kind !== "delete")) throw new RangeError("Invalid paragraph break suggestion");
 }
 
-/** `suggestionFormat` and `suggestionBreak` of paragraphs and headings. */
+function validateObjectSuggestion(value: unknown): void {
+  if (value !== null && !isMeta(value)) throw new RangeError("Invalid object suggestion");
+}
+
+function isImageFormatValue(value: unknown): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  // A crop.
+  return !!value && typeof value === "object" && !Array.isArray(value) && Object.values(value).every((side) => typeof side === "number" && Number.isFinite(side));
+}
+
+function validateImageFormat(value: unknown): void {
+  if (value === null) return;
+  const before = (value as Record<string, unknown> | null)?.before;
+  const valid =
+    isMeta(value) &&
+    !!before &&
+    typeof before === "object" &&
+    !Array.isArray(before) &&
+    Object.entries(before).every(([key, item]) => imageFormatKeys.has(key) && isImageFormatValue(item));
+  if (!valid) throw new RangeError("Invalid image format suggestion");
+}
+
+const objectAttribute = (name: "insert" | "delete") => ({
+  default: null,
+  keepOnSplit: false,
+  parseHTML: (element: HTMLElement) => jsonAttribute(element.getAttribute(`data-suggestion-${name}`)),
+  renderHTML: (attributes: Record<string, unknown>) => {
+    const value = attributes[name === "insert" ? "suggestionInsert" : "suggestionDelete"];
+    return value ? { [`data-suggestion-${name}`]: JSON.stringify(value) } : {};
+  },
+  validate: validateObjectSuggestion,
+});
+
+/**
+ * `suggestionFormat` and `suggestionBreak` of paragraphs and headings, `suggestionInsert` and
+ * `suggestionDelete` of whole objects, and `suggestionFormat` of images.
+ */
 export const SuggestionAttributes = Extension.create({
   name: "suggestionAttributes",
   addGlobalAttributes() {
     return [
+      {
+        types: [...suggestedObjectTypes],
+        attributes: { suggestionInsert: objectAttribute("insert"), suggestionDelete: objectAttribute("delete") },
+      },
+      {
+        types: ["image"],
+        attributes: {
+          suggestionFormat: {
+            default: null,
+            parseHTML: (element) => jsonAttribute(element.getAttribute("data-suggestion-image")),
+            renderHTML: (attributes) =>
+              attributes.suggestionFormat ? { "data-suggestion-image": JSON.stringify(attributes.suggestionFormat) } : {},
+            validate: validateImageFormat,
+          },
+        },
+      },
       {
         types: textblockTypes,
         attributes: {
@@ -251,7 +369,20 @@ export type Suggestion = SuggestionMeta & {
   paragraphChanges: string[];
   /** The new list of a list change ("Bulleted list", "None"), or null. */
   listChange: string | null;
+  /** Objects it inserts or deletes, as named on the card ("Image", "Table row"), each once. */
+  insertedObjects: string[];
+  deletedObjects: string[];
+  /** Objects it inserts, deletes or reformats, for drawing them (positions in the document). */
+  nodes: { pos: number; size: number; kind: "insert" | "delete" | "format" }[];
+  /**
+   * Set for a suggestion in a header, footer or footnote. `from` and `to` are then where the
+   * region is (the start of the document for headers, the end for footers, the reference for a
+   * footnote), and the region's own positions are here.
+   */
+  region: SuggestionRegion | null;
 };
+
+export type SuggestionRegion = { key: RegionKey | "footnote"; footnotePos: number | null; from: number; to: number };
 
 const markLabels: Record<string, string> = {
   bold: "bold",
@@ -360,6 +491,10 @@ export function collectSuggestions(doc: Node): Suggestion[] {
         formatChanges: [],
         paragraphChanges: [],
         listChange: null,
+        insertedObjects: [],
+        deletedObjects: [],
+        nodes: [],
+        region: null,
         lastBlock: -1,
       };
       byId.set(meta.id, found);
@@ -376,6 +511,12 @@ export function collectSuggestions(doc: Node): Suggestion[] {
   const addAll = (list: string[], labels: string[]) => {
     for (const label of labels) if (!list.includes(label)) list.push(label);
   };
+  /** Objects are outlined as a whole, so they widen the suggestion without adding inline ranges. */
+  const extend = (suggestion: Suggestion, from: number, to: number) => {
+    suggestion.from = Math.min(suggestion.from, from);
+    suggestion.to = Math.max(suggestion.to, to);
+  };
+  const footnotes: { pos: number; node: Node }[] = [];
   let block = -1;
   let previousTextblockEnd = -1;
   doc.descendants((node, pos) => {
@@ -388,7 +529,9 @@ export function collectSuggestions(doc: Node): Suggestion[] {
         if (after) {
           const { labels, list } = blockChangeLabels(format.before, after);
           addAll(suggestion.paragraphChanges, labels);
-          if (list) suggestion.listChange = list;
+          // Turning paragraphs into a list is "Format: bulleted list"; changing a list's kind a "Format bullet" line.
+          if (list && format.before.list === null && after.list) addAll(suggestion.paragraphChanges, [list.toLowerCase()]);
+          else if (list) suggestion.listChange = list;
         }
         cover(suggestion, pos, pos + node.nodeSize);
       }
@@ -409,37 +552,123 @@ export function collectSuggestions(doc: Node): Suggestion[] {
       previousTextblockEnd = pos + node.nodeSize - 1;
       return true;
     }
-    if (!node.isInline) return true;
+    if (!node.isInline) {
+      if (objectTypeNames.has(node.type.name)) {
+        for (const kind of ["insert", "delete"] as const) {
+          const meta = objectSuggestion(node, kind);
+          if (!meta || !isMeta(meta)) continue;
+          const suggestion = entry(meta);
+          addAll(kind === "insert" ? suggestion.insertedObjects : suggestion.deletedObjects, [objectLabels[node.type.name]!]);
+          suggestion.nodes.push({ pos, size: node.nodeSize, kind });
+          extend(suggestion, pos, pos + node.nodeSize);
+        }
+        const imageFormat = node.type.name === "image" ? (node.attrs.suggestionFormat as ImageFormatSuggestion | null) : null;
+        if (imageFormat && isMeta(imageFormat)) {
+          const suggestion = entry(imageFormat);
+          addAll(suggestion.formatChanges, ["image"]);
+          suggestion.nodes.push({ pos, size: node.nodeSize, kind: "format" });
+          extend(suggestion, pos, pos + node.nodeSize);
+        }
+      }
+      return true;
+    }
+    if (node.type.name === "footnote" && regionHasSuggestions(node.attrs.content)) footnotes.push({ pos, node });
     for (const mark of node.marks) {
       if (!isSuggestionMark(mark) || !isMeta(mark.attrs)) continue;
       const suggestion = entry(mark.attrs as SuggestionMeta);
       const text = inlineText(node);
       const separator = suggestion.lastBlock >= 0 && suggestion.lastBlock !== block ? " " : "";
-      if (mark.type.name === "suggestionInsert") suggestion.inserted += (suggestion.inserted && separator) + text;
-      else if (mark.type.name === "suggestionDelete") suggestion.deleted += (suggestion.deleted && separator) + text;
-      else addAll(suggestion.formatChanges, formatChangeLabels((mark.attrs as Record<string, unknown>).before as MarkJSON[], formatMarks(node.marks)));
+      const object = objectLabels[node.type.name];
+      if (mark.type.name === "suggestionInsert") {
+        suggestion.inserted += (suggestion.inserted && separator) + text;
+        if (object) addAll(suggestion.insertedObjects, [object]);
+      } else if (mark.type.name === "suggestionDelete") {
+        suggestion.deleted += (suggestion.deleted && separator) + text;
+        if (object) addAll(suggestion.deletedObjects, [object]);
+      } else {
+        addAll(suggestion.formatChanges, formatChangeLabels((mark.attrs as Record<string, unknown>).before as MarkJSON[], formatMarks(node.marks)));
+      }
       suggestion.lastBlock = block;
       cover(suggestion, pos, pos + node.nodeSize);
     }
     return false;
   });
-  return [...byId.values()]
-    .map(({ lastBlock: _lastBlock, ...suggestion }) => {
-      suggestion.formatChanges.sort((x, y) => orderOf(formatOrder, x) - orderOf(formatOrder, y));
-      return suggestion;
-    })
-    .sort((a, b) => a.from - b.from || (a.id < b.id ? -1 : 1));
+  const suggestions = [...byId.values()].map(({ lastBlock: _lastBlock, ...suggestion }) => {
+    suggestion.formatChanges.sort((x, y) => orderOf(formatOrder, x) - orderOf(formatOrder, y));
+    return suggestion;
+  });
+  // Suggestions in headers and footers (shared by all tabs) and in footnote text.
+  const inRegion = (content: unknown, key: SuggestionRegion["key"], at: number, footnotePos: number | null) => {
+    for (const suggestion of collectSuggestions(regionNode(doc.type.schema, content as RegionContent))) {
+      suggestions.push({
+        ...suggestion,
+        from: at,
+        to: at,
+        ranges: [],
+        breaks: [],
+        nodes: [],
+        region: { key, footnotePos, from: suggestion.from, to: suggestion.to },
+      });
+    }
+  };
+  for (const key of regionKeys) {
+    if (regionHasSuggestions(doc.attrs[key])) inRegion(doc.attrs[key], key, key.endsWith("Header") || key === "header" ? 0 : doc.content.size, null);
+  }
+  for (const { pos, node } of footnotes) inRegion(node.attrs.content, "footnote", pos, pos);
+  return suggestions.sort((a, b) => a.from - b.from || (a.id < b.id ? -1 : 1));
 }
 
 export function hasSuggestions(doc: Node): boolean {
+  if (regionKeys.some((key) => regionHasSuggestions(doc.attrs[key]))) return true;
   let found = false;
   doc.descendants((node) => {
     if (found) return false;
-    if (node.isTextblock && (node.attrs.suggestionFormat || node.attrs.suggestionBreak)) found = true;
-    else if (node.isInline && node.marks.some(isSuggestionMark)) found = true;
+    if (hasSuggestionAttributes(node)) found = true;
+    else if (node.isInline && (node.marks.some(isSuggestionMark) || (node.type.name === "footnote" && regionHasSuggestions(node.attrs.content)))) found = true;
     return !found && !node.isInline;
   });
   return found;
+}
+
+const suggestionAttributeNames = ["suggestionFormat", "suggestionBreak", "suggestionInsert", "suggestionDelete"];
+
+/** Whether a block carries a paragraph, break, object or image suggestion. */
+function hasSuggestionAttributes(node: Node): boolean {
+  if (node.isInline) return false;
+  return suggestionAttributeNames.some((name) => !!node.attrs[name]);
+}
+
+// Suggestions in headers, footers and footnotes ----------------------------------------------
+
+const regionSuggestionCache = new WeakMap<object, boolean>();
+
+/** Whether header, footer or footnote content (block JSON) holds suggestions. */
+export function regionHasSuggestions(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  let found = regionSuggestionCache.get(content);
+  if (found === undefined) {
+    found = content.some(jsonHasSuggestions);
+    regionSuggestionCache.set(content, found);
+  }
+  return found;
+}
+
+function jsonHasSuggestions(node: JSONContent): boolean {
+  if (node.marks?.some((mark) => mark.type.startsWith("suggestion"))) return true;
+  if (node.attrs && suggestionAttributeNames.some((name) => !!node.attrs![name])) return true;
+  return node.content?.some(jsonHasSuggestions) ?? false;
+}
+
+const regionNodes = new WeakMap<object, Node>();
+
+/** Region content as a document node (parsed once per content array). */
+export function regionNode(schema: Schema, content: RegionContent): Node {
+  let node = regionNodes.get(content);
+  if (!node) {
+    node = schema.nodeFromJSON({ type: "doc", content });
+    regionNodes.set(content, node);
+  }
+  return node;
 }
 
 const MAX_QUOTE_LENGTH = 50;
@@ -452,20 +681,33 @@ export function quoteText(text: string): string {
 }
 
 /** The lines of a suggestion card's description. */
+/**
+ * The lines of a suggestion card's description. Text is quoted ("Add: “text”"); an object is
+ * named instead ("Add: Image"), marked by `insertedObject` / `deletedObject`.
+ */
 export type SuggestionDescription =
-  | { action: "Add"; inserted: string }
-  | { action: "Delete"; deleted: string }
-  | { action: "Replace"; deleted: string; inserted: string }
+  | { action: "Add"; inserted: string; insertedObject?: boolean }
+  | { action: "Delete"; deleted: string; deletedObject?: boolean }
+  | { action: "Replace"; deleted: string; inserted: string; insertedObject?: boolean; deletedObject?: boolean }
   | { action: "Format"; changes: string }
   | { action: "Format bullet"; changes: string };
 
 export function describeSuggestion(suggestion: Suggestion): SuggestionDescription[] {
   const lines: SuggestionDescription[] = [];
-  const inserted = quoteText(suggestion.inserted) || (suggestion.insertedBreaks > 0 ? "↵" : "");
-  const deleted = quoteText(suggestion.deleted) || (suggestion.deletedBreaks > 0 ? "↵" : "");
-  if (inserted && deleted) lines.push({ action: "Replace", deleted, inserted });
-  else if (inserted) lines.push({ action: "Add", inserted });
-  else if (deleted) lines.push({ action: "Delete", deleted });
+  // Objects are named rather than quoted: the text in an inserted table is part of "Add: Table".
+  const insertedObject = suggestion.insertedObjects.length > 0;
+  const deletedObject = suggestion.deletedObjects.length > 0;
+  const inserted = insertedObject
+    ? suggestion.insertedObjects.join(", ")
+    : quoteText(suggestion.inserted) || (suggestion.insertedBreaks > 0 ? "↵" : "");
+  // An object put in place of an empty paragraph removes that paragraph's break: still "Add: Table".
+  const deleted = deletedObject
+    ? suggestion.deletedObjects.join(", ")
+    : quoteText(suggestion.deleted) || (suggestion.deletedBreaks > 0 && !insertedObject ? "↵" : "");
+  const objects = { ...(insertedObject && { insertedObject }), ...(deletedObject && { deletedObject }) };
+  if (inserted && deleted) lines.push({ action: "Replace", deleted, inserted, ...objects });
+  else if (inserted) lines.push({ action: "Add", inserted, ...(insertedObject && { insertedObject }) });
+  else if (deleted) lines.push({ action: "Delete", deleted, ...(deletedObject && { deletedObject }) });
   const changes = [...suggestion.formatChanges, ...suggestion.paragraphChanges.filter((label) => !suggestion.formatChanges.includes(label))];
   if (changes.length > 0) lines.push({ action: "Format", changes: changes.join(", ") });
   if (suggestion.listChange) lines.push({ action: "Format bullet", changes: suggestion.listChange });
@@ -475,13 +717,14 @@ export function describeSuggestion(suggestion: Suggestion): SuggestionDescriptio
 
 /** One line of a description as plain text, as in "Add: “text”". */
 export function descriptionText(line: SuggestionDescription): string {
+  const quote = (text: string, object?: boolean) => (object ? text : `“${text}”`);
   switch (line.action) {
     case "Add":
-      return `Add: “${line.inserted}”`;
+      return `Add: ${quote(line.inserted, line.insertedObject)}`;
     case "Delete":
-      return `Delete: “${line.deleted}”`;
+      return `Delete: ${quote(line.deleted, line.deletedObject)}`;
     case "Replace":
-      return `Replace: “${line.deleted}” with “${line.inserted}”`;
+      return `Replace: ${quote(line.deleted, line.deletedObject)} with ${quote(line.inserted, line.insertedObject)}`;
     default:
       return `${line.action}: ${line.changes}`;
   }
@@ -506,6 +749,9 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
   const blocks: { pos: number; node: Node; format: FormatSuggestion | null; brk: BreakSuggestion | null }[] = [];
   let previousEnd = -1;
   const breaks: { pos: number; previousEnd: number; brk: BreakSuggestion }[] = [];
+  const objects: { pos: number; node: Node; kind: "insert" | "delete" }[] = [];
+  const images: { pos: number; node: Node; format: ImageFormatSuggestion }[] = [];
+  const footnotes: { pos: number; node: Node }[] = [];
   doc.descendants((node, pos) => {
     if (node.isTextblock) {
       const format = node.attrs.suggestionFormat as FormatSuggestion | null;
@@ -517,7 +763,15 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
       previousEnd = pos + node.nodeSize - 1;
       return true;
     }
-    if (!node.isInline) return true;
+    if (!node.isInline) {
+      if (objectTypeNames.has(node.type.name)) {
+        for (const kind of ["insert", "delete"] as const) if (selected(objectSuggestion(node, kind))) objects.push({ pos, node, kind });
+        const imageFormat = node.type.name === "image" ? (node.attrs.suggestionFormat as ImageFormatSuggestion | null) : null;
+        if (imageFormat && selected(imageFormat)) images.push({ pos, node, format: imageFormat });
+      }
+      return true;
+    }
+    if (node.type.name === "footnote" && regionHasSuggestions(node.attrs.content)) footnotes.push({ pos, node });
     for (const mark of node.marks) {
       if (!selected(mark.attrs as SuggestionMeta) || !isSuggestionMark(mark)) continue;
       const part = { from: pos, to: pos + node.nodeSize, node, mark };
@@ -550,16 +804,46 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
     }
     if (brk) tr.setNodeAttribute(pos, "suggestionBreak", null);
   }
+  // Objects that stay lose their suggestion; the others are removed below.
+  const removedObjects = new Set<number>();
+  for (const { pos, node, kind } of objects) {
+    if ((action === "accept") === (kind === "insert")) tr.setNodeAttribute(pos, kind === "insert" ? "suggestionInsert" : "suggestionDelete", null);
+    else removedObjects.add(pos);
+  }
+  for (const { pos, node, format } of images) {
+    if (removedObjects.has(pos)) continue;
+    if (action === "reject") {
+      for (const [key, value] of Object.entries(format.before)) {
+        if (key in node.attrs && !sameJSON(node.attrs[key] ?? null, value)) tr.setNodeAttribute(pos, key, value);
+      }
+    }
+    tr.setNodeAttribute(pos, "suggestionFormat", null);
+  }
+  // Headers, footers and footnote text: their content is replaced by the result.
+  const resolveRegion = (content: unknown): RegionContent | null => {
+    const before = regionNode(schema, content as RegionContent);
+    const after = applySuggestions(new Transform(before), action, ids).doc;
+    return after.eq(before) ? null : (after.content.toJSON() as RegionContent);
+  };
+  for (const key of regionKeys) {
+    if (!regionHasSuggestions(doc.attrs[key])) continue;
+    const content = resolveRegion(doc.attrs[key]);
+    if (content) tr.setDocAttribute(key, content);
+  }
+  for (const { pos, node } of footnotes) {
+    const content = resolveRegion(node.attrs.content);
+    if (content) tr.setNodeAttribute(pos, "content", content);
+  }
 
   // Deletions, from the end of the document to the start.
   const removals: { from: number; to: number }[] = (action === "accept" ? deletes : inserts).map(({ from, to }) => ({ from, to }));
+  removals.push(...objectRemovals(doc, removedObjects));
   const joinKind = action === "accept" ? "delete" : "insert";
   for (const { pos, previousEnd: end, brk } of breaks) {
-    if (brk.kind === joinKind && end >= 0 && joinable(doc, end, pos + 1)) removals.push({ from: end, to: pos + 1 });
+    if (brk.kind === joinKind && end >= 0 && joinable(doc, end, pos + 1, removedObjects)) removals.push({ from: end, to: pos + 1 });
   }
-  removals.sort((a, b) => b.from - a.from);
   const start = tr.steps.length;
-  for (const { from, to } of removals) tr.delete(from, to);
+  for (const { from, to } of mergeRanges(removals).reverse()) tr.delete(from, to);
 
   for (const { pos, list } of listReverts) {
     const mapped = tr.mapping.slice(start).mapResult(pos + 1);
@@ -580,13 +864,55 @@ function restoreFormat(tr: Transform, schema: Schema, part: InlinePart): void {
   }
 }
 
-/** Whether only the closing and opening tokens of textblocks, list items and lists lie between `from` and `to`. */
-export function joinable(doc: Node, from: number, to: number): boolean {
+/**
+ * The ranges of objects being removed. A table row whose cells all go, or a table whose rows all
+ * go, is removed whole (a table cannot be empty).
+ */
+function objectRemovals(doc: Node, positions: ReadonlySet<number>): { from: number; to: number }[] {
+  const removed = new Set(positions);
+  for (let changed = removed.size > 0; changed; ) {
+    changed = false;
+    for (const pos of [...removed]) {
+      const $pos = doc.resolve(pos);
+      if ($pos.depth === 0) continue;
+      const parentPos = $pos.before();
+      const role = $pos.parent.type.spec.tableRole as string | undefined;
+      if (removed.has(parentPos) || (role !== "row" && role !== "table")) continue;
+      let all = true;
+      $pos.parent.forEach((_child, offset) => {
+        if (!removed.has(parentPos + 1 + offset)) all = false;
+      });
+      if (all) {
+        removed.add(parentPos);
+        changed = true;
+      }
+    }
+  }
+  return [...removed].map((pos) => ({ from: pos, to: pos + doc.nodeAt(pos)!.nodeSize }));
+}
+
+/** Overlapping or touching ranges joined, in document order. */
+function mergeRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
+  const merged: { from: number; to: number }[] = [];
+  for (const range of [...ranges].sort((a, b) => a.from - b.from)) {
+    const last = merged[merged.length - 1];
+    if (last && range.from <= last.to) last.to = Math.max(last.to, range.to);
+    else merged.push({ ...range });
+  }
+  return merged;
+}
+
+/**
+ * Whether only the closing and opening tokens of textblocks, list items and lists lie between
+ * `from` and `to`, apart from objects at the positions in `removed`, which are removed with them.
+ */
+export function joinable(doc: Node, from: number, to: number, removed: ReadonlySet<number> = new Set()): boolean {
   if (to <= from) return false;
   let ok = true;
   doc.nodesBetween(from, to, (node, pos) => {
     if (!ok) return false;
     const end = pos + node.nodeSize;
+    if (removed.has(pos) && pos >= from && end <= to) return false;
     // Ancestors around the whole range and the two textblocks at its ends.
     if (pos < from && end > to) return true;
     if (node.isTextblock || listTypes.has(node.type.name) || listItemTypes.has(node.type.name)) {
@@ -646,8 +972,10 @@ export function acceptedDocument(doc: Node): Node {
 
 // Text as if suggestions were accepted -------------------------------------------------------
 
+/** Text suggested for deletion, or an object (a table row…) suggested for deletion. */
 function isDeleted(node: Node): boolean {
-  return node.isInline && node.marks.some((mark) => mark.type.name === "suggestionDelete");
+  if (!node.isInline) return !!node.attrs.suggestionDelete;
+  return node.marks.some((mark) => mark.type.name === "suggestionDelete");
 }
 
 /** Like `Node.textBetween`, without text suggested for deletion: the text word count and the outline read. */
@@ -713,13 +1041,27 @@ function stripFragment(fragment: Fragment): Fragment {
     if (node.isText) {
       next = node.mark(node.marks.filter((mark) => !isSuggestionMark(mark)));
     } else {
-      const attrs =
-        node.attrs.suggestionFormat || node.attrs.suggestionBreak ? { ...node.attrs, suggestionFormat: null, suggestionBreak: null } : node.attrs;
+      let attrs = node.attrs;
+      for (const name of suggestionAttributeNames) if (attrs[name]) attrs = { ...attrs, [name]: null };
+      if (node.type.name === "footnote" && regionHasSuggestions(node.attrs.content)) {
+        attrs = { ...attrs, content: (node.attrs.content as JSONContent[]).map(stripJSON) };
+      }
       next = node.type.create(attrs, stripFragment(node.content), node.marks.filter((mark) => !isSuggestionMark(mark)));
     }
     children.push(next);
   });
   return Fragment.from(children);
+}
+
+function stripJSON(node: JSONContent): JSONContent {
+  const result: JSONContent = { ...node };
+  if (node.marks) result.marks = node.marks.filter((mark) => !mark.type.startsWith("suggestion"));
+  if (node.attrs) {
+    result.attrs = { ...node.attrs };
+    for (const name of suggestionAttributeNames) if (result.attrs[name]) result.attrs[name] = null;
+  }
+  if (node.content) result.content = node.content.map(stripJSON);
+  return result;
 }
 
 /** A suggestion mark of `type` for the given suggestion. */

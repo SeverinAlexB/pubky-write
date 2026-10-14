@@ -218,9 +218,15 @@ To restore a backup:
   document. Tools > Review suggested edits (Ctrl+⌘O then Ctrl+⌘U) steps through
   them, previews the document with all of them accepted or rejected, and
   accepts or rejects one or all (each one undo step). Viewing mode shows the
-  document read-only as if every suggestion were accepted. Tables, images, page
-  breaks, horizontal lines, the table of contents, headers, footers and
-  footnotes are edited directly even in Suggesting mode. See
+  document read-only as if every suggestion were accepted. Inserting or
+  deleting images, tables, table rows and columns, page and column breaks,
+  horizontal lines, tables of contents and footnotes, turning paragraphs into a
+  list and changing an image (size, wrapping, rotation, crop…) are suggestions
+  too ("Add: Image", "Delete: Table row", "Format: image"; inserted objects
+  have a dashed outline, deleted ones are striped or struck through), and so is
+  typing in headers, footers and footnotes, whose cards show next to them while
+  they are edited and in Review suggested edits. Merging and splitting cells,
+  sorting a table and dragging an image are applied directly. See
   [docs/design/suggesting.md](docs/design/suggesting.md).
 - **Autosave:** edits are sent about 300 ms after you stop typing. The header
   shows whether changes are saving, saved, or waiting for the connection to come
@@ -271,8 +277,9 @@ To restore a backup:
   number start, real Word footnotes, and the table of contents as paragraphs
   with right-aligned page numbers (and dotted leaders) or links to bookmarks on
   the headings. Suggestions become tracked changes (insertions, deletions,
-  format changes and paragraph marks); Markdown and plain text are written as
-  if every suggestion were accepted.
+  format changes and paragraph marks, inserted and deleted table rows and cells,
+  images, breaks and footnotes, also in headers, footers and footnotes);
+  Markdown and plain text are written as if every suggestion were accepted.
   In Markdown, Title becomes a level 1 heading, Subtitle a plain paragraph,
   checklists `- [ ]` / `- [x]`, superscript and subscript `<sup>` / `<sub>`,
   a page break the comment `<!-- page break -->`, footnotes `[^1]` with the
@@ -379,10 +386,11 @@ checks the result against it before creating the document.
   images (stored in `uploads/`) with their size, rotation and crop, and for anchored ones their
   text wrapping, margin and position; line, page and column breaks; columns; page size, orientation,
   margins and page colour; the default and first-page header and footer, the page number
-  start, PAGE and NUMPAGES fields and footnotes. Tracked changes in the body
-  become suggestions (insertions, deletions, run format changes and inserted or
-  deleted paragraph marks); in headers, footers and footnotes inserted text is
-  kept and deleted text left out.
+  start, PAGE and NUMPAGES fields and footnotes. Tracked changes become
+  suggestions, also in headers, footers and footnotes (insertions, deletions,
+  run format changes, inserted or deleted paragraph marks, table rows and
+  cells, and images, breaks and footnote references inside insertions or
+  deletions).
 - **Markdown** (`markdown.ts`, with markdown-it): headings, emphasis,
   strikethrough, inline code, links, lists and `- [ ]` checklists, quotes, code
   blocks, horizontal lines, tables with column alignment, images (data URLs are

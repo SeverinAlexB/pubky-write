@@ -107,7 +107,8 @@ export function findMatches(doc: Node, options: SearchOptions, range: SearchRang
   if (!pattern) return [];
   const matches: SearchMatch[] = [];
   doc.nodesBetween(range.from, range.to, (node, pos) => {
-    if (!node.isTextblock) return true;
+    // Text in an object suggested for deletion (a table row) is not searched, like deleted text.
+    if (!node.isTextblock) return !node.attrs.suggestionDelete;
     const { text: raw, offsets } = acceptedTextOffsets(node, leafText);
     const folded = foldText(raw, options.ignoreDiacritics);
     const start = pos + 1;

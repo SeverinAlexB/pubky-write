@@ -1,11 +1,14 @@
 // Converts a document to a Word file with the `docx` library. Suggestions become tracked changes:
-// insertions and deletions (w:ins, w:del), text format changes (w:rPrChange) and inserted or deleted
-// paragraph marks for suggested paragraph breaks.
+// insertions and deletions (w:ins, w:del), text format changes (w:rPrChange), inserted or deleted
+// paragraph marks for suggested paragraph breaks, inserted or deleted table rows (w:trPr) and cells
+// (w:cellIns, w:cellDel), and inserted or deleted images, breaks and footnote references (their
+// runs in w:ins or w:del), also in headers, footers and footnotes.
 import {
   AlignmentType,
   Bookmark,
   BorderStyle,
   ColumnBreak,
+  DeletedTableRow,
   DeletedTextRun,
   Document,
   ExternalHyperlink,
@@ -16,6 +19,7 @@ import {
   HeightRule,
   HorizontalPositionRelativeFrom,
   ImageRun,
+  InsertedTableRow,
   InsertedTextRun,
   InternalHyperlink,
   LeaderType,
@@ -72,6 +76,7 @@ import {
   tocTarget,
   type BreakSuggestion,
   type MarkJSON,
+  type SuggestionMeta,
   type NumberFormat,
   type ParagraphStyleDefinition,
   type RegionContent,
@@ -81,6 +86,15 @@ import {
 export type ImageReader = (src: string) => Promise<Buffer | null>;
 
 type Block = Paragraph | Table;
+/** A suggested insertion or deletion that applies to everything inside an object (a deleted table row's text). */
+type Tracked = { kind: "insert" | "delete"; meta: SuggestionMeta };
+
+/** The suggested insertion or deletion of a whole object, if any. */
+function trackedObject(node: Node): Tracked | null {
+  const inserted = node.attrs.suggestionInsert as SuggestionMeta | null | undefined;
+  const deleted = node.attrs.suggestionDelete as SuggestionMeta | null | undefined;
+  return deleted ? { kind: "delete", meta: deleted } : inserted ? { kind: "insert", meta: inserted } : null;
+}
 type ListKind = "bullet" | "ordered" | "task";
 /** Nested lists of the same kind use the preset and numbering instance of their outermost list. */
 type ListContext = { kind: ListKind; level: number; instance: number; preset: number };
@@ -126,7 +140,7 @@ export async function toDocx(doc: Node, title: string, readImage: ImageReader): 
   const region = async (key: RegionKey, Kind: typeof Header | typeof Footer, always: boolean) => {
     const content = settings[key];
     if (isEmptyRegion(content) && !always) return undefined;
-    const blocks = content && !isEmptyRegion(content) ? await converter.blocks(regionDoc(content)) : [];
+    const blocks = content && !isEmptyRegion(content) ? await converter.blocks(converter.withBreaks(regionDoc(content))) : [];
     return new Kind({ children: blocks.length > 0 ? blocks : [new Paragraph("")] });
   };
   // With a different first page, page 1 gets its own (possibly empty) header and footer.
@@ -295,6 +309,11 @@ class DocxConverter {
       return !linked && node.isBlock && !node.isTextblock;
     });
     if (linked) tocHeadings(doc).forEach((heading, index) => this.linkedHeadings.set(doc.nodeAt(heading.pos)!, index));
+    this.withBreaks(doc);
+  }
+
+  /** Records the suggested paragraph breaks of a document (the body, a header, a footnote's text). */
+  withBreaks(doc: Node): Node {
     let previous: Node | null = null;
     doc.descendants((node) => {
       if (!node.isTextblock) return true;
@@ -303,6 +322,45 @@ class DocxConverter {
       previous = node;
       return false;
     });
+    return doc;
+  }
+
+  /**
+   * The insertion or deletion of the object being converted (a table row, a footnote), which its
+   * runs carry too.
+   */
+  private tracked: Tracked | null = null;
+
+  /** Converts the content of an object with its suggestion applied to all of its runs. */
+  private async within<T>(tracked: Tracked | null, convert: () => Promise<T>): Promise<T> {
+    if (!tracked || this.tracked) return convert();
+    this.tracked = tracked;
+    try {
+      return await convert();
+    } finally {
+      this.tracked = null;
+    }
+  }
+
+  /** The `insertion` or `deletion` option of a run, row, cell or paragraph mark for a tracked object. */
+  private revisionOf(tracked: Tracked | null) {
+    if (!tracked) return {};
+    return tracked.kind === "insert" ? { insertion: this.revision(tracked.meta) } : { deletion: this.revision(tracked.meta) };
+  }
+
+  /** A run that is not a text run (a page break, a footnote reference) inside w:ins or w:del. */
+  private trackedRun(tracked: Tracked | null, run: PageBreak | ColumnBreak | FootnoteReferenceRun): ParagraphChild {
+    if (!tracked) return run;
+    const revision = this.revision(tracked.meta);
+    // The library writes these as an empty w:ins / w:del with the revision's attributes.
+    const wrapper = tracked.kind === "insert" ? new InsertedTableRow(revision) : new DeletedTableRow(revision);
+    wrapper.addChildElement(run);
+    return wrapper as unknown as ParagraphChild;
+  }
+
+  /** A paragraph of its own for an inserted or deleted object: its paragraph mark goes with it. */
+  private objectParagraph(tracked: Tracked | null): Partial<IParagraphOptions> {
+    return tracked ? { run: this.revisionOf(tracked) } : {};
   }
 
   /** Revision attributes of a suggestion: a new id, its author and date. */
@@ -324,9 +382,9 @@ class DocxConverter {
   /** A run, as a tracked insertion or deletion, or with its formatting before a suggested format change. */
   private run(options: IRunOptions, marks: readonly Mark[]): ParagraphChild {
     const find = (name: string) => marks.find((mark) => mark.type.name === name);
-    const deleted = find("suggestionDelete");
+    const deleted = find("suggestionDelete") ?? (this.tracked?.kind === "delete" ? { attrs: this.tracked.meta } : undefined);
     if (deleted) return new DeletedTextRun({ ...options, ...this.revision(deleted.attrs) });
-    const inserted = find("suggestionInsert");
+    const inserted = find("suggestionInsert") ?? (this.tracked?.kind === "insert" ? { attrs: this.tracked.meta } : undefined);
     if (inserted) return new InsertedTextRun({ ...options, ...this.revision(inserted.attrs) });
     const format = find("suggestionFormat");
     if (format) {
@@ -399,7 +457,7 @@ class DocxConverter {
           }),
         ];
       case "tableOfContents":
-        return this.tableOfContents(node);
+        return this.within(trackedObject(node), async () => this.tableOfContents(node));
       case "blockquote":
         return this.blocks(node, list, true);
       case "bulletList":
@@ -413,9 +471,11 @@ class DocxConverter {
       case "taskItem":
         return this.taskItem(node, list, quoted);
       case "pageBreak":
-        return [new Paragraph({ children: [new PageBreak()] })];
-      case "columnBreak":
-        return [new Paragraph({ children: [new ColumnBreak()] })];
+      case "columnBreak": {
+        const tracked = trackedObject(node) ?? this.tracked;
+        const brk = node.type.name === "pageBreak" ? new PageBreak() : new ColumnBreak();
+        return [new Paragraph({ ...this.objectParagraph(tracked), children: [this.trackedRun(tracked, brk)] })];
+      }
       case "codeBlock":
         return [
           new Paragraph({
@@ -427,11 +487,16 @@ class DocxConverter {
           }),
         ];
       case "horizontalRule":
-        return [new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "999999", space: 1 } } })];
+        return [
+          new Paragraph({
+            ...this.objectParagraph(trackedObject(node) ?? this.tracked),
+            border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "999999", space: 1 } },
+          }),
+        ];
       case "image":
-        return [new Paragraph({ ...base, children: [await this.image(node)] })];
+        return [new Paragraph({ ...base, ...this.objectParagraph(trackedObject(node) ?? this.tracked), children: [await this.image(node)] })];
       case "table":
-        return [await this.table(node)];
+        return [await this.within(trackedObject(node), () => this.table(node))];
       default:
         return [new Paragraph({ ...base, children: [new TextRun(node.textContent)] })];
     }
@@ -459,21 +524,23 @@ class DocxConverter {
       // Entries of the highest level used are bold.
       const bold = entry.attrs.indent === 0 && entry.attrs.heading !== null;
       if (toc.attrs.style === "links") {
-        const run = new TextRun({ text, bold, color: "1155CC", underline: {} });
+        const run = this.run({ text, bold, color: "1155CC", underline: {} }, []);
         return new Paragraph({
+          ...this.objectParagraph(this.tracked),
           indent,
           spacing: { after: 4 * TWIPS_PER_POINT },
           children: [bookmark === undefined ? run : new InternalHyperlink({ anchor: headingBookmark(bookmark), children: [run] })],
         });
       }
-      const page = entry.attrs.page === null ? [] : [new TextRun({ children: [new Tab(), String(entry.attrs.page)] })];
+      const page = entry.attrs.page === null ? [] : [this.run({ children: [new Tab(), String(entry.attrs.page)] }, [])];
       return new Paragraph({
+        ...this.objectParagraph(this.tracked),
         indent,
         spacing: { after: 4 * TWIPS_PER_POINT },
         tabStops: [
           { type: TabStopType.RIGHT, position: this.contentWidth, ...(toc.attrs.style === "dotted" && { leader: LeaderType.DOT }) },
         ],
-        children: [new TextRun({ text, bold }), ...page],
+        children: [this.run({ text, bold }, []), ...page],
       });
     });
   }
@@ -482,10 +549,11 @@ class DocxConverter {
   private async footnote(content: RegionContent): Promise<number> {
     const id = ++this.footnoteCount;
     const paragraphs: Paragraph[] = [];
-    for (const paragraph of children(regionDoc(content))) {
+    for (const paragraph of children(this.withBreaks(regionDoc(content)))) {
       paragraphs.push(
         new Paragraph({
           style: "FootnoteText",
+          ...this.paragraphMark(paragraph),
           alignment: alignments[paragraph.attrs.textAlign as keyof typeof alignments],
           ...(tabStops(paragraph) && { tabStops: tabStops(paragraph) }),
           children: await this.inline(paragraph),
@@ -546,8 +614,13 @@ class DocxConverter {
     for (const row of children(table)) {
       const cells: TableCell[] = [];
       let cellOffset = offset + 1;
+      // A whole inserted or deleted table: every row is.
+      const rowTracked = trackedObject(row) ?? this.tracked;
       for (const cell of children(row)) {
-        const content = (await this.blocks(cell)).filter((block): block is Paragraph => block instanceof Paragraph);
+        const cellTracked = trackedObject(cell);
+        const content = (await this.within(rowTracked ?? cellTracked, () => this.blocks(cell))).filter(
+          (block): block is Paragraph => block instanceof Paragraph,
+        );
         const start = map.colCount(cellOffset);
         const width = columnWidths.slice(start, start + cell.attrs.colspan).reduce((sum, value) => sum + value, 0);
         cells.push(
@@ -556,6 +629,8 @@ class DocxConverter {
             columnSpan: cell.attrs.colspan,
             rowSpan: cell.attrs.rowspan,
             width: { size: width, type: WidthType.DXA },
+            // A suggested column: Word's inserted or deleted cells.
+            ...(!rowTracked && this.revisionOf(cellTracked)),
             ...(hexColor(cell.attrs.backgroundColor) && {
               shading: { type: ShadingType.CLEAR, fill: hexColor(cell.attrs.backgroundColor) },
             }),
@@ -567,6 +642,7 @@ class DocxConverter {
       rows.push(
         new TableRow({
           children: cells,
+          ...this.revisionOf(rowTracked),
           ...(header && { tableHeader: true }),
           ...(isSize(row.attrs.height) && {
             height: { value: Math.round(row.attrs.height * TWIPS_PER_PX), rule: HeightRule.ATLEAST },
@@ -601,7 +677,8 @@ class DocxConverter {
   private async image(node: Node): Promise<ParagraphChild> {
     const data = await this.readImage(node.attrs.src);
     const size = data ? safeImageSize(data) : null;
-    if (!data || !size) return new TextRun({ text: `[Image: ${node.attrs.alt || node.attrs.src}]`, italics: true });
+    const tracked = trackedObject(node) ?? this.tracked;
+    if (!data || !size) return this.within(tracked, async () => this.run({ text: `[Image: ${node.attrs.alt || node.attrs.src}]`, italics: true }, []));
 
     const layout = imageLayoutOf(node.attrs);
     const { width, height } = node.attrs;
@@ -624,6 +701,8 @@ class DocxConverter {
         crop: { left: percent(layout.crop.left), top: percent(layout.crop.top), right: percent(layout.crop.right), bottom: percent(layout.crop.bottom) },
       }),
       ...(floatingOptions(node) && { floating: floatingOptions(node) }),
+      // An inserted or deleted image: its run in w:ins or w:del.
+      ...this.revisionOf(tracked),
       altText: node.attrs.alt || node.attrs.title
         ? { name: node.attrs.title || node.attrs.alt, description: node.attrs.alt ?? undefined, title: node.attrs.title ?? undefined }
         : undefined,
@@ -643,7 +722,13 @@ class DocxConverter {
         const field = node.attrs.kind === "count" ? PageNumber.TOTAL_PAGES : PageNumber.CURRENT;
         runs.push(this.run({ ...runOptions(node.marks, strike), children: [field] }, node.marks));
       } else if (node.type.name === "footnote") {
-        runs.push(new FootnoteReferenceRun(await this.footnote(node.attrs.content as RegionContent)));
+        // An inserted or deleted footnote: its reference and its text.
+        const mark = node.marks.find((candidate) => candidate.type.name === "suggestionInsert" || candidate.type.name === "suggestionDelete");
+        const tracked: Tracked | null = mark
+          ? { kind: mark.type.name === "suggestionInsert" ? "insert" : "delete", meta: mark.attrs as SuggestionMeta }
+          : this.tracked;
+        const id = await this.within(tracked, () => this.footnote(node.attrs.content as RegionContent));
+        runs.push(this.trackedRun(tracked, new FootnoteReferenceRun(id)));
       } else if (node.isText) {
         const run = this.run({ text: node.text ?? "", ...runOptions(node.marks, strike) }, node.marks);
         const link = node.marks.find((mark) => mark.type.name === "link");

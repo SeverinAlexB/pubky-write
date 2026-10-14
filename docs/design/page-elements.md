@@ -50,6 +50,9 @@ one transaction on the main editor that sets the attribute to the region's new J
 - when the main state changes the attribute (undo, redo, restore) the region editor replaces
   only the part of its content that differs, so the cursor stays where it was.
 
+In Suggesting mode the region editor turns its edits into suggestions inside its own content,
+like the body (see [suggesting.md](suggesting.md#headers-footers-and-footnotes)).
+
 The toolbar and the Format menu act on the region editor while it is active (bold,
 alignment, fonts…). Only one region editor exists at a time; every other header, footer and
 footnote is a static rendering of its JSON (`DOMSerializer`).

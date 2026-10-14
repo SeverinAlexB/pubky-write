@@ -12,6 +12,7 @@ import {
   pageSetupKeys,
   pageSetupOf,
   type ColumnSettings,
+  type Suggestion,
   type CommentThread,
   type OpenedDocument,
   type PageSetup,
@@ -69,7 +70,7 @@ import { TocPill } from "./TocPill.tsx";
 import { OutlinePanel, OutlineToggle, type TabActions } from "./OutlinePanel.tsx";
 import { addTab, currentTab, currentTabId, documentTabsKey, switchTab } from "./documentTabs.ts";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
-import { cursorPage, resetPagination } from "./pagination.ts";
+import { cursorPage, documentFootnotes, resetPagination } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
 import { stepsTransport } from "./stepsTransport.ts";
 import {
@@ -82,6 +83,7 @@ import {
   type PendingEntry,
 } from "./pendingSteps.ts";
 import {
+  applyDirectly,
   getSuggesting,
   resolveSuggestions,
   setSuggesting,
@@ -586,9 +588,46 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     activateSuggestion(id);
     const suggestion = getSuggesting(editor.state).suggestions.find((candidate) => candidate.id === id);
     if (!suggestion) return;
+    if (suggestion.region) {
+      // A header's, footer's or footnote's suggestion: its region on the page.
+      if (suggestion.region.key !== "footnote" && !printLayout) setPrintLayout(true);
+      requestAnimationFrame(() => regionElement(suggestion)?.scrollIntoView({ block: "center" }));
+      return;
+    }
     const { node } = editor.view.domAtPos(Math.min(suggestion.from + 1, editor.state.doc.content.size));
     const element = node instanceof HTMLElement ? node : node.parentElement;
     element?.scrollIntoView({ block: "center" });
+  }
+
+  /** Whether a header's, footer's or footnote's suggestion is in the region being edited. */
+  function isEditedRegion(suggestion: Suggestion): boolean {
+    if (!regionEditor || regionEditor.isDestroyed || !suggestion.region) return false;
+    return getSuggesting(regionEditor.state).suggestions.some((candidate) => candidate.id === suggestion.id);
+  }
+
+  /** Where a header, footer or footnote is drawn: the first page's copy (or the one being edited). */
+  function regionElement(suggestion: Suggestion): HTMLElement | null {
+    const region = suggestion.region;
+    if (!region || !stack) return null;
+    if (region.key === "footnote") {
+      const index = documentFootnotes(editor.state).findIndex((footnote) => footnote.pos === region.footnotePos);
+      return stack.querySelector<HTMLElement>(`.footnote-entry[data-footnote-index="${index}"]`);
+    }
+    return stack.querySelector<HTMLElement>(`.page-region-slot.is-editing[data-region-key="${region.key}"]`) ??
+      stack.querySelector<HTMLElement>(`.page-region-slot[data-region-key="${region.key}"]`);
+  }
+
+  /** The top of a header's, footer's or footnote's suggestion in the window, for its card. */
+  function regionSuggestionTop(suggestion: Suggestion): number | null {
+    if (!suggestion.region) return null;
+    if (regionEditor && !regionEditor.isDestroyed && isEditedRegion(suggestion)) {
+      try {
+        return regionEditor.view.coordsAtPos(Math.min(suggestion.region.from, regionEditor.state.doc.content.size)).top;
+      } catch {
+        return null;
+      }
+    }
+    return regionElement(suggestion)?.getBoundingClientRect().top ?? null;
   }
 
   /** One suggestion, or (null) all of the shown tab's. */
@@ -1095,13 +1134,23 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: null }));
     }
   }, [editor, suggestionState.activeId]);
-  // The shown tab's suggestions: in the margin and in Review suggested edits.
+  // The shown tab's suggestions: in the margin and in Review suggested edits. Headers and footers
+  // belong to every tab.
   const tabSuggestions =
     tabCount > 1
-      ? suggestionState.suggestions.filter((suggestion) => tabAtPos(editor.state.doc, suggestion.from)?.id === shownTabId)
+      ? suggestionState.suggestions.filter(
+          (suggestion) =>
+            (suggestion.region !== null && suggestion.region.key !== "footnote") || tabAtPos(editor.state.doc, suggestion.from)?.id === shownTabId,
+        )
       : suggestionState.suggestions;
-  // Suggestion cards are shown with the suggestions, not in the previews.
-  const marginSuggestions = display === "suggestions" ? tabSuggestions : [];
+  // Suggestion cards are shown with the suggestions, not in the previews. A header's, footer's or
+  // footnote's cards are shown while it is edited, and the active one (selected in Review suggested edits).
+  const marginSuggestions =
+    display === "suggestions"
+      ? tabSuggestions.filter(
+          (suggestion) => suggestion.region === null || suggestion.id === suggestionState.activeId || isEditedRegion(suggestion),
+        )
+      : [];
   // The margin is there while there is something to show in it; Viewing mode shows only the document.
   const marginShown =
     !commentsHidden &&
@@ -1260,6 +1309,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                     }}
                     onRegionEditor={setRegionEditor}
                     onPageNumbers={(position) => setPageNumbersDialog(currentPageNumberOptions(editor.state.doc, position))}
+                    onActivateSuggestion={activateSuggestion}
                   />
                 </div>
                 {marginShown && (
@@ -1278,6 +1328,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                     onDeleteReply={async (id, messageId) => replaceThread(await api.deleteCommentReply(doc.id, id, messageId))}
                     onCopyLink={(id) => void copyCommentLink(id)}
                     suggestions={marginSuggestions}
+                    regionEditor={regionEditor}
+                    regionTop={regionSuggestionTop}
                     activeSuggestion={display === "suggestions" ? suggestionState.activeId : null}
                     suggestionReplies={suggestionReplies}
                     onActivateSuggestion={activateSuggestion}
@@ -1393,7 +1445,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           <SplitCellDialog
             onSplit={(columns, rows) => {
               setSplitCellOpen(false);
-              splitCellInto(columns, rows)(editor.state, editor.view.dispatch);
+              // Splitting cells is applied directly, also in Suggesting mode.
+              splitCellInto(columns, rows)(editor.state, (tr) => editor.view.dispatch(applyDirectly(tr)));
               editor.commands.focus();
             }}
             onCancel={() => {

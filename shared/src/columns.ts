@@ -106,8 +106,8 @@ export const ColumnBreak = TiptapNode.create({
     return [{ tag: 'div[data-type="column-break"]' }];
   },
 
-  renderHTML() {
-    return ["div", { "data-type": "column-break", class: "column-break", role: "separator", "aria-label": "Column break" }];
+  renderHTML({ HTMLAttributes }) {
+    return ["div", { ...HTMLAttributes, "data-type": "column-break", class: "column-break", role: "separator", "aria-label": "Column break" }];
   },
 
   addCommands() {
