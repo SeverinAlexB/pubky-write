@@ -329,3 +329,45 @@ test("the link bubble, Preferences, Keyboard shortcuts and the offline snackbar 
   await expect(page.getByRole("status").filter({ hasText: "You're offline." })).toBeVisible();
   await expectAccessible(page, "Offline indicator and snackbar");
 });
+
+test("document tabs: the sidebar, the tab menu, the emoji picker and the delete dialog have no serious accessibility violations", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("First tab");
+  await page.getByRole("button", { name: "Show tabs and outlines" }).click();
+  const sidebar = page.getByRole("complementary", { name: "Tabs and outlines" });
+  await sidebar.getByRole("button", { name: "Add tab" }).click();
+  await page.keyboard.type("Second tab");
+  // The ⋮ button shows on hover (and on the current tab).
+  const options = (name: string) => ({
+    click: async () => {
+      const row = sidebar.locator(".outline-tab", { hasText: name });
+      await row.hover();
+      await row.getByRole("button", { name: "Tab options" }).click();
+    },
+  });
+  await options("Tab 2").click();
+  await page.getByRole("menuitem", { name: "Add subtab" }).click();
+  await options("Tab 1").click();
+  await expect(page.getByRole("menuitem", { name: "Move into" })).toBeVisible();
+  await expectAccessible(page, "Tab options menu");
+  await page.getByRole("menuitem", { name: "Choose emoji" }).click();
+  await expect(page.getByRole("dialog", { name: "Choose emoji" })).toBeVisible();
+  await expectAccessible(page, "Choose emoji");
+  await page.getByRole("dialog", { name: "Choose emoji" }).getByRole("button", { name: "⭐" }).click();
+  await expectAccessible(page, "Tabs with a subtab and an emoji");
+  await options("Tab 1").click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  await expect(sidebar.getByRole("textbox", { name: "Tab name" })).toBeFocused();
+  await expectAccessible(page, "Renaming a tab");
+  await page.keyboard.press("Escape");
+  await options("Tab 1").click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(page.getByRole("dialog", { name: "Delete tab?" })).toBeVisible();
+  await expectAccessible(page, "Delete tab?");
+  await page.getByRole("dialog", { name: "Delete tab?" }).getByRole("button", { name: "Cancel" }).click();
+  await waitUntilSaved(page);
+  await page.getByRole("button", { name: "Version history" }).click();
+  await expect(page.locator(".history-mode").getByRole("complementary", { name: "Tabs and outlines" })).toBeVisible();
+  await expectAccessible(page, "Version history with tabs");
+});

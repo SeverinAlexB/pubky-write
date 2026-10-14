@@ -8,11 +8,13 @@
 // edit, and repeats until the spacers stop changing.
 import {
   footnotesOf,
+  firstTab,
   pageElementsOf,
   pageGeometry,
   pageSetupKeys,
   pageSetupOf,
   regionFor,
+  type DocTab,
   type FootnoteRef,
   type PageGeometry,
   type RegionContent,
@@ -32,6 +34,7 @@ import {
   type PageFrame,
   type PageSpacer,
 } from "./pageLayout.ts";
+import { currentTab, documentTabsKey, shownTabElement } from "./documentTabs.ts";
 import { HEADER_OFFSET, regionHTML } from "./regionRender.ts";
 import { layoutTabsIn } from "./tabLayout.ts";
 
@@ -88,15 +91,24 @@ export function pageLayoutOf(state: EditorState): PageLayout | null {
   return value?.enabled ? value.layout : null;
 }
 
-const footnoteLists = new WeakMap<Node, FootnoteRef[]>();
+const footnoteLists = new WeakMap<Node, { from: number; list: FootnoteRef[] }>();
 
-/** The document's footnotes (cached per document, as the selectors that need them run on every transaction). */
-export function documentFootnotes(doc: Node): FootnoteRef[] {
-  let list = footnoteLists.get(doc);
-  if (!list) {
-    list = footnotesOf(doc);
-    footnoteLists.set(doc, list);
-  }
+/**
+ * The footnotes of the shown tab, numbered from 1 in each tab (cached per tab, as the selectors
+ * that need them run on every transaction).
+ */
+export function documentFootnotes(state: EditorState): FootnoteRef[] {
+  return tabFootnotes(state.doc, currentTab(state));
+}
+
+/** The footnotes of one tab, with positions in the document. */
+export function tabFootnotes(doc: Node, tab: DocTab): FootnoteRef[] {
+  const cached = footnoteLists.get(tab.node);
+  if (cached && cached.from === tab.from) return cached.list;
+  // A tab node's content starts one position after the node; a document's at 0.
+  const offset = tab.pos === null ? 0 : tab.from;
+  const list = footnotesOf(tab.node).map(({ pos, node }) => ({ pos: pos + offset, node }));
+  footnoteLists.set(tab.node, { from: tab.from, list });
   return list;
 }
 
@@ -126,10 +138,12 @@ function paginationPlugin(): Plugin<PaginationState> {
 
 function applyTransaction(tr: Transaction, value: PaginationState): PaginationState {
   const meta = tr.getMeta(paginationKey) as PaginationMeta | undefined;
-  if (meta && "reset" in meta) {
+  // Another tab is shown: its pages are laid out from scratch.
+  if ((meta && "reset" in meta) || tr.getMeta(documentTabsKey)) {
+    const reset = meta && "reset" in meta ? meta : { enabled: undefined, gap: undefined };
     return {
-      enabled: meta.enabled ?? value.enabled,
-      gap: meta.gap ?? value.gap,
+      enabled: reset.enabled ?? value.enabled,
+      gap: reset.gap ?? value.gap,
       layout: value.layout,
       decorations: DecorationSet.empty,
       scroll: false,
@@ -330,7 +344,7 @@ class PaginationView {
 
     const toY = (clientY: number) => (clientY - stackRect.top) / scale;
     const natural = naturalPositions(view, toY);
-    const footnotes = documentFootnotes(view.state.doc);
+    const footnotes = documentFootnotes(view.state);
     const boxes = layoutBoxes(view, (y) => natural(toY(y)), footnotes, (content) => this.footnoteHeight(stack, geometry, scale, content));
     const { spacers, pageCount, footnotePages } = paginate(boxes, frame);
     setPageCount(stack, pageCount);
@@ -445,7 +459,7 @@ class PaginationView {
  * redraw) CSS counters show them.
  */
 function updatePageFields(view: EditorView, stack: HTMLElement, stride: number, scale: number): void {
-  const fields = view.dom.querySelectorAll<HTMLElement>(".page-field, .footnote-ref");
+  const fields = shownTabElement(view).querySelectorAll<HTMLElement>(".page-field, .footnote-ref");
   if (fields.length === 0) return;
   const start = pageElementsOf(view.state.doc).pageNumberStart;
   const count = stack.dataset.pageCount ?? "1";
@@ -474,7 +488,7 @@ function flushPendingSelection(view: EditorView): void {
  * by subtracting the shift of every spacer above it.
  */
 function naturalPositions(view: EditorView, toY: (clientY: number) => number): (y: number) => number {
-  const spacers = Array.from(view.dom.querySelectorAll<HTMLElement>(".page-spacer"), (element) => ({
+  const spacers = Array.from(shownTabElement(view).querySelectorAll<HTMLElement>(".page-spacer"), (element) => ({
     bottom: toY(element.getBoundingClientRect().bottom),
     shift: Number(element.dataset.shift) || 0,
   })).sort((a, b) => a.bottom - b.bottom);
@@ -490,8 +504,8 @@ function naturalPositions(view: EditorView, toY: (clientY: number) => number): (
 
 type BoxNode = { node: Node; pos: number; breakPos: number };
 
-/** Textblocks and atomic blocks (images, rules, tables, page breaks) in document order. */
-export function boxNodes(doc: Node): BoxNode[] {
+/** Textblocks and atomic blocks (images, rules, tables, page breaks) of a tab (the shown one), in document order. */
+export function boxNodes(doc: Node, tab: DocTab = firstTab(doc)): BoxNode[] {
   const boxes: BoxNode[] = [];
   const visit = (node: Node, pos: number, breakPos: number) => {
     if (isLayoutBox(node)) {
@@ -501,7 +515,8 @@ export function boxNodes(doc: Node): BoxNode[] {
     // The first child moves with its container, so a moved list item keeps its bullet.
     node.forEach((child, offset, index) => visit(child, pos + 1 + offset, index === 0 ? breakPos : pos + 1 + offset));
   };
-  doc.forEach((child, offset) => visit(child, offset, offset));
+  const start = tab.pos === null ? 0 : tab.from;
+  tab.node.forEach((child, offset) => visit(child, start + offset, start + offset));
   return boxes;
 }
 
@@ -551,7 +566,7 @@ function layoutBoxes(
   const boxes: LayoutBox[] = [];
   const elementAt = blockElements(view);
   let next = 0;
-  for (const { node, pos, breakPos } of boxNodes(view.state.doc)) {
+  for (const { node, pos, breakPos } of boxNodes(view.state.doc, currentTab(view.state))) {
     const element = elementAt(pos);
     // Footnotes referenced in this block (both lists are in document order).
     let notes: LayoutFootnote[] | undefined;

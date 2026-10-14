@@ -1,6 +1,10 @@
 import {
   acceptedDocument,
   commentQuote,
+  documentTabs,
+  findTab,
+  tabAtPos,
+  tabsDocument,
   lengthUnit,
   pageGeometry,
   pageSetupKeys,
@@ -13,7 +17,7 @@ import {
 import { getText, getTextSerializersFromSchema } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { closeHistory as startUndoStep } from "@tiptap/pm/history";
-import type { Transaction } from "@tiptap/pm/state";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { getVersion, receiveTransaction, sendableSteps } from "prosemirror-collab";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
@@ -56,7 +60,8 @@ import {
 } from "./pageElementCommands.ts";
 import { PageElements } from "./PageElements.tsx";
 import { TocPill } from "./TocPill.tsx";
-import { OutlinePanel, OutlineToggle } from "./OutlinePanel.tsx";
+import { OutlinePanel, OutlineToggle, type TabActions } from "./OutlinePanel.tsx";
+import { addTab, currentTab, currentTabId, documentTabsKey, switchTab } from "./documentTabs.ts";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { cursorPage, resetPagination } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
@@ -218,6 +223,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         mode: storedMode(doc.id),
         onSuggestionClick: (id) => handlers.current.activateSuggestion(id),
         onImageError: (message) => handlers.current.notify(message),
+        // A link to a tab (?tab=<id>) opens the document on that tab.
+        initialTab: new URLSearchParams(window.location.search).get("tab"),
       }),
     // The document is fixed for the life of this component; a reload remounts it.
     [],
@@ -541,8 +548,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   function openReview() {
     if (historyOpen || mode === "viewing") return;
     setReviewOpen(true);
-    const { suggestions, activeId } = getSuggesting(editor.state);
-    if (!activeId && suggestions[0]) selectSuggestion(suggestions[0].id);
+    const { activeId } = getSuggesting(editor.state);
+    if (!activeId && tabSuggestions[0]) selectSuggestion(tabSuggestions[0].id);
   }
 
   function closeReview() {
@@ -570,8 +577,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     element?.scrollIntoView({ block: "center" });
   }
 
+  /** One suggestion, or (null) all of the shown tab's. */
   function resolveSuggestion(action: "accept" | "reject", id: string | null) {
-    const transaction = resolveSuggestions(editor.state, action, id === null ? null : [id]);
+    const ids = id !== null ? [id] : tabCount > 1 ? tabSuggestions.map((suggestion) => suggestion.id) : null;
+    const transaction = resolveSuggestions(editor.state, action, ids);
     if (transaction) editor.view.dispatch(transaction);
   }
 
@@ -643,14 +652,21 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     }
   }
 
-  /** Activates a thread in the margin and scrolls the document to its text (All comments, links). */
+  /** Activates a thread in the margin and scrolls the document to its text (All comments, links), in its tab. */
   function selectComment(id: number) {
     setCommentsHidden(false);
     if (getCommentAnchors(editor.state).hidden) {
       editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "hide", hidden: false }));
     }
-    activateComment(id);
     const anchor = getCommentAnchors(editor.state).anchors.find((candidate) => candidate.id === id);
+    const tab = anchor && tabAtPos(editor.state.doc, anchor.from);
+    if (tab && tab.id !== currentTabId(editor.state)) {
+      switchToTab(tab.id, true);
+      // Once the tab's pages are laid out.
+      requestAnimationFrame(() => requestAnimationFrame(() => selectComment(id)));
+      return;
+    }
+    activateComment(id);
     if (!anchor) return;
     const { node } = editor.view.domAtPos(anchor.from);
     const element = node instanceof HTMLElement ? node : node.parentElement;
@@ -695,6 +711,89 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     }
   }
 
+  // Document tabs: the shown tab, and where each tab was left this session (the selection as
+  // offsets in the tab, and the scroll position).
+  const shownTabId = useEditorState({ editor, selector: ({ editor: current }) => currentTabId(current.state) });
+  const tabCount = useEditorState({ editor, selector: ({ editor: current }) => documentTabs(current.state.doc).length });
+  const tabMemory = useRef(new Map<string, { anchor: number; head: number; scrollTop: number }>());
+  /**
+   * Where to scroll once another tab is shown: a position, or null when the caller scrolls to
+   * something in it. Undefined when undo or redo showed the tab: then to the selection.
+   */
+  const tabScroll = useRef<number | null | undefined>(undefined);
+  const firstTabEffect = useRef(true);
+
+  function rememberTab() {
+    const tab = currentTab(editor.state);
+    const { anchor, head } = editor.state.selection;
+    tabMemory.current.set(tab.id, { anchor: anchor - tab.from, head: head - tab.from, scrollTop: fitZoom.element?.scrollTop ?? 0 });
+  }
+
+  /** Shows tab `id` where it was left, or at its start. `reveal`: the caller scrolls to something in it. */
+  function switchToTab(id: string, reveal = false) {
+    if (id === currentTabId(editor.state)) return;
+    rememberTab();
+    const memory = tabMemory.current.get(id);
+    const tr = switchTab(editor.state, id, memory);
+    if (!tr) return;
+    tabScroll.current = reveal ? null : (memory?.scrollTop ?? 0);
+    editor.view.dispatch(tr);
+    // Now, not in the next frame (the focus command), so keys typed right after reach the tab.
+    editor.view.focus();
+  }
+
+  /** A sidebar command (see documentTabs.ts): one undo step. */
+  function runTabCommand(command: (state: EditorState) => Transaction | null) {
+    if (readOnly || historyOpen) return;
+    rememberTab();
+    const tr = command(editor.state);
+    if (!tr) return;
+    const shown = (tr.getMeta(documentTabsKey) as { switchTo?: string } | undefined)?.switchTo;
+    if (shown) tabScroll.current = tabMemory.current.get(shown)?.scrollTop ?? 0;
+    editor.view.dispatch(tr);
+    // Typing right after (in a new tab, say) is an undo step of its own.
+    editor.view.dispatch(startUndoStep(editor.state.tr));
+    // Now, not in the next frame (the focus command), so keys typed right after reach the tab.
+    editor.view.focus();
+  }
+
+  async function copyTabLink(id: string) {
+    const url = new URL(`/d/${doc.id}`, window.location.origin);
+    url.searchParams.set("tab", id);
+    try {
+      await navigator.clipboard.writeText(url.href);
+      setNotice("Link copied to clipboard");
+    } catch {
+      setNotice(`Couldn't copy the link: ${url.href}`);
+    }
+  }
+
+  const tabActions: TabActions = {
+    onSwitch: (id, reveal) => switchToTab(id, reveal),
+    onCommand: runTabCommand,
+    onAddTab: () => runTabCommand((state) => addTab(state, currentTabId(state))),
+    onCopyLink: (id) => void copyTabLink(id),
+  };
+
+  // Another tab is shown: back where it was left, without the header, footer or comment being edited in the last one.
+  useEffect(() => {
+    if (firstTabEffect.current) {
+      firstTabEffect.current = false;
+      return;
+    }
+    setRegionTarget(null);
+    if (getCommentAnchors(editor.state).draft) editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: null }));
+    const scroll = tabScroll.current;
+    tabScroll.current = undefined;
+    const frame = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (scroll === undefined) editor.commands.scrollIntoView();
+        else if (scroll !== null) fitZoom.element?.scrollTo({ top: scroll });
+      }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [shownTabId]);
+
   /** Leaves comments for version history: no draft, no active thread, no All comments panel. */
   function closeComments() {
     setAllCommentsOpen(false);
@@ -713,13 +812,15 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   function applyLink(href: string) {
     setLinkDialog(null);
     const chain = editor.chain().focus().extendMarkRange("link");
-    if (!href.trim()) return chain.unsetLink().run();
     const url = /^[a-z][a-z0-9+.-]*:/i.test(href.trim()) ? href.trim() : `https://${href.trim()}`;
-    if (editor.state.selection.empty && !editor.isActive("link")) {
+    if (!href.trim()) chain.unsetLink().run();
+    else if (editor.state.selection.empty && !editor.isActive("link")) {
       chain.insertContent({ type: "text", text: href.trim(), marks: [{ type: "link", attrs: { href: url } }] }).run();
     } else {
       chain.setLink({ href: url }).run();
     }
+    // Now, not in the next frame (the focus command), so keys typed right after Apply reach the document.
+    editor.view.focus();
   }
 
   /** Restoring reloads the document, which returns to editing with the restored content. */
@@ -798,18 +899,20 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       await sync.current?.flushNow();
       navigate(`/d/${(await api.copyDocument(doc.id)).id}`);
     },
-    download: async (format) => {
+    // The current tab, or all tabs (each from a new page under its name).
+    download: async (format, scope = "current") => {
       if (format === "pdf") return window.print();
+      const tabs = scope === "all" ? "all" : currentTabId(editor.state);
       if (format === "txt") {
         // As if every suggestion were accepted, like the Markdown export.
-        const text = getText(acceptedDocument(editor.state.doc), {
+        const text = getText(acceptedDocument(tabsDocument(editor.state.doc, tabs)), {
           blockSeparator: "\n",
           textSerializers: getTextSerializersFromSchema(editor.schema),
         });
         return downloadText(`${savedTitle}.txt`, text);
       }
       await sync.current?.flushNow();
-      window.location.assign(api.exportUrl(doc.id, format));
+      window.location.assign(api.exportUrl(doc.id, format, tabs));
     },
     rename: () => titleInput.current?.focus(),
     moveToBin: async () => {
@@ -897,7 +1000,32 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   const openCommentCount = threads.filter((thread) => !thread.resolved).length;
   const commentState = useCommentAnchors(editor);
-  const activeThread = threads.find((thread) => thread.id === commentState.activeId);
+  // The tab of each thread's text (null when its tab was deleted); changes only when a thread moves to another tab.
+  const threadTabs = useEditorState({
+    editor,
+    selector: ({ editor: current }) => {
+      const result: Record<number, string | null> = {};
+      for (const anchor of getCommentAnchors(current.state).anchors) result[anchor.id] = tabAtPos(current.state.doc, anchor.from)?.id ?? null;
+      return result;
+    },
+  });
+  const openCommentsByTab: Record<string, number> = {};
+  for (const thread of threads) {
+    const tab = threadTabs[thread.id];
+    if (!thread.resolved && tab) openCommentsByTab[tab] = (openCommentsByTab[tab] ?? 0) + 1;
+  }
+  // The margin shows the threads of the shown tab.
+  const tabThreads = tabCount > 1 ? threads.filter((thread) => (threadTabs[thread.id] ?? shownTabId) === shownTabId) : threads;
+  const tabOpenCommentCount = tabCount > 1 ? (openCommentsByTab[shownTabId] ?? 0) : openCommentCount;
+  const threadTabNames: Record<number, string> = {};
+  if (tabCount > 1) {
+    for (const thread of threads) {
+      const tab = threadTabs[thread.id];
+      const name = tab ? findTab(editor.state.doc, tab)?.name : undefined;
+      if (name) threadTabNames[thread.id] = name;
+    }
+  }
+  const activeThread = tabThreads.find((thread) => thread.id === commentState.activeId);
   const suggestionState = useEditorState({
     editor,
     selector: ({ editor: current }) => {
@@ -912,14 +1040,19 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: null }));
     }
   }, [editor, suggestionState.activeId]);
+  // The shown tab's suggestions: in the margin and in Review suggested edits.
+  const tabSuggestions =
+    tabCount > 1
+      ? suggestionState.suggestions.filter((suggestion) => tabAtPos(editor.state.doc, suggestion.from)?.id === shownTabId)
+      : suggestionState.suggestions;
   // Suggestion cards are shown with the suggestions, not in the previews.
-  const marginSuggestions = display === "suggestions" ? suggestionState.suggestions : [];
+  const marginSuggestions = display === "suggestions" ? tabSuggestions : [];
   // The margin is there while there is something to show in it; Viewing mode shows only the document.
   const marginShown =
     !commentsHidden &&
     !historyOpen &&
     mode !== "viewing" &&
-    (openCommentCount > 0 || commentState.draft !== null || activeThread !== undefined || marginSuggestions.length > 0);
+    (tabOpenCommentCount > 0 || commentState.draft !== null || activeThread !== undefined || marginSuggestions.length > 0);
   const marginWidth = marginShown ? COMMENT_MARGIN_WIDTH : 0;
   const fitZoom = useFitZoom(geometry.width, marginWidth);
   const effectiveZoom = zoom === "fit" ? fitZoom.value : zoom;
@@ -961,7 +1094,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
               <MenuBar
                 editor={activeEditor}
                 actions={actions}
-                view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden, mode, readOnly }}
+                view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden, mode, readOnly, multipleTabs: tabCount > 1 }}
               />
             </div>
             <div className="header-actions">
@@ -1018,7 +1151,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         <div className="editor-workspace">
           {rulerVisible && printLayout && <VerticalRuler stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />}
           {outlineOpen && !historyOpen && (
-            <OutlinePanel editor={editor} openComments={openCommentCount} onClose={() => setOutlineOpen(false)} />
+            <OutlinePanel editor={editor} openComments={openCommentsByTab} actions={tabActions} onClose={() => setOutlineOpen(false)} />
           )}
           {/* The editor area: the find bar and the live word count float over it, left of the comment margin. */}
           <div
@@ -1041,7 +1174,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             )}
             {reviewOpen && !historyOpen && find?.mode !== "bar" && (
               <ReviewSuggestions
-                suggestions={suggestionState.suggestions}
+                suggestions={tabSuggestions}
                 activeId={suggestionState.activeId}
                 view={suggestionView}
                 onViewChange={setSuggestionView}
@@ -1077,7 +1210,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                 {marginShown && (
                   <CommentMargin
                     editor={editor}
-                    threads={threads}
+                    threads={tabThreads}
                     onCreate={createComment}
                     onCancelDraft={cancelComment}
                     onActivate={activateComment}
@@ -1123,6 +1256,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             <AllCommentsPanel
               editor={editor}
               threads={threads}
+              tabNames={threadTabNames}
               onSelect={selectComment}
               onReopen={(id) => void resolveComment(id, false)}
               onClose={() => setAllCommentsOpen(false)}
@@ -1312,6 +1446,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       {historyOpen && (
         <HistoryMode
           documentId={doc.id}
+          initialTab={shownTabId}
           loadRevisions={loadRevisions}
           initialZoom={zoom}
           onBack={closeHistory}

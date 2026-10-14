@@ -62,7 +62,7 @@ To restore a backup:
   contents; sort by last opened, last modified or title; rename, remove or open
   in a new tab from each document's ⋮ menu. The view, sort and owner filter are
   remembered in the browser. Thumbnails are drawn from the top of each
-  document's first page when its tile scrolls into view.
+  document's first page (of its first tab) when its tile scrolls into view.
 - **Templates:** a blank document or one of four built-in templates (Letter,
   Resume, Project proposal, Report, in `shared/src/templates.ts`).
 - **Import:** Open file picker opens Word (.docx) and Markdown (.md) files up to
@@ -159,10 +159,23 @@ To restore a backup:
   the selection (text suggested for deletion is not counted), and can show a live count at the bottom left of the editor
   area.
 - **Tabs and outline:** a sidebar (the list button at the top left, or View >
-  Expand tabs and outlines sidebar) shows the document's tab with its number of
-  open comments, and an outline of the Title and Heading 1–6 paragraphs, indented
-  by level, with the heading at the cursor highlighted. Clicking a heading
-  scrolls it to the top. Whether the sidebar is open is remembered.
+  Expand tabs and outlines sidebar) lists the document's tabs with their number
+  of open comments, and under the shown tab an outline of its Title and Heading
+  1–6 paragraphs, indented by level, with the heading at the cursor highlighted.
+  Clicking a heading scrolls it to the top. Whether the sidebar is open is
+  remembered.
+- **Document tabs:** a document can have several tabs, each with its own pages,
+  headings, comments and suggestions; the title, page setup, headers and footers
+  are shared. The + next to "Document tabs" adds "Tab N" after the current tab.
+  Each tab's ⋮ menu adds a subtab (up to three levels, with a chevron to
+  collapse them), deletes (after a confirmation; never the last tab), duplicates,
+  renames in place, sets or removes an emoji, copies a link that opens the tab
+  (`?tab=<id>`), shows the tab's outline while another tab is shown, and moves the
+  tab up, down or into another tab. Each tab remembers its scroll position and
+  cursor for the session. Find, word count, the comment margin, review of
+  suggestions and printing are of the shown tab; All comments lists every
+  thread with its tab's name. See
+  [docs/design/document-tabs.md](docs/design/document-tabs.md).
 - **Comments:** select text and choose Add comment on the floating pill, the
   toolbar, Insert > Comment or ⌘⌥M. Threads are cards in a margin right of the
   pages, level with their text and stacked 8px apart; the active card sits
@@ -228,7 +241,8 @@ To restore a backup:
   versions. Restoring replaces only the text that differs, so comments on
   unchanged text survive.
 - **Export:** File > Download as Microsoft Word (.docx), plain text (.txt) or
-  Markdown (.md). Word files use Word's Title, Subtitle and Heading 1–6 styles,
+  Markdown (.md), of the current tab or (listed separately once there are several
+  tabs) all tabs, each starting on a new page under its name as a Heading 1. Word files use Word's Title, Subtitle and Heading 1–6 styles,
   the document's page size, orientation, margins and page colour, paragraph
   indents (left, first line or hanging, right), the tables' column
   widths, row heights, borders and cell colours, and the images' sizes; headers
@@ -394,7 +408,7 @@ removed text, struck through, where it was.
 | `GET /api/documents?q=&sort=`                        | List or search documents                |
 | `POST /api/documents`                                | Create a document (blank or `template`) |
 | `POST /api/documents/import`                         | Open a .docx or .md file as a new document (multipart `file`) |
-| `GET /api/documents/:id/preview?v=`                  | The top of the first page, for thumbnails |
+| `GET /api/documents/:id/preview?v=`                  | The top of the first tab's first page, for thumbnails |
 | `POST /api/documents/:id/copy`                       | Make a copy                             |
 | `GET /api/documents/:id`                             | Open a document (content, version, comments) |
 | `PATCH /api/documents/:id`                           | Rename                                  |
@@ -407,7 +421,7 @@ removed text, struck through, where it was.
 | `PATCH /api/documents/:id/revisions/:revisionId`     | Name a version (a blank name removes it) |
 | `POST /api/documents/:id/revisions/current/name`     | Name the current version                |
 | `POST /api/documents/:id/revisions/:revisionId/copy` | Make a copy of a version                |
-| `GET /api/documents/:id/export/:format`              | Download as `docx` or `md`              |
+| `GET /api/documents/:id/export/:format?tab=`         | Download as `docx` or `md`: one tab (its id), `all` tabs, or the first |
 | `POST /api/documents/:id/comments`                   | Start a comment thread on a range       |
 | `POST /api/documents/:id/comments/:commentId/replies` | Reply to a thread                      |
 | `PATCH /api/documents/:id/comments/:commentId`       | Resolve or reopen a thread              |
@@ -450,6 +464,9 @@ the pages settle and frame times while typing on pages 1 and 50. Set
   and comments cannot be attached to header, footer or footnote text. Version
   history does not highlight changes in headers, footers or footnotes.
 - Comments are not included in exports. The author is always "You"; emoji
-  reactions and renaming the tab are not available yet.
+  reactions are not available yet.
+- Find searches the shown tab only (no "All tabs" option), tabs cannot be
+  reordered by dragging (use Move up, Move down and Move into), and undo is shared
+  by all tabs (undoing a change in another tab shows that tab).
 - No real-time collaboration yet. Suggestions are always by "You"; the Preview
   reject all view still shows suggested formatting and paragraph breaks.

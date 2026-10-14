@@ -195,8 +195,8 @@ test("the tab shows the number of open comments", async ({ page }) => {
   const badgeBox = (await badge.boundingBox())!;
   expect(badgeBox.width).toBe(20);
   expect(badgeBox.height).toBe(20);
-  // One tab only: no "+" button next to "Document tabs".
-  await expect(sidebar(page).getByRole("button", { name: /add|new tab|\+/i })).toHaveCount(0);
+  // The "+" next to "Document tabs" adds a tab (docs/spec/18-document-tabs.md).
+  await expect(sidebar(page).getByRole("button", { name: "Add tab" })).toBeVisible();
 
   await page.getByRole("article", { name: 'Comment on "one"' }).click();
   await page.getByRole("button", { name: "Mark as resolved and hide discussion" }).click();

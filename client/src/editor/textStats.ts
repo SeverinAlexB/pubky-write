@@ -1,6 +1,7 @@
 import { acceptedTextBetween } from "@docs/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
+import { currentTab } from "./documentTabs.ts";
 
 export type TextStats = {
   words: number;
@@ -33,7 +34,7 @@ const documentCounts = new WeakMap<Node, TextStats>();
 let lastSelection: { doc: Node; from: number; to: number; stats: TextStats } | null = null;
 
 /**
- * Counts of the whole document. Blocks are separated by a line break, which ends a word and is
+ * Counts of a document or tab node. Blocks are separated by a line break, which ends a word and is
  * not a character, so the sum of the blocks' counts equals the count of the document's text.
  */
 function totalStats(doc: Node): TextStats {
@@ -55,7 +56,7 @@ function totalStats(doc: Node): TextStats {
   return total;
 }
 
-/** Counts for the whole document, and for the selection when there is one. */
+/** Counts for the shown tab, and for the selection when there is one. */
 export function documentStats(state: EditorState): DocumentStats {
   const { doc, selection } = state;
   const { from, to } = selection;
@@ -66,7 +67,7 @@ export function documentStats(state: EditorState): DocumentStats {
     }
     selected = lastSelection.stats;
   }
-  return { total: totalStats(doc), selected };
+  return { total: totalStats(currentTab(state).node), selected };
 }
 
 /** "12", or "3 of 12" with a selection. */

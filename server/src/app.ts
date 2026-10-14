@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { extname } from "node:path";
-import { toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type ImportResponse, type SubmitStepsRequest } from "@docs/shared";
+import { firstTab, tabsDocument, toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type ImportResponse, type SubmitStepsRequest } from "@docs/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
@@ -253,8 +253,10 @@ export function createApp({
     c.json(found(restoreRevision(db, c.req.param("id"), Number(c.req.param("revisionId"))))),
   );
 
+  // ?tab=<id> exports one tab, ?tab=all every tab; without it the first tab.
   app.get("/api/documents/:id/export/:format", async (c) => {
-    const { title, doc } = found(getDocumentContent(db, c.req.param("id")));
+    const { title, doc: content } = found(getDocumentContent(db, c.req.param("id")));
+    const doc = tabsDocument(content, c.req.query("tab") ?? firstTab(content).id);
     const format = c.req.param("format");
     if (format === "md") {
       return download(toMarkdown(doc), `${title}.md`, "text/markdown; charset=utf-8");

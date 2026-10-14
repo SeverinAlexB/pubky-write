@@ -22,6 +22,7 @@ import {
   type RegionBinding,
   type RegionTarget,
 } from "./pageElementCommands.ts";
+import { currentTabId } from "./documentTabs.ts";
 import { documentFootnotes, pageLayoutOf, type PageLayout } from "./pagination.ts";
 import { HEADER_OFFSET, regionHTML } from "./regionRender.ts";
 import { layoutTabsIn } from "./tabLayout.ts";
@@ -50,7 +51,7 @@ function selectState({ editor }: { editor: Editor }): PageElementsState {
     layout: pageLayoutOf(editor.state),
     geometry: pageGeometry(pageSetupOf(doc)),
     settings: pageElementsOf(doc),
-    footnotes: documentFootnotes(doc).map((footnote) => footnote.node.attrs.content as RegionContent),
+    footnotes: documentFootnotes(editor.state).map((footnote) => footnote.node.attrs.content as RegionContent),
   };
 }
 
@@ -199,7 +200,7 @@ export function PageElements({ editor, target, onTargetChange, onRegionEditor, o
                 {target?.kind === "footnote" && target.index === index ? (
                   <RegionEditor
                     main={editor}
-                    binding={footnoteBinding(index)}
+                    binding={footnoteBinding(index, currentTabId(editor.state))}
                     className="footnote-text"
                     at={target.at}
                     onRegionEditor={onRegionEditor}
@@ -359,7 +360,7 @@ function RegionBar({ editor, kind, differentFirstPage, onPageNumbers, onRemove }
  * now (the focus command waits a frame), so keys typed right after Escape reach the body.
  */
 function focusAfterFootnote(editor: Editor, index: number): void {
-  const footnote = documentFootnotes(editor.state.doc)[index];
+  const footnote = documentFootnotes(editor.state)[index];
   if (footnote) editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, footnote.pos + 1)));
   editor.view.focus();
 }

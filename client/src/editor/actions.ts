@@ -9,6 +9,8 @@ import type { EditorMode } from "./suggesting.ts";
 // DocumentEditor enables them.
 
 export type DownloadFormat = "docx" | "pdf" | "txt" | "md";
+/** File > Download of a document with several tabs: the current tab or all of them. */
+export type DownloadScope = "current" | "all";
 export type { ListKind };
 export type Capitalisation = "lowercase" | "uppercase" | "titleCase";
 
@@ -17,7 +19,7 @@ export type EditorActions = {
   newDocument: () => void;
   openDocumentList: () => void;
   makeCopy: () => void;
-  download: (format: DownloadFormat) => void;
+  download: (format: DownloadFormat, scope?: DownloadScope) => void;
   rename: () => void;
   moveToBin: () => void;
   openVersionHistory: () => void;
@@ -103,4 +105,6 @@ export type ViewSettings = {
   mode: EditorMode;
   /** Viewing mode or a suggestion preview: nothing may change the document. */
   readOnly: boolean;
+  /** The document has more than one tab: File > Download offers the current tab or all tabs. */
+  multipleTabs?: boolean;
 };

@@ -72,6 +72,10 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
       state.write(`[^${notes.length}]`);
     },
     pageField() {},
+    // Exports pick their tabs with tabsDocument first; a tab node elsewhere (a copied selection) is its blocks.
+    documentTab(state, node) {
+      state.renderContent(node);
+    },
     tableOfContents(state, node) {
       writeTableOfContents(state, node);
     },

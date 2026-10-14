@@ -22,17 +22,22 @@ export function PromptDialog({
 }: PromptDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [value, setValue] = useState(initialValue);
+  const confirmed = useRef(false);
 
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
 
   return (
-    <dialog ref={dialog} className="dialog" onCancel={onCancel} onClose={onCancel}>
+    <dialog ref={dialog} className="dialog" onCancel={onCancel} onClose={() => confirmed.current || onCancel()}>
       <form
         method="dialog"
         onSubmit={(event) => {
           event.preventDefault();
+          // Closed now rather than when it is removed: until then the modal dialog makes the page
+          // inert, and keys typed right after confirming would be lost.
+          confirmed.current = true;
+          dialog.current?.close();
           onConfirm(value);
         }}
       >

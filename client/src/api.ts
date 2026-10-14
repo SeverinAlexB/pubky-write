@@ -93,7 +93,8 @@ export const api = {
     form.set("file", file);
     return request<UploadResponse>("/api/uploads", { method: "POST", body: form });
   },
-  exportUrl: (id: string, format: "md" | "docx") => `/api/documents/${id}/export/${format}`,
+  /** `tab`: a tab's id, or "all" for every tab. */
+  exportUrl: (id: string, format: "md" | "docx", tab: string) => `/api/documents/${id}/export/${format}?tab=${encodeURIComponent(tab)}`,
   createComment: (id: string, comment: CreateCommentRequest) =>
     request<CommentThread>(`/api/documents/${id}/comments`, { method: "POST", body: JSON.stringify(comment) }),
   replyToComment: (id: string, commentId: number, body: string) =>

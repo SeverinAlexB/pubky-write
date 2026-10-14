@@ -13,6 +13,8 @@ type MenuProps = {
   listClassName?: string;
   align?: "start" | "end";
   disabled?: boolean;
+  /** Positions the list in the window under the button, so a scrolling container cannot clip it (or its submenus). */
+  fixed?: boolean;
 };
 
 /** A button that opens a dropdown menu; closes on selection, outside click or Escape. */
@@ -24,8 +26,9 @@ export function Menu({
   listClassName = "",
   align = "start",
   disabled = false,
+  fixed = false,
 }: MenuProps) {
-  const [open, setOpen] = useState<{ fromKeyboard: boolean } | null>(null);
+  const [open, setOpen] = useState<{ fromKeyboard: boolean; at?: { x: number; y: number } } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(null), []);
   useDismiss(root, open !== null, close);
@@ -43,7 +46,11 @@ export function Menu({
         // Keep the editor selection while the menu is used.
         onMouseDown={(event) => event.preventDefault()}
         // A click from the keyboard (Enter or Space on the button) has no mouse position.
-        onClick={(event) => setOpen((value) => (value ? null : { fromKeyboard: event.detail === 0 }))}
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          const at = fixed ? { x: rect.left, y: rect.bottom } : undefined;
+          setOpen((value) => (value ? null : { fromKeyboard: event.detail === 0, at }));
+        }}
       >
         {label}
       </button>
@@ -52,8 +59,9 @@ export function Menu({
           entries={entries}
           label={ariaLabel}
           highlightFirst={open.fromKeyboard}
-          className={`menu-list-${align} ${listClassName}`}
+          className={`${open.at ? "" : `menu-list-${align}`} ${listClassName}`}
           onClose={close}
+          at={open.at}
         />
       )}
     </div>

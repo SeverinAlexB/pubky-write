@@ -6,7 +6,7 @@ import { MenuList, type MenuEntry, type MenuItem } from "../components/MenuList.
 import { modeEntries } from "./modes.tsx";
 import { shortcutText } from "../shortcuts.ts";
 import { useDismiss } from "../components/useDismiss.ts";
-import type { EditorActions, ListKind, ViewSettings } from "./actions.ts";
+import type { DownloadFormat, EditorActions, ListKind, ViewSettings } from "./actions.ts";
 import { clearFormatting } from "./extensions.ts";
 import { alignAndIndentMenu, lineSpacingEntries, paragraphSpacingAt, paragraphStylesMenu, textMenu } from "./formatMenus.ts";
 import { ListPresetMenu } from "./ListPresets.tsx";
@@ -55,7 +55,7 @@ export function MenuBar({ editor, actions, view }: MenuBarProps) {
   // Viewing mode (and the suggestion previews) disable everything that would change the document.
   const editing = (entries: MenuEntry[], keep: string[] = []) => (view.readOnly ? readOnlyEntries(entries, keep) : entries);
   const menus: { label: string; entries: MenuEntry[] }[] = [
-    { label: "File", entries: fileMenu(actions) },
+    { label: "File", entries: fileMenu(actions, view) },
     { label: "Edit", entries: editing(editMenu(editor, actions, state), ["Copy", "Copy as Markdown", "Select all", "Find and replace"]) },
     { label: "View", entries: viewMenu(actions, view) },
     { label: "Insert", entries: editing(insertMenu(editor, actions, state)) },
@@ -135,7 +135,28 @@ export function MenuBar({ editor, actions, view }: MenuBarProps) {
   );
 }
 
-function fileMenu(actions: EditorActions): MenuEntry[] {
+const downloadFormats: { label: string; format: DownloadFormat }[] = [
+  { label: "Microsoft Word (.docx)", format: "docx" },
+  { label: "PDF document (.pdf)", format: "pdf" },
+  { label: "Plain text (.txt)", format: "txt" },
+  { label: "Markdown (.md)", format: "md" },
+];
+
+/** The formats, and with several tabs a "Current tab" and an "All tabs" group (printing is of the current tab). */
+function downloadMenu(actions: EditorActions, view: ViewSettings): MenuEntry[] {
+  const items = (scope: "current" | "all") =>
+    downloadFormats
+      .filter(({ format }) => scope === "current" || format !== "pdf")
+      .map(({ label, format }) => ({
+        label: scope === "all" ? `${label}, all tabs` : label,
+        content: label,
+        onSelect: () => actions.download(format, scope),
+      }));
+  if (!view.multipleTabs) return items("current");
+  return [{ heading: "Current tab" }, ...items("current"), "separator", { heading: "All tabs" }, ...items("all")];
+}
+
+function fileMenu(actions: EditorActions, view: ViewSettings): MenuEntry[] {
   return [
     { label: "New", icon: "description", submenu: [{ label: "Document", icon: "description", onSelect: actions.newDocument }] },
     { label: "Open", icon: "folder_open", shortcut: shortcutText("open"), onSelect: actions.openDocumentList },
@@ -144,12 +165,7 @@ function fileMenu(actions: EditorActions): MenuEntry[] {
     {
       label: "Download",
       icon: "download",
-      submenu: [
-        { label: "Microsoft Word (.docx)", onSelect: () => actions.download("docx") },
-        { label: "PDF document (.pdf)", onSelect: () => actions.download("pdf") },
-        { label: "Plain text (.txt)", onSelect: () => actions.download("txt") },
-        { label: "Markdown (.md)", onSelect: () => actions.download("md") },
-      ],
+      submenu: downloadMenu(actions, view),
     },
     "separator",
     { label: "Rename", icon: "edit", onSelect: actions.rename },

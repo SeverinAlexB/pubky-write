@@ -1,6 +1,7 @@
 // The thumbnail content of a document in the document list: the blocks at the top of its first
 // page, cut to about a page of text so the stored preview stays small for any document.
 import type { JSONContent } from "@tiptap/core";
+import { tabsDocument, firstTab } from "@docs/shared";
 import { Fragment, type Node } from "@tiptap/pm/model";
 
 /** More lines than fit on a page, so the thumbnail is never cut short. */
@@ -8,7 +9,9 @@ const PREVIEW_LINES = 64;
 const CHARS_PER_LINE = 90;
 const IMAGE_LINES = 12;
 
-export function documentPreview(doc: Node): JSONContent {
+/** The thumbnail shows the first tab. */
+export function documentPreview(source: Node): JSONContent {
+  const doc = tabsDocument(source, firstTab(source).id);
   const blocks: Node[] = [];
   let budget = PREVIEW_LINES;
   doc.forEach((block) => {

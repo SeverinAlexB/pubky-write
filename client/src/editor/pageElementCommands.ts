@@ -12,6 +12,9 @@ import {
   type RegionContent,
   type RegionKey,
   type TocStyle,
+  findTab,
+  tabAtPos,
+  type TocRange,
 } from "@docs/shared";
 import { Editor, Extension, type JSONContent } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
@@ -21,7 +24,8 @@ import { closeHistory } from "@tiptap/pm/history";
 import { keyBinding, keyBindings } from "../shortcuts.ts";
 import { AUTOFORMAT, Autoformat } from "./autoformat.ts";
 import { PasteCleanup } from "./paste.ts";
-import { documentFootnotes, layOutNow, pageIndexAt } from "./pagination.ts";
+import { currentTab } from "./documentTabs.ts";
+import { documentFootnotes, layOutNow, pageIndexAt, tabFootnotes } from "./pagination.ts";
 import { TabKey, TabLayout } from "./tabLayout.ts";
 
 /** What is being edited: a page's header or footer, or footnote number index + 1. */
@@ -52,14 +56,19 @@ export function headerBinding(kind: "header" | "footer", page: number, different
   };
 }
 
-export function footnoteBinding(index: number): RegionBinding {
+/** Footnote `index` (0-based) of tab `tabId`. */
+export function footnoteBinding(index: number, tabId: string): RegionBinding {
   return {
     key: `footnote-${index}`,
     kind: "footnote",
     label: `Footnote ${index + 1}`,
-    read: (state) => documentFootnotes(state.doc)[index]?.node.attrs.content as RegionContent | undefined,
+    read: (state) => {
+      const tab = findTab(state.doc, tabId);
+      return tab ? (tabFootnotes(state.doc, tab)[index]?.node.attrs.content as RegionContent | undefined) : undefined;
+    },
     write: (tr, content) => {
-      const footnote = documentFootnotes(tr.doc)[index];
+      const tab = findTab(tr.doc, tabId);
+      const footnote = tab && tabFootnotes(tr.doc, tab)[index];
       return footnote ? tr.setNodeAttribute(footnote.pos, "content", content) : null;
     },
   };
@@ -276,7 +285,7 @@ export function insertFootnote(editor: Editor): number | null {
   editor.view.dispatch(tr);
   // The footnote's text is edited at the bottom of its page, so that page has to be known now.
   layOutNow(editor.view);
-  return documentFootnotes(editor.state.doc).findIndex((footnote) => footnote.pos === pos);
+  return documentFootnotes(editor.state).findIndex((footnote) => footnote.pos === pos);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -288,10 +297,16 @@ function pageNumberOf(view: EditorView): (pos: number) => number {
   return (pos) => pageIndexAt(view, pos) + start;
 }
 
+/** The headings a table of contents at `pos` lists: those of its tab. */
+function tocRange(doc: Node, pos: number): TocRange | undefined {
+  return tabAtPos(doc, pos) ?? undefined;
+}
+
 /** Inserts a table of contents at the cursor. */
 export function insertTableOfContents(editor: Editor, style: TocStyle): void {
   const group = newUndoGroup();
-  const json = tableOfContents(editor.state.doc, style, pageNumberOf(editor.view));
+  // The headings of the tab it is in.
+  const json = tableOfContents(editor.state.doc, style, pageNumberOf(editor.view), currentTab(editor.state));
   editor
     .chain()
     .focus()
@@ -323,7 +338,9 @@ export function updateTableOfContents(editor: Editor): void {
   const toc = selectedToc(editor.state);
   if (!toc) return;
   const group = newUndoGroup();
-  const entries = tocEntries(editor.state.doc, pageNumberOf(editor.view)).map((entry) => editor.schema.nodeFromJSON(entry));
+  const entries = tocEntries(editor.state.doc, pageNumberOf(editor.view), tocRange(editor.state.doc, toc.pos)).map((entry) =>
+    editor.schema.nodeFromJSON(entry),
+  );
   const tr = editor.state.tr.replaceWith(toc.pos + 1, toc.pos + toc.node.nodeSize - 1, entries);
   tr.setSelection(NodeSelection.create(tr.doc, toc.pos));
   closeHistory(tr);
@@ -355,7 +372,7 @@ function tocPageTransaction(editor: Editor): Transaction | null {
   doc.descendants((node, pos) => {
     if (node.type.name !== "tableOfContents") return true;
     node.forEach((entry, offset, index) => {
-      const heading = tocTarget(doc, node, index);
+      const heading = tocTarget(doc, node, index, tocRange(doc, pos));
       if (!heading || entry.attrs.page === null) return;
       const page = pageOf(heading.pos);
       if (page !== entry.attrs.page) tr.setNodeAttribute(pos + 1 + offset, "page", page);
@@ -369,7 +386,7 @@ function tocPageTransaction(editor: Editor): Transaction | null {
 export function followTocEntry(view: EditorView, tocPos: number, entryIndex: number): boolean {
   const toc = view.state.doc.nodeAt(tocPos);
   if (!toc || toc.attrs.style !== "links") return false;
-  const heading = tocTarget(view.state.doc, toc, entryIndex);
+  const heading = tocTarget(view.state.doc, toc, entryIndex, tocRange(view.state.doc, tocPos));
   if (!heading) return false;
   const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, heading.pos + 1));
   view.dispatch(tr);

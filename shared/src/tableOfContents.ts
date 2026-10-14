@@ -14,10 +14,13 @@ export const TOC_PLACEHOLDER = "Add headings (Format > Paragraph styles) and the
 /** A heading the table of contents lists; level 0 is the Title. */
 export type TocHeading = { level: number; text: string; pos: number };
 
-/** Title and Heading 1–6 blocks with text, in document order. */
-export function tocHeadings(doc: Node): TocHeading[] {
+/** The part of a document a table of contents lists: the content of its tab (see documentTabs.ts). */
+export type TocRange = { from: number; to: number };
+
+/** Title and Heading 1–6 blocks with text, in document order; only those in `range` when given. */
+export function tocHeadings(doc: Node, range?: TocRange): TocHeading[] {
   const headings: TocHeading[] = [];
-  doc.descendants((node, pos) => {
+  doc.nodesBetween(range?.from ?? 0, range?.to ?? doc.content.size, (node, pos) => {
     if (node.type.name === "tableOfContents") return false;
     const level = node.type.name === "heading" ? (node.attrs.level as number) : node.attrs.paragraphStyle === "title" ? 0 : null;
     if (level !== null && node.isTextblock) {
@@ -33,8 +36,8 @@ export function tocHeadings(doc: Node): TocHeading[] {
  * The entries of a table of contents for `doc`. Each level below the highest one present is
  * indented one step (0.5 in). `pageOf` gives the page number shown for a heading position.
  */
-export function tocEntries(doc: Node, pageOf: (pos: number) => number | null = () => null): JSONContent[] {
-  const headings = tocHeadings(doc);
+export function tocEntries(doc: Node, pageOf: (pos: number) => number | null = () => null, range?: TocRange): JSONContent[] {
+  const headings = tocHeadings(doc, range);
   if (headings.length === 0) return [{ type: "tocEntry", content: [{ type: "text", text: TOC_PLACEHOLDER }] }];
   const top = Math.min(...headings.map((heading) => heading.level));
   return headings.map((heading, index) => ({
@@ -45,18 +48,18 @@ export function tocEntries(doc: Node, pageOf: (pos: number) => number | null = (
 }
 
 /** A table of contents node's JSON. */
-export function tableOfContents(doc: Node, style: TocStyle, pageOf?: (pos: number) => number | null): JSONContent {
-  return { type: "tableOfContents", attrs: { style }, content: tocEntries(doc, pageOf) };
+export function tableOfContents(doc: Node, style: TocStyle, pageOf?: (pos: number) => number | null, range?: TocRange): JSONContent {
+  return { type: "tableOfContents", attrs: { style }, content: tocEntries(doc, pageOf, range) };
 }
 
 /**
  * The heading an entry links to: the n-th heading with the entry's text (n counting the entries
  * before it with the same text), or the heading at the entry's index if the text changed.
  */
-export function tocTarget(doc: Node, toc: Node, entryIndex: number): TocHeading | null {
+export function tocTarget(doc: Node, toc: Node, entryIndex: number, range?: TocRange): TocHeading | null {
   const entry = toc.maybeChild(entryIndex);
   if (!entry || entry.attrs.heading === null) return null;
-  const headings = tocHeadings(doc);
+  const headings = tocHeadings(doc, range);
   const text = entry.textContent.trim();
   let occurrence = 0;
   for (let index = 0; index < entryIndex; index++) if (toc.child(index).textContent.trim() === text) occurrence += 1;

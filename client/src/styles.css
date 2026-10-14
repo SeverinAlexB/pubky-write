@@ -2538,8 +2538,9 @@ button:disabled {
   color: #666666;
 }
 
-/* Space before is not applied at the top of the document, even when set on the paragraph. */
-.page-content > :first-child {
+/* Space before is not applied at the top of the document (of each tab), even when set on the paragraph. */
+.page-content > :first-child,
+.page-content > .document-tab > :first-child {
   margin-top: 0;
   padding-top: 0 !important;
 }
@@ -3686,17 +3687,127 @@ body.is-column-resizing * {
   font-weight: 500;
 }
 
+/* "Document tabs" with the Add tab button at its right. */
+.outline-tabs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.icon-button.outline-add-tab {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+}
+
+.outline-tabs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.outline-tab-item {
+  position: relative;
+  margin-bottom: 2px;
+}
+
+/* Hidden tabs of the document (docs/design/document-tabs.md). */
+.page-content > .document-tab.is-hidden-tab {
+  display: none;
+}
+
 .outline-tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   height: 40px;
   padding: 0 4px 0 12px;
   border-radius: 20px;
+  cursor: pointer;
+}
+
+.outline-tab:hover {
+  background: #f1f4f8;
 }
 
 .outline-tab.is-current {
   background: var(--primary-container);
+}
+
+/* A parent's chevron sits in the space left of its icon. */
+.icon-button.outline-tab-chevron {
+  position: absolute;
+  top: 10px;
+  left: -10px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-secondary);
+}
+
+.outline-tab-emoji {
+  width: 24px;
+  font-size: 18px;
+  line-height: 24px;
+  text-align: center;
+}
+
+/* The ⋮ button shows on hover, on the current tab and while its menu is open. */
+.outline-tab:not(:hover, .is-current, :focus-within) .outline-tab-menu:not([aria-expanded="true"]) {
+  visibility: hidden;
+}
+
+.outline-tab-rename {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.tab-emoji-picker {
+  position: absolute;
+  z-index: 30;
+  top: 44px;
+  left: 12px;
+  display: grid;
+  grid-template-columns: repeat(6, 36px);
+  gap: 2px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--menu-shadow);
+}
+
+.tab-emoji {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font-size: 20px;
+}
+
+.tab-emoji:hover,
+.tab-emoji:focus-visible {
+  background: var(--hover);
+}
+
+.all-comments-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .outline-tab .icon {
@@ -3705,12 +3816,23 @@ body.is-column-resizing * {
 
 .outline-tab-name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
-  color: #041e49;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
   font-size: 14px;
-  font-weight: 500;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.outline-tab.is-current .outline-tab-name {
+  color: #041e49;
+  font-weight: 500;
 }
 
 .outline-tab-badge {
@@ -3922,6 +4044,7 @@ body.is-column-resizing * {
 }
 
 .history-body {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;

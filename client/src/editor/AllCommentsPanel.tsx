@@ -13,12 +13,14 @@ const filters: Filter[] = ["All", "Open", "Resolved"];
 type AllCommentsPanelProps = {
   editor: Editor;
   threads: CommentThread[];
+  /** The name of each thread's tab, when the document has several tabs. */
+  tabNames?: Record<number, string>;
   onSelect: (id: number) => void;
   onReopen: (id: number) => void;
   onClose: () => void;
 };
 
-export function AllCommentsPanel({ editor, threads, onSelect, onReopen, onClose }: AllCommentsPanelProps) {
+export function AllCommentsPanel({ editor, threads, tabNames = {}, onSelect, onReopen, onClose }: AllCommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("Open");
   const { anchors, activeId } = useCommentAnchors(editor);
   const listed = threads
@@ -60,6 +62,12 @@ export function AllCommentsPanel({ editor, threads, onSelect, onReopen, onClose 
               aria-label={`Comment on "${thread.quote}"`}
               onClick={() => onSelect(thread.id)}
             >
+              {tabNames[thread.id] && (
+                <p className="all-comments-tab">
+                  <Icon name="description" size={16} />
+                  {tabNames[thread.id]}
+                </p>
+              )}
               <p className={`all-comments-quote${isCollapsed(anchor) ? " is-deleted" : ""}`}>
                 {isCollapsed(anchor) ? <s>{thread.quote}</s> : thread.quote}
               </p>

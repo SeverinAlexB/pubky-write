@@ -3,6 +3,8 @@
 import {
   documentExtensions,
   documentSchema,
+  documentTabs,
+  tabAtPos,
   emptyDocument,
   pageGeometry,
   pageSetupOf,
@@ -18,6 +20,8 @@ import { Icon } from "../components/Icon.tsx";
 import { Menu } from "../components/Menu.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { formatDay, formatVersionTime, formatVersionTitle } from "../format.ts";
+import { currentTabId, DocumentTabs, switchTab } from "./documentTabs.ts";
+import { OutlinePanel, OutlineToggle } from "./OutlinePanel.tsx";
 import { PageElements } from "./PageElements.tsx";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { Pagination, resetPagination } from "./pagination.ts";
@@ -28,6 +32,8 @@ import { VersionHighlight } from "./versionHighlight.ts";
 
 type HistoryModeProps = {
   documentId: string;
+  /** The tab shown in the editor, shown first in the preview too. */
+  initialTab: string;
   /** Saves pending edits, then lists the versions, newest first. */
   loadRevisions: () => Promise<Revision[]>;
   initialZoom: Zoom;
@@ -43,7 +49,7 @@ type Comparison = { id: number; before: Node; after: Node };
 
 const emptyDoc = Node.fromJSON(documentSchema, emptyDocument);
 
-export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, onRestore, onMakeCopy }: HistoryModeProps) {
+export function HistoryMode({ documentId, initialTab, loadRevisions, initialZoom, onBack, onRestore, onMakeCopy }: HistoryModeProps) {
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -55,6 +61,9 @@ export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, on
   const [restoring, setRestoring] = useState<Revision | null>(null);
   const [naming, setNaming] = useState<Revision | null>(null);
   const contents = useRef(new Map<number, Promise<Node>>());
+  // The preview's tab, kept when another version is selected; its sidebar lists the version's tabs.
+  const previewTab = useRef(initialTab);
+  const [tabsOpen, setTabsOpen] = useState(true);
 
   useEffect(() => {
     loadRevisions().then(
@@ -108,7 +117,13 @@ export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, on
 
   const preview = useEditor(
     {
-      extensions: [...documentExtensions, TabLayout, Pagination, VersionHighlight.configure({ edits: highlight ? edits : [] })],
+      extensions: [
+        ...documentExtensions,
+        DocumentTabs.configure({ initialTab: previewTab.current }),
+        TabLayout,
+        Pagination,
+        VersionHighlight.configure({ edits: highlight ? edits : [] }),
+      ],
       content: (comparison?.after ?? emptyDoc).toJSON(),
       editable: false,
       editorProps: { attributes: { class: "page-content", "aria-label": "Version preview" } },
@@ -126,10 +141,25 @@ export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, on
     if (!preview.isDestroyed) resetPagination(preview.view);
   }, [preview, effectiveZoom]);
 
-  /** Scrolls edit `index` to the middle of the preview and marks it as the current edit. */
+  function showTab(id: string) {
+    const tr = switchTab(preview.state, id);
+    if (!tr) return;
+    previewTab.current = id;
+    preview.view.dispatch(tr);
+    fit.element?.scrollTo({ top: 0 });
+  }
+
+  /** Scrolls edit `index` (in its tab) to the middle of the preview and marks it as the current edit. */
   function goToEdit(index: number) {
     const edit = edits[index];
     if (!edit || !fit.element) return;
+    const tab = tabAtPos(preview.state.doc, edit.from);
+    if (tab && tab.id !== currentTabId(preview.state)) {
+      showTab(tab.id);
+      // Once the tab's pages are laid out.
+      requestAnimationFrame(() => requestAnimationFrame(() => goToEdit(index)));
+      return;
+    }
     setCurrentEdit(index);
     for (const element of fit.element.querySelectorAll(".is-current-edit")) element.classList.remove("is-current-edit");
     const marked = fit.element.querySelectorAll<HTMLElement>(`[data-edit="${index}"]`);
@@ -194,6 +224,12 @@ export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, on
         </div>
 
         <div className="history-body">
+          {comparison && documentTabs(comparison.after).length > 1 &&
+            (tabsOpen ? (
+              <OutlinePanel editor={preview} openComments={{}} onClose={() => setTabsOpen(false)} onSwitch={showTab} />
+            ) : (
+              <OutlineToggle onOpen={() => setTabsOpen(true)} />
+            ))}
           {/* Focusable, so the read-only preview can be scrolled with the keyboard. */}
           <div className="editor-scroll history-scroll" ref={fit.ref} tabIndex={0} role="region" aria-label="Selected version">
             <div className="page-column" hidden={!comparison}>

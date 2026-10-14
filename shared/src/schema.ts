@@ -1,6 +1,6 @@
 // The document schema shared by the editor and the server.
 // The server applies client steps against this schema, so both sides must use the same extensions.
-import { getSchema, type AnyExtension, type JSONContent } from "@tiptap/core";
+import { getSchema, Node as TiptapNode, type AnyExtension, type JSONContent } from "@tiptap/core";
 import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
 import { Color, FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
@@ -9,6 +9,7 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import StarterKit from "@tiptap/starter-kit";
 import { DocsImage } from "./images.ts";
+import { DOCUMENT_TAB, DocumentTab } from "./documentTabs.ts";
 import { checklistExtensions, ListPreset } from "./lists.ts";
 import { PageBreak } from "./pageBreak.ts";
 import { Footnote, PageElementAttributes, PageField, registerRegionSchema } from "./pageElements.ts";
@@ -28,7 +29,12 @@ export const documentExtensions: AnyExtension[] = [
     // Undo history is configured by the editor so it can be left out on the server.
     undoRedo: false,
     strike: false,
+    document: false,
   }),
+  // Blocks, or one tab node per document tab (documentTabs.ts). Blocks come first, so an
+  // emptied document is filled with a paragraph.
+  TiptapNode.create({ name: "doc", topNode: true, content: `block+ | ${DOCUMENT_TAB}+` }),
+  DocumentTab,
   // Strikethrough is ⌘+Shift+X, as in Format > Text.
   Strike.extend({
     addKeyboardShortcuts() {

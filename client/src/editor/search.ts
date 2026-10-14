@@ -4,6 +4,7 @@ import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { currentTab } from "./documentTabs.ts";
 
 export type SearchRange = { from: number; to: number };
 
@@ -97,12 +98,15 @@ export function searchPattern(options: SearchOptions): RegExp | null {
   }
 }
 
-/** Finds the search in every textblock, skipping text suggested for deletion. Matches never span two paragraphs. */
-export function findMatches(doc: Node, options: SearchOptions): SearchMatch[] {
+/**
+ * Finds the search in every textblock (of `range`, the shown tab), skipping text suggested for
+ * deletion. Matches never span two paragraphs.
+ */
+export function findMatches(doc: Node, options: SearchOptions, range: SearchRange = { from: 0, to: doc.content.size }): SearchMatch[] {
   const pattern = searchPattern(options);
   if (!pattern) return [];
   const matches: SearchMatch[] = [];
-  doc.descendants((node, pos) => {
+  doc.nodesBetween(range.from, range.to, (node, pos) => {
     if (!node.isTextblock) return true;
     const { text: raw, offsets } = acceptedTextOffsets(node, leafText);
     const folded = foldText(raw, options.ignoreDiacritics);
@@ -233,22 +237,25 @@ export const Search = Extension.create({
         key: searchKey,
         state: {
           init: () => emptySearch,
-          apply(tr, previous, _oldState, newState) {
+          apply(tr, previous, oldState, newState) {
             const meta = tr.getMeta(searchKey) as (SearchMeta & Partial<ApplyMeta>) | undefined;
-            if (!meta && !tr.docChanged) return previous;
+            const tab = currentTab(newState);
+            // Find searches the shown tab.
+            const tabChanged = tab.id !== currentTab(oldState).id;
+            if (!meta && !tr.docChanged && !tabChanged) return previous;
             const options: SearchOptions = {
               query: meta?.query ?? previous.query,
               caseSensitive: meta?.caseSensitive ?? previous.caseSensitive,
               regex: meta?.regex ?? previous.regex,
               ignoreDiacritics: meta?.ignoreDiacritics ?? previous.ignoreDiacritics,
             };
-            const matches = findMatches(newState.doc, options);
+            const matches = findMatches(newState.doc, options, tab);
             const searchChanged = (Object.keys(defaultSearchOptions) as (keyof SearchOptions)[]).some(
               (key) => options[key] !== previous[key],
             );
             let current = meta?.current ?? previous.current;
             if (meta?.after !== undefined) current = matchAtOrAfter(matches, meta.after);
-            else if (searchChanged) current = matchAtOrAfter(matches, newState.selection.from);
+            else if (searchChanged || tabChanged) current = matchAtOrAfter(matches, newState.selection.from);
             if (current >= matches.length) current = matches.length - 1;
             if (current < 0 && matches.length > 0) current = 0;
             const reveal = meta ? previous.reveal + 1 : previous.reveal;

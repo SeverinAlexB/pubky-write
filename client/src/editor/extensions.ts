@@ -9,6 +9,7 @@ import { keyBinding } from "../shortcuts.ts";
 import { Autoformat } from "./autoformat.ts";
 import { PasteCleanup } from "./paste.ts";
 import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
+import { DocumentTabs } from "./documentTabs.ts";
 import { EditorImage } from "./imageView.ts";
 import { Pagination } from "./pagination.ts";
 import { Search } from "./search.ts";
@@ -30,6 +31,8 @@ type EditorExtensionOptions = {
   mode: EditorMode;
   onSuggestionClick: (id: string | null) => void;
   onImageError?: (message: string) => void;
+  /** The tab shown first (a `?tab=` link); otherwise the first tab. */
+  initialTab?: string | null;
 };
 
 /** The shared document schema plus the editor-only behaviour: undo, step tracking, search, pages and shortcuts. */
@@ -45,6 +48,7 @@ export function editorExtensions({
   mode,
   onSuggestionClick,
   onImageError = () => {},
+  initialTab = null,
 }: EditorExtensionOptions): AnyExtension[] {
   return [
     // The shared schema, with the editor's own views of tables and images.
@@ -53,6 +57,7 @@ export function editorExtensions({
     ),
     TableColumnResize,
     UndoRedo,
+    DocumentTabs.configure({ initialTab }),
     Search,
     TabLayout,
     Pagination,

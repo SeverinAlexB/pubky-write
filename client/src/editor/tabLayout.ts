@@ -11,6 +11,7 @@ import { Extension, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, type EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
+import { currentTab, shownTabElement } from "./documentTabs.ts";
 
 const TAB_SELECTOR = ".tab-char";
 const TEXTBLOCK_SELECTOR = "p, h1, h2, h3, h4, h5, h6";
@@ -167,15 +168,17 @@ class TabLayoutView {
 
   /** Tab elements ProseMirror drew again (for new decorations) have lost their width. */
   private hasStaleTabs(): boolean {
-    return this.view.dom.querySelector(`${TAB_SELECTOR}:not([data-width])`) !== null;
+    return shownTabElement(this.view).querySelector(`${TAB_SELECTOR}:not([data-width])`) !== null;
   }
 
   run(): void {
     const { view } = this;
     if (view.isDestroyed || !view.dom.isConnected) return;
+    // The blocks of the shown tab: the others are hidden, and laid out when they are shown.
     const blocks: { node: Node; pos: number }[] = [];
-    view.state.doc.forEach((node, pos) => {
-      if (containsTab(node)) blocks.push({ node, pos });
+    const tab = currentTab(view.state);
+    tab.node.forEach((node, offset) => {
+      if (containsTab(node)) blocks.push({ node, pos: tab.from + offset });
     });
     if (blocks.length === 0) return;
     const width = view.dom.clientWidth;
@@ -191,7 +194,7 @@ class TabLayoutView {
       const element = view.nodeDOM(pos);
       if (element instanceof Element) containers.add(element);
     }
-    for (const tab of view.dom.querySelectorAll(`${TAB_SELECTOR}:not([data-width])`)) containers.add(tab);
+    for (const element of shownTabElement(view).querySelectorAll(`${TAB_SELECTOR}:not([data-width])`)) containers.add(element);
     if (containers.size === 0) return;
     layoutTabsIn(containers);
     for (const { node } of blocks) this.laid.add(node);
