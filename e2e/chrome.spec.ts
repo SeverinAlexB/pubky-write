@@ -71,6 +71,7 @@ test("toolbar controls are in order and named after their tooltips", async ({ pa
     named("Decrease indent", "⌘+["),
     named("Increase indent", "⌘+]"),
     named("Clear formatting", "⌘+\\"),
+    "Editing mode",
     named("Hide the menus", "⌘+Shift+F"),
   ]);
   await expect(page.getByRole("button", { name: /Strikethrough/ })).toHaveCount(0);
@@ -318,7 +319,7 @@ test("menus list their items in order without omitted ones", async ({ page }) =>
   await items("Symbols").toEqual(["Special characters", "Emoji"]);
 
   await menuBarItem(page, "Tools").hover();
-  await items("Tools").toEqual(["Word count", "Preferences"]);
+  await items("Tools").toEqual(["Word count", "Review suggested edits", "Preferences"]);
 
   for (const omitted of [
     "Share",

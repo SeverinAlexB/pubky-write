@@ -17,6 +17,7 @@ import { ParagraphFormat } from "./paragraphFormat.ts";
 import { headingLevels, ParagraphStyle } from "./paragraphStyles.ts";
 import { DocsTable, DocsTableCell, DocsTableHeader, DocsTableRow } from "./tables.ts";
 import { TableOfContents, TocEntry } from "./tableOfContents.ts";
+import { suggestionExtensions } from "./suggestions.ts";
 import { Tab, TabStops } from "./tabStops.ts";
 
 export const documentExtensions: AnyExtension[] = [
@@ -61,6 +62,8 @@ export const documentExtensions: AnyExtension[] = [
   TocEntry,
   TabStops,
   Tab,
+  // Last, so suggestion marks are the innermost spans and their colour wins.
+  ...suggestionExtensions,
 ];
 
 export const documentSchema = getSchema(documentExtensions);

@@ -1,5 +1,6 @@
 import {
   defaultPaperSize,
+  type CommentMessage,
   type CommentThread,
   type CreateCommentRequest,
   type CreateDocumentRequest,
@@ -107,4 +108,14 @@ export const api = {
     }),
   deleteCommentReply: (id: string, commentId: number, messageId: number) =>
     request<CommentThread>(`/api/documents/${id}/comments/${commentId}/messages/${messageId}`, { method: "DELETE" }),
+  /** Replies on a suggestion; each call returns all of the suggestion's replies. */
+  replyToSuggestion: (id: string, suggestionId: string, body: string) =>
+    request<CommentMessage[]>(`/api/documents/${id}/suggestions/${encodeURIComponent(suggestionId)}/replies`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+  deleteSuggestionReply: (id: string, suggestionId: string, replyId: number) =>
+    request<CommentMessage[]>(`/api/documents/${id}/suggestions/${encodeURIComponent(suggestionId)}/replies/${replyId}`, {
+      method: "DELETE",
+    }),
 };

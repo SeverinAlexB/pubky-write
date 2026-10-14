@@ -16,3 +16,4 @@ export * from "./images.ts";
 export * from "./pageElements.ts";
 export * from "./tableOfContents.ts";
 export * from "./tabStops.ts";
+export * from "./suggestions.ts";

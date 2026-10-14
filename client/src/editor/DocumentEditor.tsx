@@ -1,4 +1,5 @@
 import {
+  acceptedDocument,
   commentQuote,
   lengthUnit,
   pageGeometry,
@@ -9,6 +10,7 @@ import {
   type PageSetup,
   type Revision,
 } from "@docs/shared";
+import { getText, getTextSerializersFromSchema } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { closeHistory as startUndoStep } from "@tiptap/pm/history";
 import { getVersion } from "prosemirror-collab";
@@ -33,6 +35,7 @@ import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
 import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
 import { MenuBar } from "./MenuBar.tsx";
+import { storedMode, storeMode } from "./modes.tsx";
 import {
   addPageNumbers,
   currentPageNumberOptions,
@@ -48,6 +51,13 @@ import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { cursorPage, resetPagination } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
 import { stepsTransport } from "./stepsTransport.ts";
+import {
+  getSuggesting,
+  resolveSuggestions,
+  setSuggesting,
+  type EditorMode,
+  type SuggestionView,
+} from "./suggesting.ts";
 import type { ImportNotice } from "../home/HomePage.tsx";
 import { DocumentSync, type SaveStatus } from "./sync.ts";
 import { ColorPalette } from "./toolbar/ColorPicker.tsx";
@@ -65,6 +75,7 @@ const CustomSpacingDialog = lazyComponent(() => import("./CustomSpacingDialog.ts
 const TableOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.TableOptionsPanel));
 const ImageOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.ImageOptionsPanel));
 const PageNumbersDialog = lazyComponent(() => import("./PageNumbersDialog.tsx").then((module) => module.PageNumbersDialog));
+const ReviewSuggestions = lazyComponent(() => import("./ReviewSuggestions.tsx").then((module) => module.ReviewSuggestions));
 const SpecialCharactersDialog = lazyComponent(() =>
   import("./characters/SpecialCharactersDialog.tsx").then((module) => module.SpecialCharactersDialog),
 );
@@ -79,9 +90,10 @@ const onDemand = [
   ImageOptionsPanel,
   PageNumbersDialog,
   SpecialCharactersDialog,
+  ReviewSuggestions,
 ];
 
-/** The second key of a header (H) or footer (F) chord must follow Ctrl+⌘O within this time. */
+/** The second key of a header (H), footer (F) or review (U) chord must follow Ctrl+⌘O within this time. */
 const CHORD_TIMEOUT_MS = 2000;
 
 const OUTLINE_SETTING = "docs.outlineOpen";
@@ -126,6 +138,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [pageNumbersDialog, setPageNumbersDialog] = useState<Required<PageNumberOptions> | null>(null);
   // Insert > Symbols > Special characters (or Emoji), opened on that category.
   const [specialCharacters, setSpecialCharacters] = useState<{ category: string } | null>(null);
+  // Editing, Suggesting or Viewing, remembered per document.
+  const [mode, setMode] = useState<EditorMode>(() => storedMode(doc.id));
+  // Tools > Review suggested edits, and its preview of accepting or rejecting all suggestions.
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [suggestionView, setSuggestionView] = useState<SuggestionView>("suggestions");
+  const [suggestionReplies, setSuggestionReplies] = useState(doc.suggestionReplies ?? {});
   const location = useLocation();
   // A notice from the document list, such as content an import left out.
   const [notice, setNotice] = useState<string | null>(
@@ -147,6 +165,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     toggleCommentsHidden: () => {},
     insertFootnote: () => {},
     editRegion: (_kind: "header" | "footer") => {},
+    activateSuggestion: (_id: string | null) => {},
+    changeMode: (_mode: EditorMode) => {},
+    toggleSuggesting: () => {},
+    openReview: () => {},
     historyOpen: false,
   });
 
@@ -161,6 +183,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         comments: doc.comments.map(({ id, from, to, resolved }) => ({ id, from, to, resolved })),
         commentsHidden,
         onCommentClick: (id) => handlers.current.activateComment(id),
+        mode: storedMode(doc.id),
+        onSuggestionClick: (id) => handlers.current.activateSuggestion(id),
       }),
     // The document is fixed for the life of this component; a reload remounts it.
     [],
@@ -298,6 +322,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           handlers.current.editRegion(event.code === "KeyH" ? "header" : "footer");
           return;
         }
+        if (event.code === "KeyU" && Date.now() - chordStarted < CHORD_TIMEOUT_MS) {
+          event.preventDefault();
+          chordStarted = 0;
+          handlers.current.openReview();
+          return;
+        }
       }
       // Alt+F10 moves to the toolbar, as in other editors (the document uses Tab for indentation).
       if (event.altKey && event.key === "F10" && !handlers.current.historyOpen) {
@@ -320,6 +350,9 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         "Shift+KeyF": () => setMenusHidden((hidden) => !hidden),
         "Alt+Shift+KeyA": () => setAllCommentsOpen(true),
         "Alt+Shift+KeyJ": () => handlers.current.toggleCommentsHidden(),
+        "Alt+Shift+KeyX": () => handlers.current.toggleSuggesting(),
+        "Alt+Shift+KeyZ": () => handlers.current.changeMode("editing"),
+        "Alt+Shift+KeyC": () => handlers.current.changeMode("viewing"),
         KeyO: () => navigate("/"),
       }[pressed];
       if (!action) return;
@@ -350,6 +383,85 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   handlers.current.historyOpen = historyOpen;
   handlers.current.insertFootnote = startFootnote;
   handlers.current.editRegion = editRegion;
+  handlers.current.activateSuggestion = activateSuggestion;
+  handlers.current.changeMode = changeMode;
+  handlers.current.toggleSuggesting = () => changeMode(mode === "suggesting" ? "editing" : "suggesting");
+  handlers.current.openReview = openReview;
+
+  // Viewing mode shows the document as if every suggestion were accepted; the review card can preview either.
+  const display: SuggestionView = mode === "viewing" ? "accepted" : suggestionView;
+  const readOnly = display !== "suggestions";
+
+  useEffect(() => {
+    storeMode(doc.id, mode);
+    const current = getSuggesting(editor.state);
+    if (current.mode !== mode || current.readOnly !== readOnly) {
+      editor.view.dispatch(setSuggesting(editor.state.tr, { mode, readOnly, group: null }));
+    }
+    if (editor.isEditable === readOnly) editor.setEditable(!readOnly);
+  }, [editor, mode, readOnly]);
+
+  function changeMode(next: EditorMode) {
+    if (historyOpen) return;
+    if (next === "suggesting" && mode !== "suggesting") setNotice("You're suggesting");
+    if (next === "viewing") {
+      setRegionTarget(null);
+      setReviewOpen(false);
+      setSuggestionView("suggestions");
+      closeComments();
+      activateSuggestion(null);
+    }
+    setMode(next);
+    if (next !== "viewing") requestAnimationFrame(() => editor.commands.focus(undefined, { scrollIntoView: false }));
+  }
+
+  /** Tools > Review suggested edits: the card, with the first suggestion selected. */
+  function openReview() {
+    if (historyOpen || mode === "viewing") return;
+    setReviewOpen(true);
+    const { suggestions, activeId } = getSuggesting(editor.state);
+    if (!activeId && suggestions[0]) selectSuggestion(suggestions[0].id);
+  }
+
+  function closeReview() {
+    setReviewOpen(false);
+    setSuggestionView("suggestions");
+    editor.commands.focus(undefined, { scrollIntoView: false });
+  }
+
+  /** A click on suggested text or a card (its id), or elsewhere (null). */
+  function activateSuggestion(id: string | null) {
+    if (getSuggesting(editor.state).activeId === id) return;
+    if (id !== null && getCommentAnchors(editor.state).activeId !== null) {
+      editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: null }));
+    }
+    editor.view.dispatch(setSuggesting(editor.state.tr, { activeId: id }));
+  }
+
+  /** Activates a suggestion and scrolls the document to it (review card). */
+  function selectSuggestion(id: string) {
+    activateSuggestion(id);
+    const suggestion = getSuggesting(editor.state).suggestions.find((candidate) => candidate.id === id);
+    if (!suggestion) return;
+    const { node } = editor.view.domAtPos(Math.min(suggestion.from + 1, editor.state.doc.content.size));
+    const element = node instanceof HTMLElement ? node : node.parentElement;
+    element?.scrollIntoView({ block: "center" });
+  }
+
+  function resolveSuggestion(action: "accept" | "reject", id: string | null) {
+    const transaction = resolveSuggestions(editor.state, action, id === null ? null : [id]);
+    if (transaction) editor.view.dispatch(transaction);
+  }
+
+  async function replyToSuggestion(id: string, body: string) {
+    const replies = await api.replyToSuggestion(doc.id, id, body);
+    setSuggestionReplies((current) => ({ ...current, [id]: replies }));
+  }
+
+  async function deleteSuggestionReply(id: string, replyId: number) {
+    const replies = await api.deleteSuggestionReply(doc.id, id, replyId);
+    setSuggestionReplies((current) => ({ ...current, [id]: replies }));
+  }
 
   /** Insert > Header or Footer: edits the one on the cursor's page. */
   function editRegion(kind: "header" | "footer") {
@@ -359,7 +471,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   /** Insert > Footnote (⌘+Option+F): a reference at the cursor, then the cursor in the footnote's text. */
   function startFootnote() {
-    if (regionTarget || historyOpen) return;
+    if (regionTarget || historyOpen || readOnly) return;
     const index = insertFootnote(editor);
     if (index !== null) setRegionTarget({ kind: "footnote", index });
   }
@@ -374,7 +486,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   function startComment() {
     const { from, to, empty } = editor.state.selection;
-    if (empty || historyOpen || !commentQuote(editor.state.doc, from, to)) return;
+    if (empty || historyOpen || readOnly || !commentQuote(editor.state.doc, from, to)) return;
     setCommentsHidden(false);
     editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: { from, to } }));
   }
@@ -425,6 +537,9 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   /** A click on commented text, on a card or elsewhere (null). */
   function activateComment(id: number | null) {
+    if (id !== null && getSuggesting(editor.state).activeId !== null) {
+      editor.view.dispatch(setSuggesting(editor.state.tr, { activeId: null }));
+    }
     if (getCommentAnchors(editor.state).activeId === id) return;
     editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id }));
   }
@@ -494,6 +609,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   function openHistory() {
     setRegionTarget(null);
+    setReviewOpen(false);
+    setSuggestionView("suggestions");
     closeComments();
     setFind(null);
     editor.commands.blur();
@@ -561,7 +678,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     },
     download: async (format) => {
       if (format === "pdf") return window.print();
-      if (format === "txt") return downloadText(`${savedTitle}.txt`, editor.getText({ blockSeparator: "\n" }));
+      if (format === "txt") {
+        // As if every suggestion were accepted, like the Markdown export.
+        const text = getText(acceptedDocument(editor.state.doc), {
+          blockSeparator: "\n",
+          textSerializers: getTextSerializersFromSchema(editor.schema),
+        });
+        return downloadText(`${savedTitle}.txt`, text);
+      }
       await sync.current?.flushNow();
       window.location.assign(api.exportUrl(doc.id, format));
     },
@@ -586,6 +710,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     paste: () => void pasteFromClipboard(editor, true),
     pasteWithoutFormatting: () => void pasteFromClipboard(editor, false),
     findAndReplace: () => openFind("dialog"),
+    setMode: changeMode,
     hideComments: () => {
       if (!commentsHidden && getCommentAnchors(editor.state).draft) cancelComment();
       setCommentsHidden((hidden) => !hidden);
@@ -627,6 +752,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     setPageOrientation: () => setPageSetupOpen(true),
     switchToPageless: () => setPrintLayout(false),
     wordCount: () => setWordCountOpen(true),
+    reviewSuggestedEdits: openReview,
     tableOptions: () => openOptionsPanel("table"),
     imageOptions: () => openOptionsPanel("image"),
   };
@@ -648,9 +774,22 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const openCommentCount = threads.filter((thread) => !thread.resolved).length;
   const commentState = useCommentAnchors(editor);
   const activeThread = threads.find((thread) => thread.id === commentState.activeId);
-  // The margin is there while there is something to show in it.
+  const suggestionState = useEditorState({
+    editor,
+    selector: ({ editor: current }) => {
+      const { suggestions, activeId } = getSuggesting(current.state);
+      return { suggestions, activeId };
+    },
+    equalityFn: (a, b) => b !== null && a.suggestions === b.suggestions && a.activeId === b.activeId,
+  });
+  // Suggestion cards are shown with the suggestions, not in the previews.
+  const marginSuggestions = display === "suggestions" ? suggestionState.suggestions : [];
+  // The margin is there while there is something to show in it; Viewing mode shows only the document.
   const marginShown =
-    !commentsHidden && !historyOpen && (openCommentCount > 0 || commentState.draft !== null || activeThread !== undefined);
+    !commentsHidden &&
+    !historyOpen &&
+    mode !== "viewing" &&
+    (openCommentCount > 0 || commentState.draft !== null || activeThread !== undefined || marginSuggestions.length > 0);
   const marginWidth = marginShown ? COMMENT_MARGIN_WIDTH : 0;
   const fitZoom = useFitZoom(geometry.width, marginWidth);
   const effectiveZoom = zoom === "fit" ? fitZoom.value : zoom;
@@ -658,7 +797,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   // Zoom, the print layout setting and showing the page again all change the layout from outside the editor.
   useEffect(() => {
     if (stack && !editor.isDestroyed) resetPagination(editor.view, printLayout);
-  }, [editor, stack, effectiveZoom, printLayout, historyOpen]);
+  }, [editor, stack, effectiveZoom, printLayout, historyOpen, display]);
 
   return (
     <>
@@ -692,7 +831,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
               <MenuBar
                 editor={activeEditor}
                 actions={actions}
-                view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden }}
+                view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden, mode, readOnly }}
               />
             </div>
             <div className="header-actions">
@@ -727,6 +866,9 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             onZoomChange={setZoom}
             menusHidden={menusHidden}
             onToggleMenus={() => setMenusHidden((hidden) => !hidden)}
+            mode={mode}
+            onModeChange={changeMode}
+            readOnly={readOnly}
           />
         )}
         {rulerVisible ? (
@@ -767,13 +909,25 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                 onClose={closeFind}
               />
             )}
+            {reviewOpen && !historyOpen && find?.mode !== "bar" && (
+              <ReviewSuggestions
+                suggestions={suggestionState.suggestions}
+                activeId={suggestionState.activeId}
+                view={suggestionView}
+                onViewChange={setSuggestionView}
+                onSelect={selectSuggestion}
+                onResolve={resolveSuggestion}
+                onClose={closeReview}
+              />
+            )}
             {liveCount.visible && !historyOpen && <LiveWordCount editor={editor} setting={liveCount} onChange={setLiveCount} />}
-            <div className="editor-scroll" ref={fitZoom.ref}>
+            {/* While read-only the document cannot take focus, so the scroll area does, for scrolling with the keyboard. */}
+            <div className="editor-scroll" ref={fitZoom.ref} tabIndex={readOnly ? 0 : undefined}>
               {/* The pages and, right of them, the comment margin, centred together. */}
               <div ref={setColumn} className="page-column">
                 <div
                   ref={setStack}
-                  className={`page-stack${printLayout ? "" : " is-pageless"}`}
+                  className={`page-stack${printLayout ? "" : " is-pageless"} suggestions-${display}${mode === "viewing" ? " is-viewing" : ""}`}
                   style={{ zoom: effectiveZoom }}
                 >
                   {/* One sheet per page, drawn by the pagination plugin. */}
@@ -782,7 +936,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                   <PageElements
                     editor={editor}
                     target={historyOpen ? null : regionTarget}
-                    onTargetChange={setRegionTarget}
+                    onTargetChange={(target) => {
+                      // Headers, footers and footnotes cannot be edited while the document is read-only.
+                      if (!target || !readOnly) setRegionTarget(target);
+                    }}
                     onRegionEditor={setRegionEditor}
                     onPageNumbers={(position) => setPageNumbersDialog(currentPageNumberOptions(editor.state.doc, position))}
                   />
@@ -802,11 +959,18 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                     }
                     onDeleteReply={async (id, messageId) => replaceThread(await api.deleteCommentReply(doc.id, id, messageId))}
                     onCopyLink={(id) => void copyCommentLink(id)}
+                    suggestions={marginSuggestions}
+                    activeSuggestion={display === "suggestions" ? suggestionState.activeId : null}
+                    suggestionReplies={suggestionReplies}
+                    onActivateSuggestion={activateSuggestion}
+                    onResolveSuggestion={resolveSuggestion}
+                    onReplyToSuggestion={replyToSuggestion}
+                    onDeleteSuggestionReply={deleteSuggestionReply}
                   />
                 )}
-                {!historyOpen && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
-                {!historyOpen && <TocPill editor={editor} column={column} />}
-                {!historyOpen && (
+                {!historyOpen && !readOnly && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
+                {!historyOpen && !readOnly && <TocPill editor={editor} column={column} />}
+                {!historyOpen && !readOnly && (
                   <ImagePill
                     editor={editor}
                     column={column}

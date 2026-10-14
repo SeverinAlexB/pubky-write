@@ -1,4 +1,5 @@
 // Find and replace: matching, highlighting (as decorations) and replacing.
+import { acceptedTextBetween, acceptedTextOffsets } from "@docs/shared";
 import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
@@ -96,19 +97,20 @@ export function searchPattern(options: SearchOptions): RegExp | null {
   }
 }
 
-/** Finds the search in every textblock. Matches never span two paragraphs. */
+/** Finds the search in every textblock, skipping text suggested for deletion. Matches never span two paragraphs. */
 export function findMatches(doc: Node, options: SearchOptions): SearchMatch[] {
   const pattern = searchPattern(options);
   if (!pattern) return [];
   const matches: SearchMatch[] = [];
   doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
-    const raw = node.textBetween(0, node.content.size, undefined, leafText);
+    const { text: raw, offsets } = acceptedTextOffsets(node, leafText);
     const folded = foldText(raw, options.ignoreDiacritics);
     const start = pos + 1;
     const toDocument = ([from, to]: [number, number]): SearchRange => {
       const range = unfoldRange(folded, raw.length, from, to);
-      return { from: start + range.from, to: start + range.to };
+      if (!offsets) return { from: start + range.from, to: start + range.to };
+      return { from: start + offsets[range.from]!, to: start + offsets[range.to - 1]! + 1 };
     };
     pattern.lastIndex = 0;
     for (let result = pattern.exec(folded.text); result; result = pattern.exec(folded.text)) {
@@ -140,7 +142,7 @@ export function findMatches(doc: Node, options: SearchOptions): SearchMatch[] {
  */
 export function expandReplacement(doc: Node, match: SearchMatch, replacement: string, regex: boolean): string {
   if (!regex) return replacement;
-  const text = (range: SearchRange | undefined) => (range ? doc.textBetween(range.from, range.to, undefined, leafText) : "");
+  const text = (range: SearchRange | undefined) => (range ? acceptedTextBetween(doc, range.from, range.to, undefined, leafText) : "");
   const groupCount = (match.groups?.length ?? 1) - 1;
   return replacement.replace(/\$(\$|&|<([^>]*)>|(\d\d?))/g, (token, symbol: string, name?: string, digits?: string) => {
     if (symbol === "$") return "$";

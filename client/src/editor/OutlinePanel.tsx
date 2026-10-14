@@ -1,4 +1,5 @@
 // The tabs and outline sidebar: the document's single tab and an outline of its headings.
+import { acceptedTextBetween } from "@docs/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
@@ -18,7 +19,8 @@ export function outlineHeadings(doc: Node): OutlineHeading[] {
   doc.descendants((node, pos) => {
     const level = node.type.name === "heading" ? (node.attrs.level as number) : node.attrs.paragraphStyle === "title" ? 0 : null;
     if (level !== null && node.isTextblock) {
-      const text = node.textContent.trim();
+      // Without text suggested for deletion.
+      const text = acceptedTextBetween(node, 0, node.content.size).trim();
       if (text) headings.push({ level, text, pos });
     }
     return node.isBlock && !node.isTextblock; // headings only live at block level

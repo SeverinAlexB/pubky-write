@@ -1,7 +1,7 @@
 import { listPresetAt } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import { useCallback, useRef, type ReactNode } from "react";
+import { isValidElement, useCallback, useRef, type ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";
 import { Menu } from "../../components/Menu.tsx";
 import { usePopover } from "../../components/usePopover.ts";
@@ -9,6 +9,8 @@ import { useRovingToolbar } from "../../components/useRovingToolbar.ts";
 import { withShortcut } from "../../components/shortcuts.ts";
 import type { EditorActions } from "../actions.ts";
 import { isImage } from "../imageView.ts";
+import { ModeButton } from "../modes.tsx";
+import type { EditorMode } from "../suggesting.ts";
 import { clearFormatting, selectedFontFamily, selectedFontSize } from "../extensions.ts";
 import { paragraphSpacingAt } from "../formatMenus.ts";
 import { currentParagraphStyle } from "../paragraphStyles.ts";
@@ -27,10 +29,17 @@ type ToolbarProps = {
   onZoomChange: (zoom: Zoom) => void;
   menusHidden: boolean;
   onToggleMenus: () => void;
+  mode: EditorMode;
+  onModeChange: (mode: EditorMode) => void;
+  /** Viewing mode or a suggestion preview: the editing controls are disabled. */
+  readOnly: boolean;
 };
 
+/** Controls that stay enabled while the document is read-only. */
+const readOnlyControls = new Set(["search", "print", "zoom"]);
+
 /** The rounded formatting bar under the menus. Controls that do not fit move into "More". */
-export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onToggleMenus }: ToolbarProps) {
+export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onToggleMenus, mode, onModeChange, readOnly }: ToolbarProps) {
   const state = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -215,12 +224,22 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
 
   const { bar, visibleCount } = useToolbarOverflow(items.length);
   const more = usePopover();
-  const overflow = items.slice(visibleCount);
+  // A disabled fieldset disables every button and field of a control.
+  const shown = items.map((item) =>
+    readOnly && isValidElement(item) && !readOnlyControls.has(String(item.key)) ? (
+      <fieldset key={item.key} className="toolbar-fieldset" disabled>
+        {item}
+      </fieldset>
+    ) : (
+      item
+    ),
+  );
+  const overflow = shown.slice(visibleCount);
 
   return (
     <div className="toolbar" role="toolbar" aria-label="Formatting" ref={toolbar}>
       <div className="toolbar-items" ref={bar}>
-        {items.slice(0, visibleCount).map((item, index) => (
+        {shown.slice(0, visibleCount).map((item, index) => (
           <div key={index} className="toolbar-item">
             {item}
           </div>
@@ -242,6 +261,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
           )}
         </div>
       )}
+      <ModeButton mode={mode} onChange={onModeChange} />
       <ToolButton
         label={withShortcut(menusHidden ? "Show the menus" : "Hide the menus", "⌘+Shift+F")}
         className="hide-menus-button"

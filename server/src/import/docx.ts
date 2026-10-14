@@ -13,10 +13,14 @@
 //   the page number start, PAGE and NUMPAGES fields, and footnotes.
 //
 // Endnotes, even-page headers, comments, equations, text boxes, charts and embedded objects are
-// dropped and reported. Deleted tracked changes are left out and inserted ones kept.
+// dropped and reported. Tracked changes in the body become suggestions: insertions (w:ins, w:moveTo),
+// deletions (w:del, w:moveFrom), run format changes (w:rPrChange) and inserted or deleted paragraph
+// marks (suggested paragraph breaks). In headers, footers and footnotes, which have no suggestions,
+// insertions are kept and deletions left out.
 import {
   bulletPresets,
   documentSchema,
+  sameJSON,
   indentAttributes,
   isMargin,
   isPageColor,
@@ -386,10 +390,18 @@ type Entry = { kind: "block"; node: JSONContent } | { kind: "item"; list: ListIn
 
 type Field = { instruction: string; result: boolean; link?: string; pageField?: "page" | "count"; emitted?: boolean };
 
-type InlineContext = { marks: MarkJSON[]; link?: string; inHyperlink: boolean };
+type InlineContext = { marks: MarkJSON[]; link?: string; inHyperlink: boolean; deleted?: boolean };
 
 class DocxConverter {
   private readonly fields: Field[] = [];
+  /** A suggested paragraph break after the previous paragraph (its paragraph mark was inserted or deleted). */
+  private pendingBreak: Record<string, unknown> | null = null;
+  /**
+   * The last revision read, until other content follows. Adjacent revisions by the same author at
+   * the same time (a deletion and its replacement, an inserted paragraph mark and the text after
+   * it, runs with different formatting) are one suggestion.
+   */
+  private lastRevision: { key: string; id: string } | null = null;
   /** How many items each numbered list (by numbering instance and level) has had, so interrupted lists continue. */
   private readonly listCounts = new Map<string, number>();
   private readonly zip: JSZip;
@@ -421,6 +433,7 @@ class DocxConverter {
       case "p":
         return this.paragraph(element);
       case "tbl": {
+        this.pendingBreak = null;
         const table = await this.table(element);
         return table ? [{ kind: "block", node: table }] : [];
       }
@@ -451,6 +464,8 @@ class DocxConverter {
     const list = style.startsWith("h") ? null : this.listOf(properties, styleId);
     const level = list ? (number(val(child(child(properties, "numPr") ?? this.styleNumbering(styleId), "ilvl"))) ?? 0) : 0;
     const attrs = paragraphAttributes(properties, style, list !== null);
+    if (this.pendingBreak) attrs.suggestionBreak = this.pendingBreak;
+    this.pendingBreak = this.paragraphMarkRevision(properties);
     const textBlock: JSONContent = style.startsWith("h")
       ? { type: "heading", attrs: { ...attrs, level: Number(style.slice(1)) } }
       : { type: "paragraph", attrs: { ...attrs, ...(style !== "normal" && { paragraphStyle: style }) } };
@@ -531,7 +546,18 @@ class DocxConverter {
           break;
         }
         case "ins":
-        case "moveTo":
+        case "moveTo": {
+          const mark = this.revisionMark("suggestionInsert", element);
+          const inserted = mark ? { ...context, marks: [...context.marks, mark] } : context;
+          result.push(...(await this.inlineContent(element.children, inserted, style)));
+          break;
+        }
+        case "del":
+        case "moveFrom": {
+          const mark = this.revisionMark("suggestionDelete", element);
+          if (mark) result.push(...(await this.inlineContent(element.children, { ...context, marks: [...context.marks, mark], deleted: true }, style)));
+          break;
+        }
         case "smartTag":
         case "customXml":
           result.push(...(await this.inlineContent(element.children, context, style)));
@@ -546,7 +572,7 @@ class DocxConverter {
         case "oMathPara":
           this.dropped.add("Equations");
           break;
-        // Deleted text (del, moveFrom), bookmarks, proofing marks and paragraph properties are left out.
+        // Bookmarks, proofing marks and paragraph properties are left out.
       }
     }
     return result;
@@ -557,10 +583,15 @@ class DocxConverter {
     const properties = child(run, "rPr");
     // Hidden text, though a field's instruction and characters still count.
     const hidden = toggle(child(properties, "vanish")) === true;
-    const marks = this.runMarks(properties, context, style);
+    const tracked = context.marks.some((mark) => mark.type === "suggestionInsert" || mark.type === "suggestionDelete");
+    if (!tracked && !child(properties, "rPrChange")) this.lastRevision = null;
+    const marks = [...this.runMarks(properties, context, style), ...this.formatRevision(properties, context, style)];
     for (const element of run.children) {
       const field = this.fields[this.fields.length - 1];
       switch (element.name) {
+        case "delText":
+          if (!context.deleted) break;
+        // falls through: deleted text inside a deletion is shown struck through.
         case "t":
           // Text between a field's begin and separate characters is its instruction, not shown text.
           // A page number field's result is drawn by the editor instead.
@@ -569,6 +600,7 @@ class DocxConverter {
           }
           break;
         case "instrText":
+        case "delInstrText":
           if (field && !field.result) field.instruction += element.text;
           break;
         case "fldChar": {
@@ -636,6 +668,42 @@ class DocxConverter {
     if (first?.type === "text" && first.text) first.text = first.text.replace(/^\s+/, "");
     if (first?.type === "text" && !first.text) content[0]!.content!.shift();
     return [{ type: "footnote", attrs: { content } }];
+  }
+
+  /** A suggestion mark for a Word revision (w:ins, w:del, w:rPrChange); none outside the body. */
+  private revisionMark(type: string, element: Element, extra: Record<string, unknown> = {}): MarkJSON | null {
+    if (this.part !== "body") return null;
+    return { type, attrs: { ...this.revision(element, type === "suggestionFormat" ? "format" : "change"), ...extra } };
+  }
+
+  private revision(element: Element, group: "change" | "format") {
+    const attributes = revisionAttributes(element);
+    const key = `${group}|${attributes.author}|${attributes.createdAt}`;
+    if (this.lastRevision?.key === key) attributes.id = this.lastRevision.id;
+    this.lastRevision = { key, id: attributes.id };
+    return attributes;
+  }
+
+  /** A suggested format change, from the run properties before a tracked change (w:rPrChange). */
+  private formatRevision(properties: Element | undefined, context: InlineContext, style: ParagraphStyleId): MarkJSON[] {
+    const change = child(properties, "rPrChange");
+    if (!change || this.part !== "body") return [];
+    const formatting = (marks: MarkJSON[]) => marks.filter((mark) => !mark.type.startsWith("suggestion"));
+    const before = formatting(this.runMarks(child(change, "rPr"), context, style));
+    const after = formatting(this.runMarks(properties, context, style));
+    if (sameJSON(before, after)) return [];
+    const mark = this.revisionMark("suggestionFormat", change, { before });
+    return mark ? [mark] : [];
+  }
+
+  /** A paragraph whose paragraph mark was inserted or deleted: the break after it is a suggestion. */
+  private paragraphMarkRevision(properties: Element | undefined): Record<string, unknown> | null {
+    if (this.part !== "body") return null;
+    const runProperties = child(properties, "rPr");
+    const inserted = child(runProperties, "ins") ?? child(runProperties, "moveTo");
+    const deleted = child(runProperties, "del") ?? child(runProperties, "moveFrom");
+    const revision = deleted ?? inserted;
+    return revision ? { kind: deleted ? "delete" : "insert", ...this.revision(revision, "change") } : null;
   }
 
   private runMarks(properties: Element | undefined, context: InlineContext, style: ParagraphStyleId): MarkJSON[] {
@@ -861,6 +929,16 @@ function paragraphAttributes(properties: Element | undefined, style: ParagraphSt
     for (const key of ["indentLeft", "indentFirstLine", "indentRight"] as const) if (indents[key] !== 0) attrs[key] = indents[key];
   }
   return attrs;
+}
+
+/** Every Word revision becomes its own suggestion, with the revision's author and date. */
+function revisionAttributes(element: Element): { id: string; author: string; createdAt: number } {
+  const date = Date.parse(element.attributes.date ?? "");
+  return {
+    id: `w${String(element.attributes.id ?? "").slice(0, 32) || Math.random().toString(36).slice(2, 10)}`,
+    author: (element.attributes.author ?? "").slice(0, 200) || "Unknown",
+    createdAt: Number.isFinite(date) ? date : 0,
+  };
 }
 
 const blockTypes = new Set(["image", "pageBreak"]);

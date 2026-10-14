@@ -1,6 +1,15 @@
-// The comment margin right of the pages: one card per open thread, level with the line of its
-// commented text (see commentLayout.ts), plus the draft card while a new comment is written.
-import { isCollapsed, type Anchor, type CommentMessage, type CommentThread } from "@docs/shared";
+// The comment margin right of the pages: one card per open thread and per suggestion, level with
+// the line of its text (see commentLayout.ts), plus the draft card while a new comment is written.
+import {
+  describeSuggestion,
+  descriptionText,
+  isCollapsed,
+  type Anchor,
+  type CommentMessage,
+  type CommentThread,
+  type Suggestion,
+  type SuggestionDescription,
+} from "@docs/shared";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -16,7 +25,7 @@ export const COMMENT_MARGIN_WIDTH = 401;
 /** The single local user (a display name preference is P2). */
 export const AUTHOR_NAME = "You";
 
-type CardKey = number | "draft";
+type CardKey = number | "draft" | `s:${string}`;
 
 export type CommentHandlers = {
   onCreate: (body: string) => Promise<void>;
@@ -28,6 +37,14 @@ export type CommentHandlers = {
   onEditMessage: (id: number, messageId: number, body: string) => Promise<void>;
   onDeleteReply: (id: number, messageId: number) => Promise<void>;
   onCopyLink: (id: number) => void;
+};
+
+export type SuggestionHandlers = {
+  /** A click on a card (its id) or on the margin's background (null). */
+  onActivateSuggestion: (id: string | null) => void;
+  onResolveSuggestion: (action: "accept" | "reject", id: string) => void;
+  onReplyToSuggestion: (id: string, body: string) => Promise<void>;
+  onDeleteSuggestionReply: (id: string, replyId: number) => Promise<void>;
 };
 
 /** Live anchors of every thread, the active thread and the draft, from the editor's comment plugin. */
@@ -56,21 +73,32 @@ export function marginThreads(threads: CommentThread[], anchors: Record<number, 
     .sort((a, b) => a.anchor.from - b.anchor.from || a.thread.id - b.thread.id);
 }
 
-type CommentMarginProps = CommentHandlers & { editor: Editor; threads: CommentThread[] };
+type CommentMarginProps = CommentHandlers &
+  SuggestionHandlers & {
+    editor: Editor;
+    threads: CommentThread[];
+    /** The suggestions shown as cards, in document order. */
+    suggestions: Suggestion[];
+    activeSuggestion: string | null;
+    suggestionReplies: Record<string, CommentMessage[]>;
+  };
 
-export function CommentMargin({ editor, threads, ...handlers }: CommentMarginProps) {
+export function CommentMargin({ editor, threads, suggestions, activeSuggestion, suggestionReplies, ...handlers }: CommentMarginProps) {
   const { anchors, activeId, draft } = useCommentAnchors(editor);
   const visible = marginThreads(threads, anchors, activeId);
   const margin = useRef<HTMLElement>(null);
   const cards = useRef(new Map<CardKey, HTMLElement>());
   const [tops, setTops] = useState<Map<CardKey, number>>(new Map());
 
-  const entries: { key: CardKey; pos: number }[] = visible.map(({ thread, anchor }) => ({ key: thread.id, pos: anchor.from }));
+  const entries: { key: CardKey; pos: number }[] = [
+    ...visible.map(({ thread, anchor }) => ({ key: thread.id as CardKey, pos: anchor.from })),
+    ...suggestions.map((suggestion) => ({ key: `s:${suggestion.id}` as CardKey, pos: suggestion.from })),
+  ].sort((a, b) => a.pos - b.pos);
   if (draft) {
     const index = entries.findIndex((entry) => entry.pos > draft.from);
     entries.splice(index < 0 ? entries.length : index, 0, { key: "draft", pos: draft.from });
   }
-  const activeKey: CardKey | null = draft ? "draft" : activeId;
+  const activeKey: CardKey | null = draft ? "draft" : activeSuggestion !== null ? `s:${activeSuggestion}` : activeId;
   const layoutKey = `${activeKey}|${entries.map((entry) => `${entry.key}@${entry.pos}`).join(",")}`;
 
   // Reads the editor's line positions (which include page spacers and zoom) and the card heights.
@@ -125,7 +153,9 @@ export function CommentMargin({ editor, threads, ...handlers }: CommentMarginPro
       className="comment-margin"
       aria-label="Comments"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) handlers.onActivate(null);
+        if (event.target !== event.currentTarget) return;
+        handlers.onActivate(null);
+        handlers.onActivateSuggestion(null);
       }}
     >
       {draft && (
@@ -144,7 +174,18 @@ export function CommentMargin({ editor, threads, ...handlers }: CommentMarginPro
           style={place(thread.id)}
           thread={thread}
           deleted={isCollapsed(anchor)}
-          active={thread.id === activeId && !draft}
+          active={thread.id === activeId && !draft && activeSuggestion === null}
+          handlers={handlers}
+        />
+      ))}
+      {suggestions.map((suggestion) => (
+        <SuggestionCard
+          key={`s:${suggestion.id}`}
+          cardRef={cardRef(`s:${suggestion.id}`)}
+          style={place(`s:${suggestion.id}`)}
+          suggestion={suggestion}
+          replies={suggestionReplies[suggestion.id] ?? []}
+          active={suggestion.id === activeSuggestion && !draft}
           handlers={handlers}
         />
       ))}
@@ -317,6 +358,135 @@ function ThreadCard({ cardRef, style, thread, deleted, active, handlers }: Threa
       {thread.resolved && <p className="comment-resolved-note">Resolved</p>}
       {active && !thread.resolved && (
         <CommentField label="Reply" placeholder="Reply" submitLabel="Reply" onSubmit={(body) => handlers.onReply(thread.id, body)} />
+      )}
+    </article>
+  );
+}
+
+/** One line of a suggestion's description: "Add: “text”", with the quoted text in italics. */
+function DescriptionLine({ line }: { line: SuggestionDescription }) {
+  const quote = (text: string) => (
+    <>
+      “<em>{text}</em>”
+    </>
+  );
+  switch (line.action) {
+    case "Add":
+      return <p className="suggestion-description">Add: {quote(line.inserted)}</p>;
+    case "Delete":
+      return <p className="suggestion-description">Delete: {quote(line.deleted)}</p>;
+    case "Replace":
+      return (
+        <p className="suggestion-description">
+          Replace: {quote(line.deleted)} with {quote(line.inserted)}
+        </p>
+      );
+    default:
+      return (
+        <p className="suggestion-description">
+          {line.action}: {line.changes}
+        </p>
+      );
+  }
+}
+
+type SuggestionCardProps = {
+  cardRef: (element: HTMLElement | null) => void;
+  style: CardPlacement;
+  suggestion: Suggestion;
+  replies: CommentMessage[];
+  active: boolean;
+  handlers: SuggestionHandlers;
+};
+
+/** A suggestion's card: who and when, what it changes, and on the active card accept, reject and Reply. */
+function SuggestionCard({ cardRef, style, suggestion, replies, active, handlers }: SuggestionCardProps) {
+  const lines = describeSuggestion(suggestion);
+  const summary = lines.map(descriptionText).join(". ");
+  const removeReply = (reply: CommentMessage) => {
+    if (confirm("Delete this reply?")) void handlers.onDeleteSuggestionReply(suggestion.id, reply.id);
+  };
+  const actions = active && (
+    <div className="comment-header-actions">
+      <button
+        type="button"
+        className="icon-button comment-action suggestion-accept"
+        aria-label="Accept suggestion"
+        data-tooltip="Accept suggestion"
+        onClick={(event) => {
+          event.stopPropagation();
+          handlers.onResolveSuggestion("accept", suggestion.id);
+        }}
+      >
+        <Icon name="check" />
+      </button>
+      <button
+        type="button"
+        className="icon-button comment-action"
+        aria-label="Reject suggestion"
+        data-tooltip="Reject suggestion"
+        onClick={(event) => {
+          event.stopPropagation();
+          handlers.onResolveSuggestion("reject", suggestion.id);
+        }}
+      >
+        <Icon name="close" />
+      </button>
+    </div>
+  );
+  return (
+    <article
+      ref={cardRef}
+      className={`comment-card suggestion-card${active ? " is-active" : ""}`}
+      style={style}
+      aria-label={`Suggestion: ${summary}`}
+      aria-current={active || undefined}
+      onClick={() => {
+        if (!active) handlers.onActivateSuggestion(suggestion.id);
+      }}
+    >
+      <div className="comment-message">
+        <div className="comment-message-header">
+          <Avatar name={suggestion.author} />
+          <div className="comment-meta">
+            <span className="comment-author">{suggestion.author}</span>
+            <time dateTime={new Date(suggestion.createdAt).toISOString()}>{formatCommentTime(suggestion.createdAt)}</time>
+          </div>
+          {actions}
+        </div>
+        {lines.map((line, index) => (
+          <DescriptionLine key={index} line={line} />
+        ))}
+      </div>
+      {replies.map((reply) => (
+        <div key={reply.id} className="comment-message is-reply">
+          <div className="comment-message-header">
+            <Avatar name={AUTHOR_NAME} />
+            <div className="comment-meta">
+              <span className="comment-author">{AUTHOR_NAME}</span>
+              <time dateTime={new Date(reply.createdAt).toISOString()}>{formatCommentTime(reply.createdAt)}</time>
+            </div>
+            <div className="comment-reply-actions">
+              <Menu
+                label={<Icon name="more_vert" />}
+                ariaLabel="More options for this reply"
+                buttonClassName="icon-button comment-action"
+                align="end"
+                listClassName="comment-menu"
+                entries={[{ label: "Delete", onSelect: () => removeReply(reply) }]}
+              />
+            </div>
+          </div>
+          <p className="comment-body">{reply.body}</p>
+        </div>
+      ))}
+      {active && (
+        <CommentField
+          label="Reply"
+          placeholder="Reply"
+          submitLabel="Reply"
+          onSubmit={(body) => handlers.onReplyToSuggestion(suggestion.id, body)}
+        />
       )}
     </article>
   );

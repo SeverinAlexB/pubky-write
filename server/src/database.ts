@@ -63,6 +63,17 @@ export function openDatabase(path: string): Database {
       body       TEXT    NOT NULL,
       created_at INTEGER NOT NULL
     );
+
+    -- Replies on a suggestion (see docs/design/suggesting.md). The suggestion itself lives in the
+    -- document content; replies of suggestions that are gone are kept, so undo brings them back.
+    CREATE TABLE IF NOT EXISTS suggestion_replies (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id   TEXT    NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      suggestion_id TEXT    NOT NULL,
+      body          TEXT    NOT NULL,
+      created_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS suggestion_replies_by_document ON suggestion_replies (document_id, suggestion_id);
   `);
   // Databases created before versions could be named.
   const revisionColumns = db.prepare("PRAGMA table_info(revisions)").all() as { name: string }[];

@@ -33,6 +33,8 @@ export type OpenedDocument = DocumentSummary & {
   content: JSONContent;
   /** Comment anchors are positions in `content` at `version`. */
   comments: CommentThread[];
+  /** Replies on suggestions, by suggestion id (the suggestions themselves are in `content`). */
+  suggestionReplies: Record<string, CommentMessage[]>;
 };
 
 export type CommentMessage = {

@@ -253,3 +253,39 @@ test("the toolbar and menu bar work with the keyboard", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(editor(page)).toBeFocused();
 });
+
+test("the mode menu, suggestions, their cards and the review card have no serious accessibility violations", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("Draft text to review");
+  await waitUntilSaved(page);
+  const modeButton = page.getByRole("toolbar", { name: "Formatting" }).getByRole("button", { name: "Editing mode" });
+  await modeButton.click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Suggesting" })).toBeVisible();
+  await expectAccessible(page, "Mode menu");
+  await page.getByRole("menuitemcheckbox", { name: "Suggesting" }).click();
+
+  await page.keyboard.type(" and more");
+  await selectText(page, "Draft");
+  await page.keyboard.press("Backspace");
+  await selectText(page, "review");
+  await page.keyboard.press(`${mod}+b`);
+  const margin = page.getByRole("complementary", { name: "Comments", exact: true });
+  await expect(margin.locator(".suggestion-card")).toHaveCount(3);
+  await editor(page).locator(".suggestion-insert").click();
+  await expect(margin.getByRole("button", { name: "Accept suggestion" })).toBeVisible();
+  await expectAccessible(page, "Suggestions with an active card");
+
+  await menuBarItem(page, "Tools").click();
+  await page.getByRole("menuitem", { name: "Review suggested edits" }).click();
+  const review = page.getByRole("dialog", { name: "Suggested edits" });
+  await review.getByRole("button", { name: "More accept options" }).click();
+  await expect(page.getByRole("menuitem", { name: "Accept all (3)" })).toBeVisible();
+  await expectAccessible(page, "Review suggested edits");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("toolbar", { name: "Formatting" }).getByRole("button", { name: "Suggesting mode" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Viewing" }).click();
+  await expect(editor(page)).toHaveAttribute("contenteditable", "false");
+  await expectAccessible(page, "Viewing mode");
+});

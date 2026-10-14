@@ -1,3 +1,4 @@
+import { acceptedTextBetween } from "@docs/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 
@@ -42,7 +43,8 @@ function totalStats(doc: Node): TextStats {
   doc.forEach((block) => {
     let stats = blockCounts.get(block);
     if (!stats) {
-      stats = countText(block.textBetween(0, block.content.size, "\n", leafText));
+      // Text suggested for deletion is not counted: the counts are of the accepted document.
+      stats = countText(acceptedTextBetween(block, 0, block.content.size, "\n", leafText));
       blockCounts.set(block, stats);
     }
     total.words += stats.words;
@@ -60,7 +62,7 @@ export function documentStats(state: EditorState): DocumentStats {
   let selected: TextStats | null = null;
   if (!selection.empty) {
     if (!(lastSelection && lastSelection.doc === doc && lastSelection.from === from && lastSelection.to === to)) {
-      lastSelection = { doc, from, to, stats: countText(doc.textBetween(from, to, "\n", leafText)) };
+      lastSelection = { doc, from, to, stats: countText(acceptedTextBetween(doc, from, to, "\n", leafText)) };
     }
     selected = lastSelection.stats;
   }

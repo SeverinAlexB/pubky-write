@@ -6,10 +6,12 @@ import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import {
   addReply,
+  addSuggestionReply,
   CommentVersionConflictError,
   createComment,
   deleteComment,
   deleteReply,
+  deleteSuggestionReply,
   editMessage,
   getComment,
   InvalidCommentError,
@@ -175,6 +177,18 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
   app.get("/api/documents/:id/comments/:commentId", (c) =>
     c.json(found(getComment(db, c.req.param("id"), Number(c.req.param("commentId"))))),
   );
+
+  app.post("/api/documents/:id/suggestions/:suggestionId/replies", async (c) => {
+    const { id, suggestionId } = c.req.param();
+    found(getDocumentContent(db, id));
+    const { body } = await c.req.json<{ body: string }>();
+    return c.json(addSuggestionReply(db, id, suggestionId, body), 201);
+  });
+
+  app.delete("/api/documents/:id/suggestions/:suggestionId/replies/:replyId", (c) => {
+    const { id, suggestionId, replyId } = c.req.param();
+    return c.json(found(deleteSuggestionReply(db, id, suggestionId, Number(replyId))));
+  });
 
   app.get("/api/documents/:id/revisions", (c) => c.json(listRevisions(db, c.req.param("id"))));
 

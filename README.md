@@ -153,9 +153,10 @@ To restore a backup:
   match as you type, Enter and Shift+Enter move between them. **Find and
   replace** (⌘⇧H) adds match case, JavaScript regular expressions (`$1` in the
   replacement inserts a group) and ignoring diacritics (on by default, so
-  "cafe" finds "café"); Replace all is one undo step.
+  "cafe" finds "café"); Replace all is one undo step. Text suggested for
+  deletion is not searched.
 - **Word count** (⌘⇧C) shows pages, words and characters for the document or
-  the selection, and can show a live count at the bottom left of the editor
+  the selection (text suggested for deletion is not counted), and can show a live count at the bottom left of the editor
   area.
 - **Tabs and outline:** a sidebar (the list button at the top left, or View >
   Expand tabs and outlines sidebar) shows the document's tab with its number of
@@ -172,6 +173,22 @@ To restore a backup:
   deleted. View > Comments > Show all comments (⌘⌥⇧A, or the header button)
   lists all, open or resolved threads, where resolved ones can be reopened;
   Hide comments (⌘⌥⇧J) hides the margin and highlights and is remembered.
+- **Suggesting mode** (the mode button at the right end of the toolbar, View >
+  Mode, ⌘⌥⇧X to switch between Suggesting and Editing, ⌘⌥⇧Z for Editing and
+  ⌘⌥⇧C for Viewing; remembered per document in the browser): typed text is
+  shown in green, deleted text stays struck through in green, and formatting
+  changes (text formatting, paragraph styles, alignment, spacing, indents and
+  lists) are applied and shown in green. Consecutive edits at the same place
+  are one suggestion until the cursor moves away or for 2 minutes. Each
+  suggestion has a card in the comment margin ("Add", "Delete", "Replace",
+  "Format") with Accept, Reject and replies; the active one is outlined in the
+  document. Tools > Review suggested edits (Ctrl+⌘O then Ctrl+⌘U) steps through
+  them, previews the document with all of them accepted or rejected, and
+  accepts or rejects one or all (each one undo step). Viewing mode shows the
+  document read-only as if every suggestion were accepted. Tables, images, page
+  breaks, horizontal lines, the table of contents, headers, footers and
+  footnotes are edited directly even in Suggesting mode. See
+  [docs/design/suggesting.md](docs/design/suggesting.md).
 - **Autosave:** edits are sent about 300 ms after you stop typing. The header
   shows whether changes are saving, saved, or waiting for the connection to come
   back.
@@ -197,7 +214,9 @@ To restore a backup:
   and footers (with a different first page), page number fields and the page
   number start, real Word footnotes, and the table of contents as paragraphs
   with right-aligned page numbers (and dotted leaders) or links to bookmarks on
-  the headings.
+  the headings. Suggestions become tracked changes (insertions, deletions,
+  format changes and paragraph marks); Markdown and plain text are written as
+  if every suggestion were accepted.
   In Markdown, Title becomes a level 1 heading, Subtitle a plain paragraph,
   checklists `- [ ]` / `- [x]`, superscript and subscript `<sup>` / `<sub>`,
   a page break the comment `<!-- page break -->`, footnotes `[^1]` with the
@@ -294,8 +313,10 @@ checks the result against it before creating the document.
   checklists; tables with merged cells, header rows and column widths; PNG, JPEG, GIF and WebP
   images (stored in `uploads/`); line and page breaks; page size, orientation,
   margins and page colour; the default and first-page header and footer, the page number
-  start, PAGE and NUMPAGES fields and footnotes. Deleted tracked changes are
-  left out.
+  start, PAGE and NUMPAGES fields and footnotes. Tracked changes in the body
+  become suggestions (insertions, deletions, run format changes and inserted or
+  deleted paragraph marks); in headers, footers and footnotes inserted text is
+  kept and deleted text left out.
 - **Markdown** (`markdown.ts`, with markdown-it): headings, emphasis,
   strikethrough, inline code, links, lists and `- [ ]` checklists, quotes, code
   blocks, horizontal lines, tables with column alignment, images (data URLs are
@@ -365,6 +386,8 @@ removed text, struck through, where it was.
 | `DELETE /api/documents/:id/comments/:commentId`      | Delete a thread                         |
 | `PATCH /api/documents/:id/comments/:commentId/messages/:messageId` | Edit a message's text     |
 | `DELETE /api/documents/:id/comments/:commentId/messages/:messageId` | Delete a reply (not the first message) |
+| `POST /api/documents/:id/suggestions/:suggestionId/replies` | Reply to a suggestion                |
+| `DELETE /api/documents/:id/suggestions/:suggestionId/replies/:replyId` | Delete a reply to a suggestion |
 | `POST /api/uploads`                                  | Upload an image (PNG, JPEG, GIF, WebP)  |
 
 ## Tests
@@ -397,4 +420,5 @@ the pages settle and frame times while typing on pages 1 and 50. Set
   history does not highlight changes in headers, footers or footnotes.
 - Comments are not included in exports. The author is always "You"; emoji
   reactions and renaming the tab are not available yet.
-- No suggestion mode or real-time collaboration yet.
+- No real-time collaboration yet. Suggestions are always by "You"; the Preview
+  reject all view still shows suggested formatting and paragraph breaks.

@@ -1,5 +1,6 @@
 import type { ListKind, TocStyle } from "@docs/shared";
 import type { PageNumberOptions } from "./pageElementCommands.ts";
+import type { EditorMode } from "./suggesting.ts";
 
 // Everything the menu bar and toolbar can do beyond plain editor commands.
 //
@@ -35,7 +36,7 @@ export type EditorActions = {
   findAndReplace: () => void;
 
   // View
-  setViewingMode?: (viewing: boolean) => void;
+  setMode?: (mode: EditorMode) => void;
   hideComments?: () => void;
   showAllComments: () => void;
   toggleOutline: () => void;
@@ -82,6 +83,7 @@ export type EditorActions = {
 
   // Tools
   wordCount: () => void;
+  reviewSuggestedEdits?: () => void;
   preferences?: () => void;
 
   // Toolbar only
@@ -97,4 +99,7 @@ export type ViewSettings = {
   rulerVisible: boolean;
   nonPrintingCharacters: boolean;
   commentsHidden: boolean;
+  mode: EditorMode;
+  /** Viewing mode or a suggestion preview: nothing may change the document. */
+  readOnly: boolean;
 };

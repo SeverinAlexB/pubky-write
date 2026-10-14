@@ -1,8 +1,11 @@
-// Converts a document to a Word file with the `docx` library.
+// Converts a document to a Word file with the `docx` library. Suggestions become tracked changes:
+// insertions and deletions (w:ins, w:del), text format changes (w:rPrChange) and inserted or deleted
+// paragraph marks for suggested paragraph breaks.
 import {
   AlignmentType,
   Bookmark,
   BorderStyle,
+  DeletedTextRun,
   Document,
   ExternalHyperlink,
   Footer,
@@ -11,6 +14,7 @@ import {
   HeadingLevel,
   HeightRule,
   ImageRun,
+  InsertedTextRun,
   InternalHyperlink,
   LeaderType,
   LevelFormat,
@@ -35,7 +39,7 @@ import {
   type ParagraphChild,
 } from "docx";
 import { imageSize } from "image-size";
-import type { Mark, Node } from "@tiptap/pm/model";
+import { Mark, type Node } from "@tiptap/pm/model";
 import { TableMap } from "@tiptap/pm/tables";
 import {
   bulletPresets,
@@ -58,6 +62,8 @@ import {
   tabStopsOf,
   tocHeadings,
   tocTarget,
+  type BreakSuggestion,
+  type MarkJSON,
   type NumberFormat,
   type ParagraphStyleDefinition,
   type RegionContent,
@@ -262,6 +268,10 @@ class DocxConverter {
   private footnoteCount = 0;
   /** Headings a table of contents links to, by node, with their bookmark index. */
   private readonly linkedHeadings = new Map<Node, number>();
+  /** Suggested paragraph breaks, by the textblock before them: Word marks that paragraph's mark as inserted or deleted. */
+  private readonly paragraphMarks = new Map<Node, BreakSuggestion>();
+  /** Word needs a unique id on every revision element. */
+  private revisionCount = 0;
 
   constructor(
     private readonly readImage: ImageReader,
@@ -274,6 +284,54 @@ class DocxConverter {
       return !linked && node.isBlock && !node.isTextblock;
     });
     if (linked) tocHeadings(doc).forEach((heading, index) => this.linkedHeadings.set(doc.nodeAt(heading.pos)!, index));
+    let previous: Node | null = null;
+    doc.descendants((node) => {
+      if (!node.isTextblock) return true;
+      const brk = node.attrs.suggestionBreak as BreakSuggestion | null | undefined;
+      if (brk && previous) this.paragraphMarks.set(previous, brk);
+      previous = node;
+      return false;
+    });
+  }
+
+  /** Revision attributes of a suggestion: a new id, its author and date. */
+  private revision(meta: { author?: unknown; createdAt?: unknown }) {
+    return {
+      id: ++this.revisionCount,
+      author: typeof meta.author === "string" && meta.author ? meta.author : "Unknown",
+      date: new Date(typeof meta.createdAt === "number" ? meta.createdAt : 0).toISOString(),
+    };
+  }
+
+  /** The paragraph mark of a textblock followed by a suggested paragraph break, as an inserted or deleted mark. */
+  private paragraphMark(node: Node): Partial<IParagraphOptions> {
+    const brk = this.paragraphMarks.get(node);
+    if (!brk) return {};
+    return { run: brk.kind === "insert" ? { insertion: this.revision(brk) } : { deletion: this.revision(brk) } };
+  }
+
+  /** A run, as a tracked insertion or deletion, or with its formatting before a suggested format change. */
+  private run(options: IRunOptions, marks: readonly Mark[]): ParagraphChild {
+    const find = (name: string) => marks.find((mark) => mark.type.name === name);
+    const deleted = find("suggestionDelete");
+    if (deleted) return new DeletedTextRun({ ...options, ...this.revision(deleted.attrs) });
+    const inserted = find("suggestionInsert");
+    if (inserted) return new InsertedTextRun({ ...options, ...this.revision(inserted.attrs) });
+    const format = find("suggestionFormat");
+    if (format) {
+      const before = (format.attrs.before as MarkJSON[]).flatMap((json) => {
+        try {
+          return [Mark.fromJSON(documentSchema, json)];
+        } catch {
+          return [];
+        }
+      });
+      // Word expects run properties in the change; "not bold" stands for plain text.
+      const previous = runOptions(before);
+      const properties = Object.values(previous).some((value) => value !== undefined) ? previous : { bold: false };
+      return new TextRun({ ...options, revision: { ...properties, ...this.revision(format.attrs) } });
+    }
+    return new TextRun(options);
   }
 
   async blocks(parent: Node, list?: ListContext, quoted = false): Promise<Block[]> {
@@ -297,13 +355,21 @@ class DocxConverter {
         return [
           new Paragraph({
             ...base,
+            ...this.paragraphMark(node),
             ...(node.attrs.paragraphStyle === "title" && { heading: HeadingLevel.TITLE }),
             ...(node.attrs.paragraphStyle === "subtitle" && { style: SUBTITLE_STYLE }),
             children: await this.headingContent(node),
           }),
         ];
       case "heading":
-        return [new Paragraph({ ...base, heading: headings[node.attrs.level - 1], children: await this.headingContent(node) })];
+        return [
+          new Paragraph({
+            ...base,
+            ...this.paragraphMark(node),
+            heading: headings[node.attrs.level - 1],
+            children: await this.headingContent(node),
+          }),
+        ];
       case "tableOfContents":
         return this.tableOfContents(node);
       case "blockquote":
@@ -427,6 +493,7 @@ class DocxConverter {
         blocks.push(
           new Paragraph({
             alignment: alignments[child.attrs.textAlign as keyof typeof alignments],
+            ...this.paragraphMark(child),
             indent,
             ...(tabStops(child) && { tabStops: tabStops(child) }),
             children: [new TextRun({ text: `${checked ? "☑" : "☐"} `, strike: strike || undefined }), ...runs],
@@ -522,26 +589,22 @@ class DocxConverter {
       if (node.type.name === "hardBreak") {
         runs.push(new TextRun({ text: "", break: 1 }));
       } else if (node.type.name === "tab") {
-        runs.push(new TextRun({ ...runOptions(node.marks, strike), children: [new Tab()] }));
+        runs.push(this.run({ ...runOptions(node.marks, strike), children: [new Tab()] }, node.marks));
       } else if (node.type.name === "image") {
         runs.push(await this.image(node));
       } else if (node.type.name === "pageField") {
         const field = node.attrs.kind === "count" ? PageNumber.TOTAL_PAGES : PageNumber.CURRENT;
-        runs.push(new TextRun({ ...runOptions(node.marks, strike), children: [field] }));
+        runs.push(this.run({ ...runOptions(node.marks, strike), children: [field] }, node.marks));
       } else if (node.type.name === "footnote") {
         runs.push(new FootnoteReferenceRun(await this.footnote(node.attrs.content as RegionContent)));
       } else if (node.isText) {
-        const run = textRun(node.text ?? "", node.marks, strike);
+        const run = this.run({ text: node.text ?? "", ...runOptions(node.marks, strike) }, node.marks);
         const link = node.marks.find((mark) => mark.type.name === "link");
         runs.push(link ? new ExternalHyperlink({ link: link.attrs.href, children: [run] }) : run);
       }
     }
     return runs;
   }
-}
-
-function textRun(text: string, marks: readonly Mark[], strike = false): TextRun {
-  return new TextRun({ text, ...runOptions(marks, strike) });
 }
 
 function runOptions(marks: readonly Mark[], strike = false): IRunOptions {

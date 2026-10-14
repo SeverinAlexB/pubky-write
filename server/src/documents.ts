@@ -2,6 +2,7 @@
 // to its copy of the document, so it always holds the authoritative version.
 import { randomUUID } from "node:crypto";
 import {
+  acceptedDocument,
   documentSchema,
   emptyDocument,
   findTemplate,
@@ -18,7 +19,7 @@ import {
 } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import { Mapping, Step, Transform } from "@tiptap/pm/transform";
-import { listComments, mapComments } from "./comments.ts";
+import { listComments, listSuggestionReplies, mapComments } from "./comments.ts";
 import { inTransaction, type Database } from "./database.ts";
 import { documentPreview } from "./preview.ts";
 import { getRevision, nameCurrentRevision, recordRevision } from "./revisions.ts";
@@ -154,6 +155,7 @@ export function openDocument(db: Database, id: string, now = Date.now()): Opened
     version: row.version,
     content: JSON.parse(row.content),
     comments: listComments(db, id),
+    suggestionReplies: listSuggestionReplies(db, id),
   };
 }
 
@@ -269,7 +271,9 @@ function applyStep(step: Step, doc: Node): Node {
   return result.doc;
 }
 
-function plainText(doc: Node): string {
+/** The text searched in the document list: the document as if its suggestions were accepted. */
+function plainText(source: Node): string {
+  const doc = acceptedDocument(source);
   return doc.textBetween(0, doc.content.size, "\n", " ");
 }
 

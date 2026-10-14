@@ -148,3 +148,40 @@ function toThread(row: CommentRow, messages: MessageRow[]): CommentThread {
     ),
   };
 }
+
+// Suggestion replies ---------------------------------------------------------------------------
+
+type SuggestionReplyRow = { id: number; suggestion_id: string; body: string; created_at: number };
+
+const MAX_SUGGESTION_ID_LENGTH = 64;
+
+/** Replies of every suggestion of the document, by suggestion id, oldest first. */
+export function listSuggestionReplies(db: Database, documentId: string): Record<string, CommentMessage[]> {
+  const rows = db
+    .prepare("SELECT id, suggestion_id, body, created_at FROM suggestion_replies WHERE document_id = ? ORDER BY created_at, id")
+    .all(documentId) as SuggestionReplyRow[];
+  const result: Record<string, CommentMessage[]> = {};
+  for (const row of rows) (result[row.suggestion_id] ??= []).push({ id: row.id, body: row.body, createdAt: row.created_at });
+  return result;
+}
+
+/** Adds a reply to a suggestion; returns the suggestion's replies. */
+export function addSuggestionReply(db: Database, documentId: string, suggestionId: string, body: string, now = Date.now()) {
+  if (!suggestionId || suggestionId.length > MAX_SUGGESTION_ID_LENGTH) throw new InvalidCommentError("Invalid suggestion");
+  db.prepare("INSERT INTO suggestion_replies (document_id, suggestion_id, body, created_at) VALUES (?, ?, ?, ?)").run(
+    documentId,
+    suggestionId,
+    validateBody(body),
+    now,
+  );
+  return listSuggestionReplies(db, documentId)[suggestionId] ?? [];
+}
+
+/** Deletes one reply of a suggestion; returns the remaining replies, or null if it is not found. */
+export function deleteSuggestionReply(db: Database, documentId: string, suggestionId: string, replyId: number) {
+  const { changes } = db
+    .prepare("DELETE FROM suggestion_replies WHERE document_id = ? AND suggestion_id = ? AND id = ?")
+    .run(documentId, suggestionId, replyId);
+  if (changes === 0) return null;
+  return listSuggestionReplies(db, documentId)[suggestionId] ?? [];
+}

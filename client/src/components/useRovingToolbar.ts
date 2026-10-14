@@ -14,7 +14,7 @@ export function toolbarControls(toolbar: HTMLElement): HTMLElement[] {
   return Array.from(toolbar.querySelectorAll<HTMLElement>("button, input, select")).filter(
     (control) =>
       !control.closest(POPUP) &&
-      !(control as HTMLButtonElement).disabled &&
+      !control.matches(":disabled") &&
       control.getAttribute("aria-hidden") !== "true" &&
       (control.tabIndex >= 0 || control.hasAttribute(MANAGED)) &&
       control.getClientRects().length > 0,

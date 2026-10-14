@@ -3080,6 +3080,221 @@ body.is-column-resizing * {
   background: #f2bf42;
 }
 
+/* Suggestions (docs/spec/16-suggesting.md, docs/design/suggesting.md) */
+
+.page-content .suggestion-insert,
+.page-content .suggestion-format,
+.page-content [data-suggestion-format] {
+  color: #35713a;
+}
+
+.page-content .suggestion-delete {
+  color: #35713a;
+  text-decoration: line-through;
+}
+
+.page-content .suggestion-break {
+  color: #35713a;
+  user-select: none;
+}
+
+.page-content .suggestion-break-delete {
+  text-decoration: line-through;
+}
+
+.page-content .suggestion-active {
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px #35713a;
+}
+
+/* Viewing mode and Preview accept all: the document as if every suggestion were accepted. */
+.suggestions-accepted .page-content .suggestion-delete,
+.suggestions-rejected .page-content .suggestion-insert,
+.suggestions-accepted .page-content .suggestion-break,
+.suggestions-rejected .page-content .suggestion-break {
+  display: none;
+}
+
+.suggestions-accepted .page-content :is(.suggestion-insert, .suggestion-format, [data-suggestion-format]),
+.suggestions-rejected .page-content :is(.suggestion-delete, .suggestion-format, [data-suggestion-format]) {
+  color: inherit;
+  text-decoration: inherit;
+}
+
+.suggestions-accepted .page-content .suggestion-active,
+.suggestions-rejected .page-content .suggestion-active {
+  box-shadow: none;
+}
+
+.page-stack.is-viewing .page-content .comment-highlight {
+  background: none;
+  cursor: auto;
+}
+
+/* The mode button and its menu */
+
+.tool-button.mode-button {
+  margin-left: 4px;
+  padding: 0 2px 0 6px;
+  border-radius: 14px;
+}
+
+.tool-button.mode-button.is-suggesting,
+.tool-button.mode-button.is-suggesting:hover {
+  background: var(--primary-container);
+  color: #041e49;
+}
+
+.mode-menu .menu-item {
+  min-height: 56px;
+}
+
+.mode-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.mode-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mode-item-title {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.mode-item-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* A disabled fieldset around a toolbar control disables it in Viewing mode. */
+.toolbar-fieldset {
+  display: contents;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* Suggestion cards share the comment margin. */
+
+.suggestion-description {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.comment-action.suggestion-accept {
+  color: var(--primary);
+}
+
+/* Review suggested edits */
+
+.find-bar.review-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  height: auto;
+  padding: 12px 16px 16px;
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.review-title {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.review-card .menu {
+  position: relative;
+}
+
+.review-view-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: none;
+  font-size: 14px;
+}
+
+.review-view-button:hover {
+  background: var(--hover);
+}
+
+.review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.split-button {
+  display: inline-flex;
+  align-items: stretch;
+  height: 36px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.split-button.is-outlined {
+  border: 1px solid var(--outline);
+  color: var(--primary);
+}
+
+.split-button.is-filled {
+  background: var(--primary);
+  color: #fff;
+}
+
+.split-button-main,
+.split-button-arrow {
+  height: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: inherit;
+}
+
+.split-button-main {
+  padding: 0 12px 0 16px;
+  border-radius: 18px 0 0 18px;
+}
+
+.split-button .menu {
+  display: flex;
+  border-left: 1px solid currentColor;
+}
+
+.split-button-arrow {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px 0 4px;
+  border-radius: 0 18px 18px 0;
+}
+
+.split-button.is-outlined :is(.split-button-main, .split-button-arrow):hover:not(:disabled) {
+  background: rgb(11 87 208 / 8%);
+}
+
+.split-button.is-filled :is(.split-button-main, .split-button-arrow):hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
 /* The pages and the comment margin, centred together in the editor area. */
 /* With too little room the margin narrows first, down to 272px. */
 .page-column {
@@ -3890,6 +4105,10 @@ body.is-column-resizing * {
   .page-content .comment-highlight {
     border: 0;
     background: none;
+  }
+
+  .page-content .suggestion-active {
+    box-shadow: none;
   }
 
   .editor-header,

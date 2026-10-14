@@ -5,8 +5,9 @@
 // keeps one top-level heading per title. A page break becomes an HTML comment, which keeps
 // it in the file without drawing anything. Footnotes become `[^1]` references with the notes
 // at the end, a table of contents a list of links to the headings; headers, footers and page
-// number fields are left out.
+// number fields are left out. Suggestions are written as if they were accepted.
 import { documentSchema } from "./schema.ts";
+import { acceptedDocument } from "./suggestions.ts";
 import { headingSlug, tocTarget } from "./tableOfContents.ts";
 import { defaultMarkdownSerializer, MarkdownSerializer, type MarkdownSerializerState } from "prosemirror-markdown";
 import type { Node } from "@tiptap/pm/model";
@@ -86,6 +87,10 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
     subscript: { open: "<sub>", close: "</sub>", mixable: true, expelEnclosingWhitespace: true },
     highlight: { open: "<mark>", close: "</mark>", mixable: true, expelEnclosingWhitespace: true },
     textStyle: { open: "", close: "", mixable: true },
+    // Gone once suggestions are accepted (see toMarkdown); kept here so a stray mark cannot fail the export.
+    suggestionInsert: { open: "", close: "", mixable: true },
+    suggestionDelete: { open: "", close: "", mixable: true },
+    suggestionFormat: { open: "", close: "", mixable: true },
   },
 );
 
@@ -98,7 +103,9 @@ function currentNotes(): string[] {
   return (notes ??= []);
 }
 
-export function toMarkdown(doc: Node): string {
+/** Markdown of the document as if every suggestion were accepted. */
+export function toMarkdown(source: Node): string {
+  const doc = acceptedDocument(source);
   notes = [];
   currentDoc = doc;
   try {

@@ -3,6 +3,7 @@ import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { MenuList, type MenuEntry, type MenuItem } from "../components/MenuList.tsx";
+import { modeEntries } from "./modes.tsx";
 import { isMac, shortcut } from "../components/shortcuts.ts";
 import { useDismiss } from "../components/useDismiss.ts";
 import type { EditorActions, ListKind, ViewSettings } from "./actions.ts";
@@ -51,12 +52,14 @@ export function MenuBar({ editor, actions, view }: MenuBarProps) {
   const close = useCallback(() => setOpen(null), []);
   useDismiss(root, open !== null, close);
 
+  // Viewing mode (and the suggestion previews) disable everything that would change the document.
+  const editing = (entries: MenuEntry[], keep: string[] = []) => (view.readOnly ? readOnlyEntries(entries, keep) : entries);
   const menus: { label: string; entries: MenuEntry[] }[] = [
     { label: "File", entries: fileMenu(actions) },
-    { label: "Edit", entries: editMenu(editor, actions, state) },
+    { label: "Edit", entries: editing(editMenu(editor, actions, state), ["Copy", "Copy as Markdown", "Select all", "Find and replace"]) },
     { label: "View", entries: viewMenu(actions, view) },
-    { label: "Insert", entries: insertMenu(editor, actions, state) },
-    { label: "Format", entries: formatMenu(editor, actions, state) },
+    { label: "Insert", entries: editing(insertMenu(editor, actions, state)) },
+    { label: "Format", entries: editing(formatMenu(editor, actions, state)) },
     { label: "Tools", entries: toolsMenu(actions) },
   ];
   const wrap = (index: number) => (index + menus.length) % menus.length;
@@ -193,10 +196,7 @@ function viewMenu(actions: EditorActions, view: ViewSettings): MenuEntry[] {
     {
       label: "Mode",
       icon: "edit",
-      submenu: [
-        { label: "Editing", checked: true, onSelect: actions.setViewingMode && (() => actions.setViewingMode!(false)) },
-        { label: "Viewing", checked: false, onSelect: actions.setViewingMode && (() => actions.setViewingMode!(true)) },
-      ],
+      submenu: actions.setMode ? modeEntries(view.mode, actions.setMode) : [],
     },
     {
       label: "Comments",
@@ -323,6 +323,12 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
   ];
 }
 
+function readOnlyEntries(entries: MenuEntry[], keep: string[]): MenuEntry[] {
+  return entries.map((entry) =>
+    entry === "separator" || "heading" in entry || keep.includes(entry.label) ? entry : { ...entry, disabled: true },
+  );
+}
+
 /** The header and footer shortcuts are chords: Ctrl+⌘O, then Ctrl+⌘H or Ctrl+⌘F. */
 function chord(key: string): string {
   return isMac ? `Ctrl+⌘O Ctrl+⌘${key}` : `Ctrl+Alt+O Ctrl+Alt+${key}`;
@@ -383,6 +389,7 @@ function listPresetEntry(label: string, kind: ListKind, actions: EditorActions, 
 function toolsMenu(actions: EditorActions): MenuEntry[] {
   return [
     { label: "Word count", icon: "tag", shortcut: shortcut("⌘+Shift+C"), onSelect: actions.wordCount },
+    { label: "Review suggested edits", icon: "rate_review", shortcut: chord("U"), onSelect: actions.reviewSuggestedEdits },
     { label: "Preferences", icon: "tune", onSelect: actions.preferences },
   ];
 }

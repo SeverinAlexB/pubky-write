@@ -24,6 +24,7 @@ import deleteSvg from "@material-symbols/svg-400/outlined/delete.svg?raw";
 import descriptionSvg from "@material-symbols/svg-400/outlined/description.svg?raw";
 import downloadSvg from "@material-symbols/svg-400/outlined/download.svg?raw";
 import editSvg from "@material-symbols/svg-400/outlined/edit.svg?raw";
+import editSquareSvg from "@material-symbols/svg-400/outlined/edit_square.svg?raw";
 import errorSvg from "@material-symbols/svg-400/outlined/error.svg?raw";
 import fileCopySvg from "@material-symbols/svg-400/outlined/file_copy.svg?raw";
 import findReplaceSvg from "@material-symbols/svg-400/outlined/find_replace.svg?raw";
@@ -76,6 +77,7 @@ import refreshSvg from "@material-symbols/svg-400/outlined/refresh.svg?raw";
 import redoSvg from "@material-symbols/svg-400/outlined/redo.svg?raw";
 import removeSvg from "@material-symbols/svg-400/outlined/remove.svg?raw";
 import restartAltSvg from "@material-symbols/svg-400/outlined/restart_alt.svg?raw";
+import rateReviewSvg from "@material-symbols/svg-400/outlined/rate_review.svg?raw";
 import rotateRightSvg from "@material-symbols/svg-400/outlined/rotate_right.svg?raw";
 import searchSvg from "@material-symbols/svg-400/outlined/search.svg?raw";
 import selectAllSvg from "@material-symbols/svg-400/outlined/select_all.svg?raw";
@@ -99,6 +101,7 @@ import uploadSvg from "@material-symbols/svg-400/outlined/upload.svg?raw";
 import uploadFileSvg from "@material-symbols/svg-400/outlined/upload_file.svg?raw";
 import viewColumnSvg from "@material-symbols/svg-400/outlined/view_column.svg?raw";
 import viewListSvg from "@material-symbols/svg-400/outlined/view_list.svg?raw";
+import visibilitySvg from "@material-symbols/svg-400/outlined/visibility.svg?raw";
 import wrapTextSvg from "@material-symbols/svg-400/outlined/wrap_text.svg?raw";
 
 const symbols = {
@@ -127,6 +130,7 @@ const symbols = {
   description: descriptionSvg,
   download: downloadSvg,
   edit: editSvg,
+  edit_square: editSquareSvg,
   error: errorSvg,
   file_copy: fileCopySvg,
   find_replace: findReplaceSvg,
@@ -179,6 +183,7 @@ const symbols = {
   refresh: refreshSvg,
   remove: removeSvg,
   restart_alt: restartAltSvg,
+  rate_review: rateReviewSvg,
   rotate_right: rotateRightSvg,
   search: searchSvg,
   select_all: selectAllSvg,
@@ -202,6 +207,7 @@ const symbols = {
   upload_file: uploadFileSvg,
   view_column: viewColumnSvg,
   view_list: viewListSvg,
+  visibility: visibilitySvg,
   wrap_text: wrapTextSvg,
 };
 

@@ -10,6 +10,7 @@ import { EditorImage } from "./imageView.ts";
 import { Pagination } from "./pagination.ts";
 import { Search } from "./search.ts";
 import { followTocEntry } from "./pageElementCommands.ts";
+import { Suggesting, type EditorMode } from "./suggesting.ts";
 import { EditorTable, TableColumnResize } from "./tables.ts";
 import { TabKey, TabLayout } from "./tabLayout.ts";
 
@@ -23,6 +24,8 @@ type EditorExtensionOptions = {
   comments: CommentAnchor[];
   commentsHidden: boolean;
   onCommentClick: (id: number | null) => void;
+  mode: EditorMode;
+  onSuggestionClick: (id: string | null) => void;
 };
 
 /** The shared document schema plus the editor-only behaviour: undo, step tracking, search, pages and shortcuts. */
@@ -35,6 +38,8 @@ export function editorExtensions({
   comments,
   commentsHidden,
   onCommentClick,
+  mode,
+  onSuggestionClick,
 }: EditorExtensionOptions): AnyExtension[] {
   return [
     // The shared schema, with the editor's own views of tables and images.
@@ -47,6 +52,8 @@ export function editorExtensions({
     TabLayout,
     Pagination,
     CommentAnchors.configure({ initial: comments, initiallyHidden: commentsHidden, onActivate: onCommentClick }),
+    // After the comment anchors, so a click on suggested text activates the suggestion's card.
+    Suggesting.configure({ initialMode: mode, onActivate: onSuggestionClick }),
     Extension.create({
       name: "collab",
       addProseMirrorPlugins: () => [collab({ version, clientID: clientId })],
