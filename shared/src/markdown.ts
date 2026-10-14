@@ -27,6 +27,8 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
       state.write("<!-- page break -->");
       state.closeBlock(node);
     },
+    // Markdown has no columns.
+    columnBreak() {},
     // Images are blocks in this schema; the default serializer treats them as inline.
     image(state, node, parent, index) {
       defaults.image!(state, node, parent, index);

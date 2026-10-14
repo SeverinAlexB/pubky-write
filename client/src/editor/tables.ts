@@ -7,6 +7,7 @@ import { Fragment, type Node } from "@tiptap/pm/model";
 import { Plugin, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { isInTable, selectedRect, TableMap } from "@tiptap/pm/tables";
 import type { EditorView, NodeView, ViewMutationRecord } from "@tiptap/pm/view";
+import { isHeaderRow } from "./tableLayout.ts";
 
 /** The narrowest a column can be dragged, in CSS pixels. */
 export const MIN_COLUMN_WIDTH = 20;
@@ -181,13 +182,6 @@ export function sortTable(direction: "ascending" | "descending"): Command {
   };
 }
 
-function isHeaderRow(row: Node): boolean {
-  let header = row.childCount > 0;
-  row.forEach((cell) => {
-    if (cell.type.spec.tableRole !== "header_cell") header = false;
-  });
-  return header;
-}
 
 /** The size of the table at the cursor, for Table options. */
 export function tableSizeAt(state: EditorState): { columns: number; rows: number } | null {

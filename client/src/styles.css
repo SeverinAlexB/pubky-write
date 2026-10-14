@@ -573,6 +573,60 @@ button:disabled {
   font-size: 14px;
 }
 
+/* Split cell: 301px wide, a Columns and a Rows field with icons. */
+.split-cell-dialog {
+  width: min(301px, 90vw);
+}
+
+.split-cell-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.split-cell-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+
+.split-cell-field .text-field {
+  flex: 1;
+}
+
+/* Format > Columns > More options: 398px wide. */
+.column-options-dialog {
+  width: min(398px, 90vw);
+}
+
+.column-options-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.column-options-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.column-options-line {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+/* Format > Columns: the current preset is outlined in the primary colour. */
+.preset-grid.is-columns {
+  grid-template-columns: repeat(3, 72px);
+}
+
+.preset-tile.column-preset.is-current {
+  border: 2px solid var(--primary);
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -1464,6 +1518,33 @@ button:disabled {
   box-shadow: var(--menu-shadow);
 }
 
+/* Image options and Replace image while an image is selected: text buttons. */
+.tool-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  margin: 0 1px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tool-text-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.tool-text-button:disabled {
+  color: rgb(31 31 31 / 38%);
+  cursor: default;
+}
+
 .tool-button {
   position: relative;
   display: inline-flex;
@@ -2027,6 +2108,98 @@ button:disabled {
 /* Pushes the content after it to the next page. */
 .page-content .page-spacer {
   display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+/*
+ * Columns (Format > Columns, see editor/columnLayout.ts): the content is a multi-column box. The
+ * pagination ends every column with a forced break and every page with a spacer across all
+ * columns, so the browser only draws what the pagination decided.
+ */
+.page-stack[data-columns] .page-content {
+  column-count: var(--columns);
+  column-gap: var(--column-gap);
+  column-fill: auto;
+}
+
+.page-stack[data-columns] .page-content * {
+  orphans: 1;
+  widows: 1;
+}
+
+.page-content .column-spacer {
+  display: contents;
+}
+
+.page-content .column-break-spacer {
+  display: block;
+  break-before: column;
+  user-select: none;
+  pointer-events: none;
+}
+
+.page-content .column-spanner {
+  column-span: all;
+}
+
+/* While the pagination measures, the content is one column as wide as a column, without spacers. */
+.page-stack.is-measuring-columns .page-content {
+  column-count: auto;
+  padding-right: calc(var(--margin-right) + var(--column-measure-extra, 0px));
+}
+
+.page-stack.is-measuring-columns .page-content .column-spacer,
+.page-stack.is-measuring-columns .page-content .page-spacer {
+  display: none;
+}
+
+/* Format > Columns > Line between columns: 1px black, the height of the page's content. */
+.page-stack > div.column-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.page-stack:not([data-columns]) > div.column-lines {
+  display: none;
+}
+
+.column-lines > .column-line {
+  position: absolute;
+  width: 1px;
+  background: #000;
+  print-color-adjust: exact;
+}
+
+/* Insert > Break > Column break: a dotted line; with columns the next column starts after it. */
+.page-content .column-break {
+  height: 0;
+  margin: 6px 0;
+  border-top: 1px dotted #9aa0a6;
+}
+
+.page-content .column-break.ProseMirror-selectednode {
+  border-top-color: var(--blue);
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* A table that continues on the next page: the rest of the page, then its pinned rows again. */
+.page-content .table-page-spacer {
+  display: contents;
+}
+
+.page-content .table-page-gap > td {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.page-content .table-repeat-row {
   user-select: none;
   pointer-events: none;
 }
@@ -2874,9 +3047,139 @@ button:disabled {
   background: #fff;
 }
 
-.image-frame.is-resizing .image-handles {
+.image-frame.is-resizing .image-handles,
+.image-frame.is-rotating .image-handles {
   outline-style: dashed;
 }
+
+.image-rotate-handle {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* A cropped image: the visible part, with the whole image moved and scaled inside it. */
+.page-content .image-crop {
+  display: contents;
+}
+
+.page-content .image-crop.is-cropped {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Wrap modes (see docs/design/images.md): behind text below the text, in front above it. */
+.page-stack .page-content {
+  isolation: isolate;
+}
+
+.page-content .image-frame[data-wrap="behind"] {
+  z-index: -1;
+}
+
+.page-content .image-frame[data-wrap="front"] {
+  z-index: 3;
+}
+
+.page-content .image-frame:not([data-wrap="inline"]) .image-crop,
+.page-content .image-frame:not([data-wrap="inline"]) .image-crop > img {
+  cursor: move;
+}
+
+.page-content .image-frame.is-moving {
+  z-index: 4;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.page-content .image-frame[data-wrap="wrap"],
+.page-content .image-frame[data-wrap="behind"],
+.page-content .image-frame[data-wrap="front"] {
+  /* Text beside a wrapped image starts at its margin, not below it. */
+  max-width: none;
+}
+
+/* Crop image: the whole image dimmed, the part that stays bright, and black crop handles. */
+.image-frame.is-cropping > .image-crop,
+.image-frame.is-cropping > .image-handles {
+  visibility: hidden;
+}
+
+.image-crop-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+.image-crop-ui img {
+  position: absolute;
+  max-width: none;
+  margin: 0;
+  pointer-events: none;
+}
+
+.image-crop-ghost {
+  opacity: 0.4;
+}
+
+.image-crop-window {
+  position: absolute;
+  overflow: visible;
+  outline: 1px solid var(--primary);
+}
+
+.image-crop-window > .image-crop-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.image-crop-handle {
+  position: absolute;
+  z-index: 1;
+  background: #000;
+  border: 1px solid #fff;
+  touch-action: none;
+}
+
+.image-crop-handle-n,
+.image-crop-handle-s {
+  left: 50%;
+  width: 18px;
+  height: 5px;
+  margin-left: -9px;
+  cursor: ns-resize;
+}
+
+.image-crop-handle-n { top: -3px; }
+.image-crop-handle-s { bottom: -3px; }
+
+.image-crop-handle-e,
+.image-crop-handle-w {
+  top: 50%;
+  width: 5px;
+  height: 18px;
+  margin-top: -9px;
+  cursor: ew-resize;
+}
+
+.image-crop-handle-e { right: -3px; }
+.image-crop-handle-w { left: -3px; }
+
+.image-crop-handle-nw,
+.image-crop-handle-ne,
+.image-crop-handle-se,
+.image-crop-handle-sw {
+  width: 11px;
+  height: 11px;
+}
+
+.image-crop-handle-nw { top: -3px; left: -3px; cursor: nwse-resize; }
+.image-crop-handle-ne { top: -3px; right: -3px; cursor: nesw-resize; }
+.image-crop-handle-se { bottom: -3px; right: -3px; cursor: nwse-resize; }
+.image-crop-handle-sw { bottom: -3px; left: -3px; cursor: nesw-resize; }
 
 .page-content mark {
   padding: 0;
@@ -2900,9 +3203,10 @@ button:disabled {
   text-align: left;
 }
 
-/* Header rows (from imported files) look like any other row. */
+/* Pinned header rows (Pin header row, Insert title row, or header rows of imported files) are light grey. */
 .page-content th {
   font-weight: inherit;
+  background-color: #d9d9d9;
 }
 
 .page-content.is-column-resize,
@@ -4392,6 +4696,27 @@ body.is-column-resizing * {
   top: calc(100% + 4px);
 }
 
+/* The margin ("3.2mm margin") and position menus of an image that is not in line with text. */
+.image-pill .image-pill-text {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 4px 0 12px;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.image-pill .image-pill-text:hover {
+  background: var(--hover);
+}
+
 /* Table options and Image options */
 .side-panel {
   display: flex;
@@ -4434,6 +4759,86 @@ body.is-column-resizing * {
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 500;
+}
+
+/* Image options: sections that open and close. */
+.side-panel-section.is-collapsible h3 {
+  margin: 0;
+}
+
+.side-panel-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.side-panel-section.is-collapsible > div {
+  padding-top: 8px;
+}
+
+.side-panel-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.side-panel-pair input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.side-panel-wraps {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.side-panel-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.side-panel-wrap.is-current {
+  border: 2px solid var(--primary);
+  background: var(--primary-container, #d3e3fd);
+  color: var(--text);
+}
+
+.side-panel-note {
+  margin: 4px 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.side-panel-slider input[type="range"] {
+  width: 100%;
+}
+
+.side-panel-slider > span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.side-panel-reset {
+  margin-top: 4px;
 }
 
 .side-panel-row,

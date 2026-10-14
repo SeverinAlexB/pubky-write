@@ -7,6 +7,8 @@
 // that are saved. Measuring happens in requestAnimationFrame, before the browser paints the
 // edit, and repeats until the spacers stop changing.
 import {
+  columnKeys,
+  columnsOf,
   footnotesOf,
   firstTab,
   pageElementsOf,
@@ -33,9 +35,20 @@ import {
   type LayoutLine,
   type PageFrame,
   type PageSpacer,
+  type Pagination as PageBreaks,
 } from "./pageLayout.ts";
 import { currentTab, documentTabsKey, shownTabElement } from "./documentTabs.ts";
 import { HEADER_OFFSET, regionHTML } from "./regionRender.ts";
+import {
+  applyColumnStyles,
+  columnGeometry,
+  columnSpacers,
+  drawColumnLines,
+  drawnColumnHeights,
+  measureColumnsFlat,
+} from "./columnLayout.ts";
+import { placeFixedImages } from "./imagePlacement.ts";
+import { pinnedRowCount, pinnedRowsKey, tableRowLines } from "./tableLayout.ts";
 import { layoutTabsIn } from "./tabLayout.ts";
 
 /** Space between pages, in CSS pixels at 100% zoom. */
@@ -43,8 +56,13 @@ export const PAGE_GAP = 10;
 /** Measuring passes after one change before the plugin stops, to avoid feedback loops. */
 const MAX_PASSES = 6;
 
-/** A spacer as rendered: block spacers are shorter than their shift by the margins they stop collapsing. */
-type RenderedSpacer = PageSpacer & { height: number };
+/**
+ * A spacer as rendered: block spacers are shorter than their shift by the margins they stop
+ * collapsing. With columns a spacer is `breaks` forced column breaks, then (to a new page) a
+ * spacer `height` tall across all columns and `after` more column breaks. A spacer between table
+ * rows repeats the table's pinned rows (`repeat` identifies their content).
+ */
+type RenderedSpacer = PageSpacer & { height: number; breaks?: number; spanner?: boolean; after?: number; repeat?: string };
 
 /**
  * Where the pages' content and footnotes are, for drawing headers, footers and footnotes over
@@ -159,7 +177,7 @@ function applyTransaction(tr: Transaction, value: PaginationState): PaginationSt
 
   const scroll = value.scroll || tr.scrolledIntoView;
   // New page settings change every line, so start over.
-  if (pageSetupKeys.some((key) => tr.before.attrs[key] !== tr.doc.attrs[key])) {
+  if ([...pageSetupKeys, ...columnKeys].some((key) => tr.before.attrs[key] !== tr.doc.attrs[key])) {
     return { ...value, decorations: DecorationSet.empty, scroll, pass: 0 };
   }
   const decorations = value.decorations.map(tr.mapping, tr.doc);
@@ -190,13 +208,17 @@ function spacerDecorations(doc: Node, spacers: RenderedSpacer[]): DecorationSet 
   return DecorationSet.create(
     doc,
     spacers.map((spacer) =>
-      Decoration.widget(spacer.pos, () => spacerElement(spacer), {
-        // Before the cursor, so a cursor at the start of a moved line shows on the new page.
-        side: -1,
-        ignoreSelection: true,
-        key: `page-spacer:${spacer.inline}:${spacer.height}:${spacer.shift}`,
-        spacer,
-      }),
+      Decoration.widget(
+        spacer.pos,
+        (view) => (spacer.breaks !== undefined ? columnSpacerElement(spacer) : tableSpacerElement(view, doc, spacer) ?? spacerElement(spacer)),
+        {
+          // Before the cursor, so a cursor at the start of a moved line shows on the new page.
+          side: -1,
+          ignoreSelection: true,
+          key: `page-spacer:${spacer.inline}:${spacer.height}:${spacer.shift}:${spacer.breaks ?? ""}:${spacer.spanner ?? ""}:${spacer.after ?? ""}:${spacer.repeat ?? ""}`,
+          spacer,
+        },
+      ),
     ),
   );
 }
@@ -210,6 +232,64 @@ function spacerElement(spacer: RenderedSpacer): HTMLElement {
   return element;
 }
 
+/**
+ * With columns: forced column breaks, and to a new page a spacer across all columns that ends
+ * the page's columns and reaches the next page's top margin (see docs/design/columns.md).
+ */
+function columnSpacerElement(spacer: RenderedSpacer): HTMLElement {
+  const element = document.createElement("span");
+  element.className = "column-spacer";
+  element.setAttribute("aria-hidden", "true");
+  const columnBreak = () => {
+    const part = document.createElement("span");
+    part.className = "column-break-spacer";
+    return part;
+  };
+  for (let index = 0; index < (spacer.breaks ?? 0); index++) element.append(columnBreak());
+  if (spacer.spanner) {
+    const spanner = document.createElement("span");
+    spanner.className = "page-spacer column-spanner";
+    spanner.style.height = `${spacer.height}px`;
+    spanner.dataset.pos = String(spacer.pos);
+    element.append(spanner);
+  }
+  for (let index = 0; index < (spacer.after ?? 0); index++) element.append(columnBreak());
+  return element;
+}
+
+/**
+ * A spacer between two rows of a table: a row without borders that takes the rest of the page, then
+ * copies of the table's pinned rows at the top of the next page. Null when `pos` is not in a table.
+ */
+function tableSpacerElement(view: EditorView, doc: Node, spacer: RenderedSpacer): HTMLElement | null {
+  if (!spacer.inline || spacer.pos > doc.content.size) return null;
+  const $pos = doc.resolve(spacer.pos);
+  if ($pos.parent.type.spec.tableRole !== "table") return null;
+  const wrapper = view.nodeDOM($pos.before());
+  const rows = wrapper instanceof HTMLElement ? tableRowElements(wrapper) : [];
+  const group = document.createElement("span");
+  group.className = "table-page-spacer";
+  group.setAttribute("aria-hidden", "true");
+  const gap = document.createElement("tr");
+  gap.className = "table-page-gap";
+  const cell = gap.appendChild(document.createElement("td"));
+  cell.colSpan = 1000;
+  cell.style.height = `${Math.max(0, spacer.height)}px`;
+  group.append(gap);
+  for (const row of rows.slice(0, pinnedRowCount($pos.parent))) {
+    const copy = row.cloneNode(true) as HTMLTableRowElement;
+    copy.classList.add("table-repeat-row");
+    for (const element of [copy, ...copy.querySelectorAll("*")]) {
+      element.removeAttribute("contenteditable");
+      element.classList.remove("selectedCell");
+    }
+    copy.contentEditable = "false";
+    group.append(copy);
+  }
+  group.lastElementChild!.setAttribute("data-shift", String(spacer.shift));
+  return group;
+}
+
 function currentSpacers(state: EditorState): RenderedSpacer[] {
   return currentSpacersOf(paginationKey.getState(state)!);
 }
@@ -219,7 +299,19 @@ function currentSpacersOf(value: PaginationState): RenderedSpacer[] {
 }
 
 function sameRenderedSpacers(a: RenderedSpacer[], b: RenderedSpacer[]): boolean {
-  return sameSpacers(a, b) && a.every((spacer, i) => spacer.height === b[i]!.height);
+  return (
+    sameSpacers(a, b) &&
+    a.every((spacer, i) => {
+      const other = b[i]!;
+      return (
+        spacer.height === other.height &&
+        spacer.breaks === other.breaks &&
+        spacer.spanner === other.spanner &&
+        spacer.after === other.after &&
+        spacer.repeat === other.repeat
+      );
+    })
+  );
 }
 
 function sameLayout(a: PageLayout, b: PageLayout): boolean {
@@ -316,7 +408,10 @@ class PaginationView {
     if (this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
-      if (!this.view.isDestroyed) this.layout();
+      if (this.view.isDestroyed) return;
+      // With columns, a page's spacer is sized from its columns as drawn: lay out once more right
+      // away, so the corrected spacers are what gets painted.
+      if (this.layout() && columnsOf(this.view.state.doc).columns > 1 && !this.view.isDestroyed) this.layout();
     });
   }
 
@@ -338,21 +433,34 @@ class PaginationView {
     const scale = stackRect.width / geometry.width;
     stack.style.setProperty("--page-gap", `${state.gap}px`);
 
-    const frame = this.pageFrame(stack, geometry, state.gap, scale);
+    const columns = columnGeometry(view.state.doc, geometry);
+    const frame: PageFrame = { ...this.pageFrame(stack, geometry, state.gap, scale), columns: columns.count };
     // The first page's content starts below its header.
     stack.style.setProperty("--content-top", `${frame.firstMarginTop}px`);
 
     const toY = (clientY: number) => (clientY - stackRect.top) / scale;
-    const natural = naturalPositions(view, toY);
+    const root = shownTabElement(view);
+    const stride = geometry.height + state.gap;
+    placeFixedImages(root, toY, stride);
     const footnotes = documentFootnotes(view.state);
-    const boxes = layoutBoxes(view, (y) => natural(toY(y)), footnotes, (content) => this.footnoteHeight(stack, geometry, scale, content));
-    const { spacers, pageCount, footnotePages } = paginate(boxes, frame);
-    setPageCount(stack, pageCount);
+    const footnoteHeight = (content: RegionContent) => this.footnoteHeight(stack, geometry, scale, content);
 
-    const rendered = spacers.map((spacer) => ({
-      ...spacer,
-      height: spacer.inline ? spacer.shift : Math.max(0, Math.round((spacer.shift - collapsedMargin(view, spacer.pos)) * 100) / 100),
-    }));
+    let pagination: PageBreaks;
+    let rendered: RenderedSpacer[];
+    if (columns.count > 1) {
+      const marginAt = (pos: number, inline = false) => (inline ? 0 : blockMarginTop(view, pos));
+      const drawn = drawnColumnHeights(root, toY, contentTop(frame, 0), marginAt);
+      pagination = measureColumnsFlat(stack, () => paginate(layoutBoxes(view, toY, footnotes, footnoteHeight, false), frame));
+      rendered = columnSpacers(pagination, frame, drawn, marginAt);
+    } else {
+      const natural = naturalPositions(view, toY);
+      pagination = paginate(layoutBoxes(view, (y) => natural(toY(y)), footnotes, footnoteHeight, true), frame);
+      rendered = pagination.spacers.map((spacer) => renderedSpacer(view, spacer));
+    }
+    const { pageCount, footnotePages } = pagination;
+    setPageCount(stack, pageCount);
+    drawColumnLines(stack, frame, pageCount, geometry, columns);
+
     const layout: PageLayout = {
       pageCount,
       gap: state.gap,
@@ -364,7 +472,7 @@ class PaginationView {
     };
     const current = currentSpacers(view.state);
     if (sameRenderedSpacers(rendered, current) && state.layout && sameLayout(state.layout, layout)) {
-      updatePageFields(view, stack, geometry.height + state.gap, scale);
+      updatePageFields(view, stack, stride, scale);
       return false;
     }
 
@@ -374,12 +482,12 @@ class PaginationView {
     const tr = view.state.tr.setMeta(paginationKey, { spacers: rendered, layout } satisfies PaginationMeta).setMeta("addToHistory", false);
     if (state.scroll && view.hasFocus()) tr.scrollIntoView();
     view.dispatch(tr);
-    updatePageFields(view, stack, geometry.height + state.gap, scale);
+    updatePageFields(view, stack, stride, scale);
     return true;
   }
 
   /** The page geometry with the space headers and footers take: taller ones push the content in. */
-  private pageFrame(stack: HTMLElement, geometry: PageGeometry, gap: number, scale: number): Required<PageFrame> {
+  private pageFrame(stack: HTMLElement, geometry: PageGeometry, gap: number, scale: number): Required<Omit<PageFrame, "columns">> {
     const settings = pageElementsOf(this.view.state.doc);
     const height = (kind: "header" | "footer", page: number) => {
       const content = regionFor(settings, kind, page);
@@ -488,7 +596,7 @@ function flushPendingSelection(view: EditorView): void {
  * by subtracting the shift of every spacer above it.
  */
 function naturalPositions(view: EditorView, toY: (clientY: number) => number): (y: number) => number {
-  const spacers = Array.from(shownTabElement(view).querySelectorAll<HTMLElement>(".page-spacer"), (element) => ({
+  const spacers = Array.from(shownTabElement(view).querySelectorAll<HTMLElement>("[data-shift]"), (element) => ({
     bottom: toY(element.getBoundingClientRect().bottom),
     shift: Number(element.dataset.shift) || 0,
   })).sort((a, b) => a.bottom - b.bottom);
@@ -562,6 +670,7 @@ function layoutBoxes(
   toNatural: (clientY: number) => number,
   footnotes: readonly FootnoteRef[],
   footnoteHeight: (content: RegionContent) => number,
+  breakTables: boolean,
 ): LayoutBox[] {
   const boxes: LayoutBox[] = [];
   const elementAt = blockElements(view);
@@ -584,17 +693,31 @@ function layoutBoxes(
       next += 1;
     }
     if (!(element instanceof HTMLElement)) continue;
+    // Images behind or in front of text are placed freely and take no room.
+    if (node.type.name === "image" && (node.attrs.wrap === "behind" || node.attrs.wrap === "front")) continue;
     const rect = element.getBoundingClientRect();
+    const table = node.type.spec.tableRole === "table";
     boxes.push({
       top: toNatural(rect.top),
       bottom: toNatural(rect.bottom),
       breakPos,
       pageBreak: node.type.name === "pageBreak",
-      lines: node.isTextblock ? () => textblockLines(view, node, pos, element, toNatural) : undefined,
+      columnBreak: node.type.name === "columnBreak",
+      lines: node.isTextblock
+        ? () => textblockLines(view, node, pos, element, toNatural)
+        : table && breakTables
+          ? () => tableRowLines(node, pos, tableRowElements(element), toNatural)
+          : undefined,
       footnotes: notes,
     });
   }
   return boxes;
+}
+
+/** The rows of a table as drawn (the editor wraps the table in a div), without the copies of pinned rows. */
+function tableRowElements(element: HTMLElement): HTMLElement[] {
+  const table = element.matches("table") ? element : element.querySelector(":scope > table");
+  return table ? Array.from(table.querySelectorAll<HTMLElement>(":scope > tbody > tr")) : [];
 }
 
 /** The lines of a textblock, from the boxes of its text. */
@@ -662,13 +785,35 @@ function collapsedMargin(view: EditorView, pos: number): number {
   return top > 0 && bottom > 0 ? Math.min(top, bottom) : 0;
 }
 
+/** How a spacer of a one-column layout is drawn: between table rows, the pinned rows repeat below it. */
+function renderedSpacer(view: EditorView, spacer: PageSpacer): RenderedSpacer {
+  if (!spacer.inline) {
+    return { ...spacer, height: Math.max(0, Math.round((spacer.shift - collapsedMargin(view, spacer.pos)) * 100) / 100) };
+  }
+  const $pos = view.state.doc.resolve(spacer.pos);
+  if ($pos.parent.type.spec.tableRole !== "table") return { ...spacer, height: spacer.shift };
+  return {
+    ...spacer,
+    height: Math.round((spacer.shift - (spacer.carry ?? 0)) * 100) / 100,
+    repeat: pinnedRowsKey($pos.parent),
+  };
+}
+
+/** The top margin of the block at `pos`, which is kept after a column break or a page's columns. */
+function blockMarginTop(view: EditorView, pos: number): number {
+  const element = view.nodeDOM(pos);
+  return element instanceof HTMLElement ? Number.parseFloat(getComputedStyle(element).marginTop) || 0 : 0;
+}
+
 /** Sizes the page stack around the editor from the document's page setup. */
 function applyPageStyles(view: EditorView): HTMLElement | null {
   const stack = view.dom.closest<HTMLElement>(".page-stack");
   if (!stack) return null;
   const setup = pageSetupOf(view.state.doc);
-  setGeometry(stack, pageGeometry(setup));
+  const geometry = pageGeometry(setup);
+  setGeometry(stack, geometry);
   stack.style.setProperty("--page-color", setup.pageColor);
+  applyColumnStyles(stack, columnGeometry(view.state.doc, geometry), paginationKey.getState(view.state)?.enabled ?? false);
   return stack;
 }
 

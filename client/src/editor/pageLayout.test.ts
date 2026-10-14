@@ -130,3 +130,84 @@ describe("sameSpacers", () => {
     expect(spacers[0]).toMatchObject({ pos: 1 + 45 * 10 });
   });
 });
+
+describe("paginate with columns", () => {
+  const twoColumns: PageFrame = { ...a4, columns: 2 };
+  const stride = 1133;
+
+  it("fills the first column, then the second, then the next page", () => {
+    // 54 lines fit in a column: 150 lines take columns 1 and 2 of page 1 and part of page 2.
+    const { spacers, pageCount, slotHeights } = paginate([paragraph(96, 150, 1)], twoColumns);
+    expect(pageCount).toBe(2);
+    expect(spacers.map(({ pos, from, to }) => ({ pos, from, to }))).toEqual([
+      { pos: 541, from: 0, to: 1 },
+      { pos: 1081, from: 1, to: 2 },
+    ]);
+    // Column 2 is laid out as its own page in the strip: its first line starts at the top margin.
+    expect(96 + 54 * LINE + spacers[0]!.shift).toBe(stride + 96);
+    expect(slotHeights).toEqual([54 * LINE, 54 * LINE, 42 * LINE]);
+  });
+
+  it("moves the content after a column break to the next column, and after a page break to the next page", () => {
+    const columnBreak: LayoutBox = { top: 96 + 3 * LINE, bottom: 96 + 3 * LINE, breakPos: 30, columnBreak: true };
+    const pageBreak: LayoutBox = { top: 96 + 5 * LINE, bottom: 96 + 5 * LINE, breakPos: 60, pageBreak: true };
+    const { spacers, pageCount } = paginate(
+      [paragraph(96, 3, 1), columnBreak, paragraph(96 + 3 * LINE, 2, 31), pageBreak, paragraph(96 + 5 * LINE, 1, 61)],
+      twoColumns,
+    );
+    expect(spacers.map(({ pos, from, to }) => ({ pos, from, to }))).toEqual([
+      { pos: 30, from: 0, to: 1 },
+      { pos: 60, from: 1, to: 2 },
+    ]);
+    expect(pageCount).toBe(2);
+  });
+
+  it("starts the next page after a page break in the first column", () => {
+    const pageBreak: LayoutBox = { top: 96 + LINE, bottom: 96 + LINE, breakPos: 20, pageBreak: true };
+    const { spacers } = paginate([paragraph(96, 1, 1), pageBreak, paragraph(96 + LINE, 1, 21)], twoColumns);
+    expect(spacers[0]).toMatchObject({ pos: 20, from: 0, to: 2 });
+    expect(96 + LINE + spacers[0]!.shift).toBe(stride * 2 + 96);
+  });
+
+  it("ignores column breaks with one column", () => {
+    const columnBreak: LayoutBox = { top: 96 + 3 * LINE, bottom: 96 + 3 * LINE, breakPos: 30, columnBreak: true };
+    expect(paginate([paragraph(96, 3, 1), columnBreak, paragraph(96 + 3 * LINE, 2, 31)], a4).spacers).toEqual([]);
+  });
+
+  it("keeps the content of every column in the page's footnote area", () => {
+    const box = paragraph(96, 60, 1);
+    box.footnotes = [{ index: 0, top: 96, bottom: 96 + LINE, height: 100 }];
+    const { spacers, footnotePages } = paginate([box], twoColumns);
+    expect(footnotePages).toEqual([0]);
+    // 1027 - 120 leaves room for 47 lines in the first column.
+    expect(spacers[0]).toMatchObject({ pos: 1 + 47 * 10, from: 0, to: 1 });
+  });
+});
+
+describe("paginate tables", () => {
+  /** A table of `count` rows of 30px from `top`; rows after the first `pinned` repeat those above them. */
+  function table(top: number, count: number, pinned: number): LayoutBox {
+    const rows = Array.from({ length: count }, (_, i) => ({
+      top: top + i * 30,
+      bottom: top + (i + 1) * 30,
+      start: () => 1000 + i * 10,
+      ...(i >= pinned && pinned > 0 && { carry: pinned * 30 }),
+    }));
+    return { top, bottom: top + count * 30, breakPos: 999, lines: () => rows };
+  }
+
+  it("breaks a table between rows and leaves room for the repeated header rows", () => {
+    // 31 rows of 30px fit between 96 and 1027.
+    const { spacers, pageCount } = paginate([table(96, 40, 1)], a4);
+    expect(pageCount).toBe(2);
+    expect(spacers).toHaveLength(1);
+    expect(spacers[0]).toMatchObject({ pos: 1000 + 31 * 10, inline: true, carry: 30 });
+    // The moved row starts below the repeated header row on page 2.
+    expect(96 + 31 * 30 + spacers[0]!.shift).toBe(contentTop(a4, 1) + 30);
+  });
+
+  it("moves no header row along with a table without pinned rows", () => {
+    const { spacers } = paginate([table(96, 40, 0)], a4);
+    expect(spacers[0]).toEqual({ pos: 1000 + 31 * 10, shift: contentTop(a4, 1) - (96 + 31 * 30), inline: true });
+  });
+});

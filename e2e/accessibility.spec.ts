@@ -141,6 +141,20 @@ test("tables, images, their panels and the right-click menu have no serious acce
   await expect(page.getByRole("complementary", { name: "Table options" })).toBeVisible();
   await expectAccessible(page, "Table options");
   await page.getByRole("button", { name: "Close table options" }).click();
+  await editor(page).locator("td").first().click({ button: "right" });
+  await page.getByRole("menu", { name: "Context menu" }).getByRole("menuitem", { name: "Split cell" }).click();
+  await expect(page.getByRole("dialog", { name: "Split cell" })).toBeVisible();
+  await expectAccessible(page, "Split cell");
+  await page.getByRole("dialog", { name: "Split cell" }).getByRole("button", { name: "Cancel" }).click();
+
+  await menuBarItem(page, "Format").click();
+  await page.getByRole("menu", { name: "Format" }).getByRole("menuitem", { name: "Columns" }).hover();
+  await expect(page.getByRole("group", { name: "Columns" })).toBeVisible();
+  await expectAccessible(page, "Format > Columns");
+  await page.getByRole("group", { name: "Columns" }).getByRole("menuitem", { name: "More options" }).click();
+  await expect(page.getByRole("dialog", { name: "Column options" })).toBeVisible();
+  await expectAccessible(page, "Column options");
+  await page.getByRole("dialog", { name: "Column options" }).getByRole("button", { name: "Cancel" }).click();
 
   const png = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
@@ -157,8 +171,23 @@ test("tables, images, their panels and the right-click menu have no serious acce
   await expect(page.getByRole("toolbar", { name: "Image actions" })).toBeVisible();
   await expectAccessible(page, "Selected image with its pill");
   await page.getByRole("toolbar", { name: "Image actions" }).getByRole("button", { name: "Image options" }).click();
-  await expect(page.getByRole("complementary", { name: "Image options" })).toBeVisible();
+  const panel = page.getByRole("complementary", { name: "Image options" });
+  await expect(panel).toBeVisible();
+  for (const section of ["Position", "Re-colour", "Adjustments", "Alt text"]) await panel.getByRole("button", { name: section, exact: true }).click();
   await expectAccessible(page, "Image options");
+
+  // Wrap text: the pill's margin and position menus, and the crop handles.
+  await editor(page).locator(".image-frame img").click();
+  const pill = page.getByRole("toolbar", { name: "Image actions" });
+  await pill.getByRole("button", { name: "Wrap text options" }).click();
+  await expectAccessible(page, "Wrap text options");
+  await page.getByRole("menu", { name: "Wrap text options" }).getByRole("menuitemcheckbox", { name: "Wrap text" }).click();
+  await expect(pill.getByRole("button", { name: "Margin" })).toBeVisible();
+  await expectAccessible(page, "Image with Wrap text and its pill");
+  await editor(page).locator(".image-frame > .image-crop > img").dblclick();
+  await expect(editor(page).locator(".image-crop-handle")).toHaveCount(8);
+  await expectAccessible(page, "Cropping an image");
+  await page.keyboard.press("Escape");
 });
 
 test("the document list's views, menus and Open a file dialog have no serious accessibility violations", async ({ page }) => {

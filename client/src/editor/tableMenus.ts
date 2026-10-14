@@ -3,13 +3,20 @@ import type { Editor } from "@tiptap/react";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import type { MenuEntry } from "../components/MenuList.tsx";
 import type { EditorActions } from "./actions.ts";
+import { insertTitleRow, pinHeaderRows, pinState, unpinHeaderRows } from "./tableExtras.ts";
 import { distributeColumns, distributeRows, measureRowHeights, sortTable } from "./tables.ts";
 
-export type TableMenuState = { canMerge: boolean; canUnmerge: boolean };
+/** `pinned`: the cursor is in a pinned row, so the menus offer Unpin header rows. */
+export type TableMenuState = { canMerge: boolean; canUnmerge: boolean; pinned: boolean };
 
 export function tableMenuState(editor: Editor): TableMenuState {
-  if (!editor.isActive("table")) return { canMerge: false, canUnmerge: false };
-  return { canMerge: editor.can().mergeCells(), canUnmerge: editor.can().splitCell() };
+  if (!editor.isActive("table")) return { canMerge: false, canUnmerge: false, pinned: false };
+  const pin = pinState(editor.state);
+  return {
+    canMerge: editor.can().mergeCells(),
+    canUnmerge: editor.can().splitCell(),
+    pinned: pin !== null && pin.row < pin.pinned,
+  };
 }
 
 type Command = (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean;
@@ -34,7 +41,17 @@ function commands(editor: Editor) {
     unmergeCells: () => run().splitCell().run(),
     sortAscending: () => apply(sortTable("ascending")),
     sortDescending: () => apply(sortTable("descending")),
+    pinHeaderRows: () => apply(pinHeaderRows),
+    unpinHeaderRows: () => apply(unpinHeaderRows),
+    insertTitleRow: () => apply(insertTitleRow),
   };
+}
+
+/** Pin header row (the rows up to the cursor's), or Unpin header rows in a pinned row. */
+function pinEntry(table: ReturnType<typeof commands>, state: TableMenuState): MenuEntry {
+  return state.pinned
+    ? { label: "Unpin header rows", icon: "keep_off", onSelect: table.unpinHeaderRows }
+    : { label: "Pin header row", icon: "keep", onSelect: table.pinHeaderRows };
 }
 
 /** Format > Table. */
@@ -55,6 +72,10 @@ export function formatTableMenu(editor: Editor, actions: EditorActions, state: T
     "separator",
     { label: "Merge cells", disabled: !state.canMerge, onSelect: table.mergeCells },
     { label: "Unmerge cells", disabled: !state.canUnmerge, onSelect: table.unmergeCells },
+    { label: "Split cell", onSelect: actions.splitCell },
+    "separator",
+    pinEntry(table, state),
+    { label: "Insert title row", onSelect: table.insertTitleRow },
     "separator",
     { label: "Sort ascending", icon: "arrow_upward", onSelect: table.sortAscending },
     { label: "Sort descending", icon: "arrow_downward", onSelect: table.sortDescending },
@@ -66,6 +87,7 @@ export function formatTableMenu(editor: Editor, actions: EditorActions, state: T
 /** The table group of the right-click menu. */
 export function contextTableMenu(editor: Editor, actions: EditorActions): MenuEntry[] {
   const table = commands(editor);
+  const state = tableMenuState(editor);
   return [
     { label: "Insert row above", icon: "add", onSelect: table.insertRowAbove },
     { label: "Insert row below", icon: "add", onSelect: table.insertRowBelow },
@@ -86,6 +108,9 @@ export function contextTableMenu(editor: Editor, actions: EditorActions): MenuEn
         { label: "Sort descending", icon: "arrow_downward", onSelect: table.sortDescending },
       ],
     },
+    pinEntry(table, state),
+    { label: "Split cell", icon: "call_split", onSelect: actions.splitCell },
+    { label: "Insert title row", icon: "title", onSelect: table.insertTitleRow },
     { label: "Table options", icon: "table", onSelect: actions.tableOptions },
   ];
 }

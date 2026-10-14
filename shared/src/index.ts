@@ -5,6 +5,7 @@ export * from "./indents.ts";
 export * from "./paragraphStyles.ts";
 export * from "./lists.ts";
 export * from "./pageBreak.ts";
+export * from "./columns.ts";
 export * from "./pageSetup.ts";
 export * from "./pageSetupAttributes.ts";
 export * from "./anchors.ts";

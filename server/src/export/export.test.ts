@@ -313,6 +313,44 @@ describe("toDocx", () => {
     ]);
   });
 
+  it("writes columns, column breaks, and images anchored with their wrap mode, position, rotation and crop", async () => {
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEUlEQVR42mNk+M9QzwAEjDAGACCDAv8cI7IoAAAAAElFTkSuQmCC",
+      "base64",
+    );
+    const doc = Node.fromJSON(documentSchema, {
+      type: "doc",
+      attrs: { columns: 2, columnSpacing: 36, columnLine: true },
+      content: [
+        paragraph(text("First column")),
+        { type: "columnBreak" },
+        {
+          type: "image",
+          attrs: { src: "/uploads/a.png", width: 200, height: 100, wrap: "wrap", wrapMargin: 18, offsetX: 10, offsetY: 20, rotation: 30 },
+        },
+        paragraph(text("Wrapped around the image")),
+        { type: "image", attrs: { src: "/uploads/a.png", width: 100, height: 50, wrap: "behind", positioning: "fixed", offsetX: 300, offsetY: 400 } },
+        { type: "image", attrs: { src: "/uploads/a.png", width: 100, height: 50, wrap: "break" } },
+        { type: "image", attrs: { src: "/uploads/a.png", width: 100, height: 50, crop: { top: 0.1, right: 0.2, bottom: 0, left: 0.25 } } },
+      ],
+    });
+    const body = await documentXml(await toDocx(doc, "Layout", async () => png), "word/document.xml");
+    expect(body).toMatch(/<w:cols w:space="720" w:num="2" w:sep="(true|1)" w:equalWidth="(true|1)"\/>/);
+    expect(body).toContain('<w:br w:type="column"/>');
+    // The wrapped image is anchored in the paragraph after it, its text wraps square on both sides.
+    const wrapped = body.match(/<w:p>(?:(?!<\/w:p>).)*Wrapped around the image/s)![0];
+    expect(wrapped).toContain('<wp:anchor distT="228600" distB="228600" distL="228600" distR="228600"');
+    expect(wrapped).toContain('<wp:wrapSquare wrapText="bothSides"');
+    expect(wrapped).toMatch(/<wp:positionH relativeFrom="column"><wp:posOffset>95250<\/wp:posOffset>/);
+    expect(wrapped).toMatch(/<wp:positionV relativeFrom="paragraph"><wp:posOffset>190500<\/wp:posOffset>/);
+    expect(wrapped).toContain('rot="1800000"');
+    // Behind text, fixed on the page; break text tops and bottoms.
+    expect(body).toMatch(/behindDoc="1"(?:(?!<\/wp:anchor>).)*<wp:positionH relativeFrom="page"><wp:posOffset>2857500<\/wp:posOffset>/s);
+    expect(body).toContain("<wp:wrapTopAndBottom");
+    // A crop is a source rectangle in thousandths of a percent.
+    expect(body).toMatch(/<a:srcRect l="25000" t="10000" r="20000" b="0"\/>/);
+  });
+
   it("exports column widths, row heights, cell backgrounds and borders", async () => {
     const doc = Node.fromJSON(documentSchema, {
       type: "doc",

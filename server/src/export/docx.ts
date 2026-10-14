@@ -5,6 +5,7 @@ import {
   AlignmentType,
   Bookmark,
   BorderStyle,
+  ColumnBreak,
   DeletedTextRun,
   Document,
   ExternalHyperlink,
@@ -13,6 +14,7 @@ import {
   Header,
   HeadingLevel,
   HeightRule,
+  HorizontalPositionRelativeFrom,
   ImageRun,
   InsertedTextRun,
   InternalHyperlink,
@@ -31,7 +33,11 @@ import {
   TableRow,
   TabStopType,
   TextRun,
+  TextWrappingSide,
+  TextWrappingType,
+  VerticalPositionRelativeFrom,
   WidthType,
+  type IFloating,
   type INumberingOptions,
   type IParagraphOptions,
   type IRunOptions,
@@ -44,6 +50,8 @@ import { TableMap } from "@tiptap/pm/tables";
 import {
   bulletPresets,
   columnFractions,
+  columnsOf,
+  imageLayoutOf,
   DEFAULT_TABLE_BORDER_COLOR,
   DEFAULT_TABLE_BORDER_WIDTH_PT,
   isSize,
@@ -167,7 +175,10 @@ function sectionProperties(doc: Node) {
   const setup = pageSetupOf(doc);
   const paper = paperSizes[setup.paperSize];
   const twips = (points: number) => Math.round(points * TWIPS_PER_POINT);
+  const { columns, columnSpacing, columnLine } = columnsOf(doc);
   return {
+    // Format > Columns: equal columns, with the space between them and an optional line.
+    ...(columns > 1 && { column: { count: columns, space: twips(columnSpacing), separate: columnLine, equalWidth: true } }),
     page: {
       // Portrait dimensions; the library swaps them for landscape.
       size: {
@@ -334,9 +345,26 @@ class DocxConverter {
     return new TextRun(options);
   }
 
+  /**
+   * Images that are not in line with text are drawings anchored in the paragraph after them (their
+   * anchor in the editor too); with no paragraph to follow they get one of their own.
+   */
+  private anchored: ParagraphChild[] = [];
+
   async blocks(parent: Node, list?: ListContext, quoted = false): Promise<Block[]> {
     const blocks: Block[] = [];
-    for (const node of children(parent)) blocks.push(...(await this.block(node, list, quoted)));
+    const flush = () => {
+      if (this.anchored.length > 0) blocks.push(new Paragraph({ children: this.anchored.splice(0) }));
+    };
+    for (const node of children(parent)) {
+      if (node.type.name === "image" && imageLayoutOf(node.attrs).wrap !== "inline") {
+        this.anchored.push(await this.image(node));
+        continue;
+      }
+      if (node.type.name !== "paragraph" && node.type.name !== "heading") flush();
+      blocks.push(...(await this.block(node, list, quoted)));
+    }
+    flush();
     return blocks;
   }
 
@@ -386,6 +414,8 @@ class DocxConverter {
         return this.taskItem(node, list, quoted);
       case "pageBreak":
         return [new Paragraph({ children: [new PageBreak()] })];
+      case "columnBreak":
+        return [new Paragraph({ children: [new ColumnBreak()] })];
       case "codeBlock":
         return [
           new Paragraph({
@@ -407,9 +437,10 @@ class DocxConverter {
     }
   }
 
-  /** A heading's text, in a bookmark when a table of contents links to it. */
+  /** A heading's text, in a bookmark when a table of contents links to it, after the images anchored in it. */
   private async headingContent(node: Node): Promise<ParagraphChild[]> {
-    const children = await this.inline(node);
+    const anchored = this.anchored.splice(0);
+    const children = [...anchored, ...(await this.inline(node))];
     const index = this.linkedHeadings.get(node);
     return index === undefined ? children : [new Bookmark({ id: headingBookmark(index), children })];
   }
@@ -563,23 +594,39 @@ class DocxConverter {
     });
   }
 
-  /** At the size set in the editor, or the natural size; never wider than the page's content. */
+  /**
+   * At the size set in the editor, or the natural size; never wider than the page's content. With
+   * its rotation and crop, and anchored with its text wrapping and position when it is not in line.
+   */
   private async image(node: Node): Promise<ParagraphChild> {
     const data = await this.readImage(node.attrs.src);
     const size = data ? safeImageSize(data) : null;
     if (!data || !size) return new TextRun({ text: `[Image: ${node.attrs.alt || node.attrs.src}]`, italics: true });
 
+    const layout = imageLayoutOf(node.attrs);
     const { width, height } = node.attrs;
+    // A cropped image's stored size is its visible part.
+    const visible = layout.crop
+      ? { width: size.width * (1 - layout.crop.left - layout.crop.right), height: size.height * (1 - layout.crop.top - layout.crop.bottom) }
+      : size;
     let shown = isSize(width)
-      ? { width, height: isSize(height) ? height : (width * size.height) / size.width }
-      : { width: size.width, height: size.height };
-    const maxWidth = isSize(width) ? this.contentWidth / TWIPS_PER_PX : MAX_IMAGE_WIDTH_PX;
+      ? { width, height: isSize(height) ? height : (width * visible.height) / visible.width }
+      : { width: visible.width, height: visible.height };
+    const free = layout.wrap === "behind" || layout.wrap === "front";
+    const maxWidth = free ? Infinity : isSize(width) ? this.contentWidth / TWIPS_PER_PX : MAX_IMAGE_WIDTH_PX;
     if (shown.width > maxWidth) shown = { width: maxWidth, height: (shown.height * maxWidth) / shown.width };
+    const percent = (fraction: number) => Math.round(fraction * 100000) / 1000;
     return new ImageRun({
       type: size.type,
       data,
-      transformation: { width: Math.round(shown.width), height: Math.round(shown.height) },
-      altText: node.attrs.alt ? { name: node.attrs.alt, description: node.attrs.alt, title: node.attrs.alt } : undefined,
+      transformation: { width: Math.round(shown.width), height: Math.round(shown.height), ...(layout.rotation !== 0 && { rotation: layout.rotation }) },
+      ...(layout.crop && {
+        crop: { left: percent(layout.crop.left), top: percent(layout.crop.top), right: percent(layout.crop.right), bottom: percent(layout.crop.bottom) },
+      }),
+      ...(floatingOptions(node) && { floating: floatingOptions(node) }),
+      altText: node.attrs.alt || node.attrs.title
+        ? { name: node.attrs.title || node.attrs.alt, description: node.attrs.alt ?? undefined, title: node.attrs.title ?? undefined }
+        : undefined,
     });
   }
 
@@ -605,6 +652,45 @@ class DocxConverter {
     }
     return runs;
   }
+}
+
+/** EMUs (Word's drawing unit) in a CSS pixel. */
+const EMU_PER_PX = 9525;
+
+/**
+ * The anchor of an image that is not in line with text: Wrap text wraps square on both sides,
+ * Break text tops and bottoms, Behind and In front of text do not wrap. Move with text positions
+ * it from the column and paragraph, Fix position on page from the top of the page (and, behind or
+ * in front of text, from its left edge).
+ */
+export function floatingOptions(node: Node): IFloating | undefined {
+  const layout = imageLayoutOf(node.attrs);
+  if (layout.wrap === "inline") return undefined;
+  const emu = (px: number) => Math.round(px * EMU_PER_PX);
+  const margin = emu(layout.wrapMargin * (96 / 72));
+  const fixed = layout.positioning === "fixed";
+  const free = layout.wrap === "behind" || layout.wrap === "front";
+  const wrap = {
+    wrap: { type: TextWrappingType.SQUARE, side: TextWrappingSide.BOTH_SIDES },
+    break: { type: TextWrappingType.TOP_AND_BOTTOM },
+    behind: { type: TextWrappingType.NONE },
+    front: { type: TextWrappingType.NONE },
+  }[layout.wrap];
+  return {
+    // Wrapped and breaking images are placed from their column, the others (when fixed) from the page.
+    horizontalPosition: {
+      relative: fixed && free ? HorizontalPositionRelativeFrom.PAGE : HorizontalPositionRelativeFrom.COLUMN,
+      offset: emu(layout.offsetX),
+    },
+    verticalPosition: {
+      relative: fixed ? VerticalPositionRelativeFrom.PAGE : VerticalPositionRelativeFrom.PARAGRAPH,
+      offset: emu(layout.offsetY),
+    },
+    wrap,
+    margins: { top: margin, bottom: margin, left: margin, right: margin },
+    behindDocument: layout.wrap === "behind",
+    allowOverlap: true,
+  };
 }
 
 function runOptions(marks: readonly Mark[], strike = false): IRunOptions {

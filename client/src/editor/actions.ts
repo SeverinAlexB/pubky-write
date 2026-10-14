@@ -54,6 +54,7 @@ export type EditorActions = {
   insertSpecialCharacter?: () => void;
   insertEmoji?: () => void;
   insertPageBreak?: () => void;
+  insertColumnBreak?: () => void;
   insertTableOfContents?: (style: TocStyle) => void;
   insertHeader?: () => void;
   insertFooter?: () => void;
@@ -78,10 +79,19 @@ export type EditorActions = {
   togglePageBreakBefore?: () => void;
   toggleChecklist?: () => void;
   applyListPreset?: (kind: ListKind, preset: number) => void;
+  /** Format > Columns: one of the presets, or the Column options dialog. */
+  setColumns?: (columns: number) => void;
+  columnOptions?: () => void;
   setPageOrientation?: () => void;
   switchToPageless?: () => void;
   tableOptions?: () => void;
+  /** Format > Table > Split cell: the Split cell dialog. */
+  splitCell?: () => void;
   imageOptions?: () => void;
+  /** Crop image (toolbar, while an image is selected). */
+  cropImage?: () => void;
+  /** Replace image ▸ Upload from computer / By URL: the same size and settings with another picture. */
+  replaceImage?: (source: "upload" | "url") => void;
 
   // Tools
   wordCount: () => void;

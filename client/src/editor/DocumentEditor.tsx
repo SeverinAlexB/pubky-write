@@ -1,5 +1,7 @@
 import {
   acceptedDocument,
+  columnKeys,
+  columnsOf,
   commentQuote,
   documentTabs,
   findTab,
@@ -9,6 +11,7 @@ import {
   pageGeometry,
   pageSetupKeys,
   pageSetupOf,
+  type ColumnSettings,
   type CommentThread,
   type OpenedDocument,
   type PageSetup,
@@ -44,6 +47,9 @@ import { COMMENT_MARGIN_WIDTH, CommentMargin, useCommentAnchors } from "./Commen
 import { CommentPill } from "./CommentPill.tsx";
 import { ContextMenu } from "./ContextMenu.tsx";
 import { ImagePill } from "./ImagePill.tsx";
+import { replaceImageSource, selectedImage } from "./imageCommands.ts";
+import { startCrop } from "./imageView.ts";
+import { splitCellInto } from "./tableExtras.ts";
 import { LinkBubble } from "./LinkBubble.tsx";
 import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
@@ -95,9 +101,11 @@ const HistoryMode = lazyComponent(() => import("./HistoryMode.tsx").then((module
 const FindReplaceDialog = lazyComponent(() => import("./FindReplaceDialog.tsx").then((module) => module.FindReplaceDialog));
 const WordCountDialog = lazyComponent(() => import("./WordCountDialog.tsx").then((module) => module.WordCountDialog));
 const PageSetupDialog = lazyComponent(() => import("./PageSetupDialog.tsx").then((module) => module.PageSetupDialog));
+const ColumnOptionsDialog = lazyComponent(() => import("./ColumnOptions.tsx").then((module) => module.ColumnOptionsDialog));
 const CustomSpacingDialog = lazyComponent(() => import("./CustomSpacingDialog.tsx").then((module) => module.CustomSpacingDialog));
 const TableOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.TableOptionsPanel));
 const ImageOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.ImageOptionsPanel));
+const SplitCellDialog = lazyComponent(() => import("./SplitCellDialog.tsx").then((module) => module.SplitCellDialog));
 const PageNumbersDialog = lazyComponent(() => import("./PageNumbersDialog.tsx").then((module) => module.PageNumbersDialog));
 const ReviewSuggestions = lazyComponent(() => import("./ReviewSuggestions.tsx").then((module) => module.ReviewSuggestions));
 const UnsavedChangesDialog = lazyComponent(() => import("./UnsavedChangesDialog.tsx").then((module) => module.UnsavedChangesDialog));
@@ -114,10 +122,12 @@ const onDemand = [
   WordCountDialog,
   PageSetupDialog,
   CustomSpacingDialog,
+  ColumnOptionsDialog,
   ColorPalette,
   TableOptionsPanel,
   ImageOptionsPanel,
   PageNumbersDialog,
+  SplitCellDialog,
   SpecialCharactersDialog,
   ReviewSuggestions,
   PreferencesDialog,
@@ -146,10 +156,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [rulerVisible, setRulerVisible] = useState(() => localStorage.getItem(RULER_SETTING) !== "false");
   const [printLayout, setPrintLayout] = useState(() => localStorage.getItem(PRINT_LAYOUT_SETTING) !== "false");
   const [pageSetupOpen, setPageSetupOpen] = useState(false);
+  const [columnOptionsOpen, setColumnOptionsOpen] = useState(false);
+  const [splitCellOpen, setSplitCellOpen] = useState(false);
   const [stack, setStack] = useState<HTMLDivElement | null>(null);
   const [menusHidden, setMenusHidden] = useState(false);
   const [linkDialog, setLinkDialog] = useState<{ href: string } | null>(null);
   const [imageUrlDialog, setImageUrlDialog] = useState(false);
+  // Replace image ▸ By URL, for the image at this position.
+  const [replaceUrlDialog, setReplaceUrlDialog] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [namingVersion, setNamingVersion] = useState(false);
   // The find bar (⌘F) or the Find and replace dialog (⌘⇧H); `request` counts ⌘F presses.
@@ -888,6 +902,20 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       .run();
   }
 
+  /** Format > Columns: the document's columns, one undo step. */
+  function applyColumns(settings: ColumnSettings) {
+    setColumnOptionsOpen(false);
+    editor
+      .chain()
+      .focus()
+      .command(({ tr }) => {
+        startUndoStep(tr);
+        for (const key of columnKeys) if (tr.doc.attrs[key] !== settings[key]) tr.setDocAttribute(key, settings[key]);
+        return true;
+      })
+      .run();
+  }
+
   // The toolbar and the Format menu act on the header, footer or footnote being edited.
   const activeEditor = regionEditor && !regionEditor.isDestroyed ? regionEditor : editor;
 
@@ -951,6 +979,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     insertSpecialCharacter: () => setSpecialCharacters({ category: "Symbol" }),
     insertEmoji: () => setSpecialCharacters({ category: "Emoji" }),
     insertPageBreak: () => editor.chain().focus().insertPageBreak().run(),
+    insertColumnBreak: () => editor.chain().focus().insertColumnBreak().run(),
     insertTableOfContents: (style) => {
       setRegionTarget(null);
       insertTableOfContents(editor, style);
@@ -974,6 +1003,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     customSpacing: () => setCustomSpacing(paragraphSpacingAt(activeEditor)),
     toggleChecklist: () => activeEditor.chain().focus().toggleTaskList().run(),
     applyListPreset: (kind, preset) => activeEditor.chain().focus().applyListPreset(kind, preset).run(),
+    setColumns: (columns) => applyColumns({ ...columnsOf(editor.state.doc), columns }),
+    columnOptions: () => setColumnOptionsOpen(true),
     setPageOrientation: () => setPageSetupOpen(true),
     switchToPageless: () => setPrintLayout(false),
     wordCount: () => setWordCountOpen(true),
@@ -981,7 +1012,31 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     preferences: () => setPreferencesOpen(true),
     keyboardShortcuts: () => setShortcutsOpen(true),
     tableOptions: () => openOptionsPanel("table"),
+    splitCell: () => setSplitCellOpen(true),
     imageOptions: () => openOptionsPanel("image"),
+    cropImage: () => {
+      startCrop(editor.view);
+      editor.commands.focus();
+    },
+    replaceImage: (source) => {
+      const image = selectedImage(editor.view);
+      if (!image) return;
+      if (source === "url") return setReplaceUrlDialog(image.pos);
+      // A file picker of its own, made when needed, so the document has one image file input.
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/png,image/jpeg,image/gif,image/webp";
+      input.addEventListener("change", () => {
+        const [file] = imageFiles(input.files);
+        if (!file) return;
+        void api
+          .uploadImage(file)
+          .then(({ url }) => replaceImageSource(editor.view, image.pos, url))
+          .catch((error: Error) => alert(`Couldn't upload ${file.name}: ${error.message}`))
+          .finally(() => editor.commands.focus());
+      });
+      input.click();
+    },
   };
 
   function openOptionsPanel(panel: "table" | "image") {
@@ -1334,6 +1389,31 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           />
         )}
 
+        {splitCellOpen && (
+          <SplitCellDialog
+            onSplit={(columns, rows) => {
+              setSplitCellOpen(false);
+              splitCellInto(columns, rows)(editor.state, editor.view.dispatch);
+              editor.commands.focus();
+            }}
+            onCancel={() => {
+              setSplitCellOpen(false);
+              editor.commands.focus();
+            }}
+          />
+        )}
+
+        {columnOptionsOpen && (
+          <ColumnOptionsDialog
+            initial={columnsOf(editor.state.doc)}
+            onApply={applyColumns}
+            onCancel={() => {
+              setColumnOptionsOpen(false);
+              editor.commands.focus();
+            }}
+          />
+        )}
+
         {pageNumbersDialog && (
           <PageNumbersDialog
             initial={pageNumbersDialog}
@@ -1384,6 +1464,25 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             onConfirm={insertImageFromUrl}
             onCancel={() => {
               setImageUrlDialog(false);
+              editor.commands.focus();
+            }}
+          />
+        )}
+
+        {replaceUrlDialog !== null && (
+          <PromptDialog
+            title="Replace image"
+            label="Image URL"
+            placeholder="Paste the URL of an image"
+            confirmLabel="Replace"
+            onConfirm={(url) => {
+              const pos = replaceUrlDialog;
+              setReplaceUrlDialog(null);
+              if (/^https?:\/\//i.test(url.trim())) replaceImageSource(editor.view, pos, url.trim());
+              editor.commands.focus();
+            }}
+            onCancel={() => {
+              setReplaceUrlDialog(null);
               editor.commands.focus();
             }}
           />

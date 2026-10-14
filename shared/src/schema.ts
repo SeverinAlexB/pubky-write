@@ -8,6 +8,7 @@ import Strike from "@tiptap/extension-strike";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import StarterKit from "@tiptap/starter-kit";
+import { ColumnAttributes, ColumnBreak } from "./columns.ts";
 import { DocsImage } from "./images.ts";
 import { DOCUMENT_TAB, DocumentTab } from "./documentTabs.ts";
 import { checklistExtensions, ListPreset } from "./lists.ts";
@@ -56,7 +57,9 @@ export const documentExtensions: AnyExtension[] = [
   ListPreset,
   ...checklistExtensions,
   PageBreak,
+  ColumnBreak,
   PageSetupAttributes,
+  ColumnAttributes,
   DocsImage,
   DocsTable,
   DocsTableRow,

@@ -88,9 +88,10 @@ test("a selected image shows an outline, eight handles, a rotation handle and th
 
   await pill.getByRole("button", { name: "Wrap text options" }).click();
   const wrap = page.getByRole("menu", { name: "Wrap text options" });
-  await expect(wrap.getByRole("menuitemcheckbox", { name: "In line with text" })).toHaveAttribute("aria-checked", "true");
-  await expect(wrap.getByRole("menuitem", { name: "Wrap text" })).toBeDisabled();
-  await expect(wrap.getByRole("menuitem", { name: "Break text" })).toBeDisabled();
+  await expect(wrap.getByRole("menuitemcheckbox", { name: "In line" })).toHaveAttribute("aria-checked", "true");
+  for (const name of ["Wrap text", "Break text", "Behind text", "In front of text"]) {
+    await expect(wrap.getByRole("menuitemcheckbox", { name })).toHaveAttribute("aria-checked", "false");
+  }
   await page.keyboard.press("Escape");
 
   // Clicking the text deselects the image.
@@ -104,8 +105,12 @@ test("while an image is selected the toolbar shows the image controls", async ({
   const toolbar = page.getByRole("toolbar", { name: "Formatting" });
   await expect(toolbar.getByRole("button", { name: "Styles" })).toBeVisible();
   await image.click();
-  for (const name of ["Border colour", "Border weight", "Border dash", "Crop image"]) {
+  for (const name of ["Border colour", "Border weight", "Border dash"]) {
     await expect(toolbar.getByRole("button", { name, exact: true })).toBeDisabled();
+  }
+  // Crop image, then the Image options and Replace image text buttons.
+  for (const name of ["Crop image", "Image options", "Replace image"]) {
+    await expect(toolbar.getByRole("button", { name, exact: true })).toBeEnabled();
   }
   for (const name of ["Styles", "Font", "Bold", "Text colour", "Highlight colour"]) {
     await expect(toolbar.getByRole("button", { name, exact: true })).toHaveCount(0);
@@ -189,6 +194,7 @@ test("Image options sets the size and alt text; Add comment comments on the imag
   await panel.getByLabel("Width (px)").fill("200");
   await panel.getByLabel("Width (px)").press("Enter");
   expect(await sizeOf(image)).toEqual([200, 100]);
+  await panel.getByRole("button", { name: "Alt text" }).click();
   await panel.getByLabel("Alt text").fill("A blue chart");
   await panel.getByLabel("Alt text").blur();
   await expect(image).toHaveAttribute("alt", "A blue chart");

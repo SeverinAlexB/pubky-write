@@ -5,6 +5,7 @@ import type { Fragment, Node } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
 import { ChangeSet, simplifyChanges } from "@tiptap/pm/changeset";
 import { documentTabs, hasTabNodes, wrapInTab } from "./documentTabs.ts";
+import { columnKeys } from "./columns.ts";
 import { pageElementKeys } from "./pageElements.ts";
 import { pageSetupKeys } from "./pageSetup.ts";
 
@@ -18,7 +19,7 @@ import { pageSetupKeys } from "./pageSetup.ts";
  */
 export function replaceDifference(doc: Node, source: Node): Transform {
   const transform = new Transform(doc);
-  for (const key of [...pageSetupKeys, ...pageElementKeys]) {
+  for (const key of [...pageSetupKeys, ...pageElementKeys, ...columnKeys]) {
     if (JSON.stringify(doc.attrs[key]) !== JSON.stringify(source.attrs[key])) transform.setDocAttribute(key, source.attrs[key]);
   }
   if (!hasTabNodes(doc) && !hasTabNodes(source)) {

@@ -101,6 +101,14 @@ import unfoldLessSvg from "@material-symbols/svg-400/outlined/unfold_less.svg?ra
 import unfoldMoreSvg from "@material-symbols/svg-400/outlined/unfold_more.svg?raw";
 import uploadSvg from "@material-symbols/svg-400/outlined/upload.svg?raw";
 import uploadFileSvg from "@material-symbols/svg-400/outlined/upload_file.svg?raw";
+import formatImageLeftSvg from "@material-symbols/svg-400/outlined/format_image_left.svg?raw";
+import formatImageBackSvg from "@material-symbols/svg-400/outlined/format_image_back.svg?raw";
+import formatImageFrontSvg from "@material-symbols/svg-400/outlined/format_image_front.svg?raw";
+import replaceImageSvg from "@material-symbols/svg-400/outlined/replace_image.svg?raw";
+import callSplitSvg from "@material-symbols/svg-400/outlined/call_split.svg?raw";
+import keepSvg from "@material-symbols/svg-400/outlined/keep.svg?raw";
+import keepOffSvg from "@material-symbols/svg-400/outlined/keep_off.svg?raw";
+import titleSvg from "@material-symbols/svg-400/outlined/title.svg?raw";
 import viewColumnSvg from "@material-symbols/svg-400/outlined/view_column.svg?raw";
 import viewListSvg from "@material-symbols/svg-400/outlined/view_list.svg?raw";
 import visibilitySvg from "@material-symbols/svg-400/outlined/visibility.svg?raw";
@@ -209,6 +217,14 @@ const symbols = {
   unfold_more: unfoldMoreSvg,
   upload: uploadSvg,
   upload_file: uploadFileSvg,
+  format_image_left: formatImageLeftSvg,
+  format_image_back: formatImageBackSvg,
+  format_image_front: formatImageFrontSvg,
+  replace_image: replaceImageSvg,
+  call_split: callSplitSvg,
+  keep: keepSvg,
+  keep_off: keepOffSvg,
+  title: titleSvg,
   view_column: viewColumnSvg,
   view_list: viewListSvg,
   visibility: visibilitySvg,

@@ -97,14 +97,34 @@ To restore a backup:
   and unmerge cells, and sort the rows by the cursor's column (header rows stay
   on top; one undo step). Table options (a side panel) shows the number of
   columns and rows and sets the minimum row height, border colour and width,
-  and cell background colour.
-- **Images:** click an image to select it: an outline with eight handles (and a
-  rotation handle, not available yet). Corner handles resize keeping the
+  and cell background colour. Split cell divides a cell into columns and rows
+  (the other cells of its row and column span the new ones). Pin header row
+  pins the rows from the top to the cursor's (light grey; Unpin header rows
+  undoes it), Insert title row adds an empty pinned row at the top; tables break
+  between rows across pages and repeat their pinned rows at the top of every page
+  they continue to (see [docs/design/columns.md](docs/design/columns.md)).
+- **Images:** click an image to select it: an outline with eight handles and a
+  rotation handle (Shift snaps to 15°). Corner handles resize keeping the
   proportions, edge handles stretch one side (Shift keeps the proportions);
   the size is stored as the image's `width` and `height`. A pill under the
-  image has Wrap text options (in line with text only), Image options (size and
-  alt text) and Add comment; while it is selected the toolbar shows the image
-  controls (border and crop, not available yet). Delete or Backspace removes it.
+  image has Wrap text options (In line, Wrap text, Break text, Behind text, In
+  front of text), for placed images a margin ("3.2mm margin") and a position
+  menu (Move with text, Fix position on page), Image options and Add comment.
+  Placed images can be dragged; they are anchored to the paragraph they are
+  dropped at. Crop image (toolbar, or a double-click) shows crop handles; Enter
+  or a click outside applies, Escape cancels, and the picture itself is never
+  changed. While an image is selected the toolbar shows the image controls
+  (border, not available yet, and Crop image) and the Image options and Replace
+  image buttons. Image options (a side panel) sets the size, scale and rotation,
+  text wrapping and margin, position, re-colour, transparency, brightness and
+  contrast, and the alt text's title and description. Delete or Backspace
+  removes it. See [docs/design/images.md](docs/design/images.md).
+- **Columns** (Format > Columns): one, two or three columns, or More options
+  for the spacing and a line between the columns. Text fills a column down to
+  the bottom margin, then the next column, then the next page; Insert > Break >
+  Column break starts the next column. The setting is the document's (all its
+  tabs); without print layout the document has one column. See
+  [docs/design/columns.md](docs/design/columns.md).
 - **Right-click menu:** the document has its own menu (Shift+right-click shows
   the browser's, for spelling suggestions) with the clipboard commands,
   Comment, Insert or Edit link (plus Copy link and Remove link on a link),
@@ -245,7 +265,8 @@ To restore a backup:
   tabs) all tabs, each starting on a new page under its name as a Heading 1. Word files use Word's Title, Subtitle and Heading 1–6 styles,
   the document's page size, orientation, margins and page colour, paragraph
   indents (left, first line or hanging, right), the tables' column
-  widths, row heights, borders and cell colours, and the images' sizes; headers
+  widths, row heights, borders and cell colours (pinned rows repeat as header rows), the images' sizes, rotation and crop
+  (placed images as anchored drawings with their text wrapping, margin and position), columns and column breaks; headers
   and footers (with a different first page), page number fields and the page
   number start, real Word footnotes, and the table of contents as paragraphs
   with right-aligned page numbers (and dotted leaders) or links to bookmarks on
@@ -323,9 +344,12 @@ On screen the editor is one content column over a stack of page sheets
 (`client/src/editor/pagination.ts`). After each change the editor measures where
 blocks and lines fall and inserts spacer widgets (decorations, not document
 content) that push the next line past the bottom margin, the gap and the next
-page's top margin. The rules are in `client/src/editor/pageLayout.ts`. Images,
-tables and other atomic blocks move to the next page whole; one taller than a
-page overflows.
+page's top margin. The rules are in `client/src/editor/pageLayout.ts`. Images
+and other atomic blocks move to the next page whole; one taller than a page
+overflows. Tables break between rows, and spacers between their rows repeat the
+pinned rows. With columns the content is a CSS multi-column box: the same rules
+fill each column, and the spacers are forced column breaks and, between pages,
+blocks across all columns (see [docs/design/columns.md](docs/design/columns.md)).
 
 Headers and footers are document attributes (block JSON) and footnote text is an
 attribute of the footnote's reference, so they are saved, validated, undone and
@@ -352,7 +376,8 @@ checks the result against it before creating the document.
   with the closest list preset, continued numbering and nesting; paragraphs
   starting with ☐ or ☑ (as the Word export writes checklists) become
   checklists; tables with merged cells, header rows and column widths; PNG, JPEG, GIF and WebP
-  images (stored in `uploads/`); line and page breaks; page size, orientation,
+  images (stored in `uploads/`) with their size, rotation and crop, and for anchored ones their
+  text wrapping, margin and position; line, page and column breaks; columns; page size, orientation,
   margins and page colour; the default and first-page header and footer, the page number
   start, PAGE and NUMPAGES fields and footnotes. Tracked changes in the body
   become suggestions (insertions, deletions, run format changes and inserted or

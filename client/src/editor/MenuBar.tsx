@@ -1,4 +1,4 @@
-import { listPresetAt } from "@docs/shared";
+import { columnsOf, listPresetAt } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
@@ -9,6 +9,7 @@ import { useDismiss } from "../components/useDismiss.ts";
 import type { DownloadFormat, EditorActions, ListKind, ViewSettings } from "./actions.ts";
 import { clearFormatting } from "./extensions.ts";
 import { alignAndIndentMenu, lineSpacingEntries, paragraphSpacingAt, paragraphStylesMenu, textMenu } from "./formatMenus.ts";
+import { ColumnPresetsPanel } from "./ColumnOptions.tsx";
 import { ListPresetMenu } from "./ListPresets.tsx";
 import { PageNumbersPanel, TableOfContentsPanel } from "./PageElementPresets.tsx";
 import { currentParagraphStyle } from "./paragraphStyles.ts";
@@ -25,6 +26,7 @@ function selectMenuState({ editor }: { editor: Editor }) {
     canRedo: editor.can().redo(),
     hasSelection: !editor.state.selection.empty,
     inTable: editor.isActive("table"),
+    columns: columnsOf(editor.state.doc).columns,
     table: tableMenuState(editor),
     style: currentParagraphStyle(editor),
     spacing: paragraphSpacingAt(editor),
@@ -283,7 +285,11 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
     {
       label: "Break",
       icon: "insert_page_break",
-      submenu: [{ label: "Page break", shortcut: shortcutText("pageBreak"), onSelect: actions.insertPageBreak }],
+      submenu: [
+        { label: "Page break", shortcut: shortcutText("pageBreak"), onSelect: actions.insertPageBreak },
+        // A column break only does something with more than one column.
+        { label: "Column break", disabled: state.columns < 2, onSelect: actions.insertColumnBreak },
+      ],
     },
     {
       label: "Page elements",
@@ -355,6 +361,24 @@ function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): M
       label: "Line & paragraph spacing",
       icon: "format_line_spacing",
       submenu: lineSpacingEntries(editor, actions, state.spacing),
+    },
+    {
+      label: "Columns",
+      icon: "view_column",
+      disabled: !actions.setColumns,
+      panel: (close) => (
+        <ColumnPresetsPanel
+          current={state.columns}
+          onPick={(columns) => {
+            close();
+            actions.setColumns?.(columns);
+          }}
+          onMoreOptions={() => {
+            close();
+            actions.columnOptions?.();
+          }}
+        />
+      ),
     },
     {
       label: "Bullets and numbering",

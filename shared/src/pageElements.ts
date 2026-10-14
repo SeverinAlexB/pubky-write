@@ -20,10 +20,10 @@ export const pageElementKeys = [...regionKeys, "differentFirstPage", "pageNumber
 export const MAX_PAGE_NUMBER_START = 9999;
 
 /** Node types that may not appear in a header or footer. */
-const notInHeaders = new Set(["pageBreak", "footnote", "tableOfContents"]);
+const notInHeaders = new Set(["pageBreak", "columnBreak", "footnote", "tableOfContents"]);
 /** Footnote text is plain paragraphs. */
 const footnoteBlocks = new Set(["paragraph"]);
-const notInFootnotes = new Set(["footnote", "pageBreak", "image", "tableOfContents"]);
+const notInFootnotes = new Set(["footnote", "pageBreak", "columnBreak", "image", "tableOfContents"]);
 
 let schemaForValidation: Schema | null = null;
 

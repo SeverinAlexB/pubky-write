@@ -22,9 +22,14 @@ import {
   documentSchema,
   sameJSON,
   indentAttributes,
+  isColumnSpacing,
+  isImageCrop,
   isMargin,
   isPageColor,
   isPageNumberStart,
+  MAX_COLUMNS,
+  MAX_IMAGE_MARGIN_PT,
+  normalizeRotation,
   numberedPresets,
   paperSizes,
   paragraphStyleDefinitions,
@@ -118,6 +123,7 @@ export async function docxToDocument(data: Uint8Array, options: ImportOptions): 
     storeImage: options.storeImage,
     dropped: new DroppedContent(),
     footnotes: new Map(),
+    margins: { left: 96, top: 96 },
   };
   const footnotesRel = [...rels.values()].find((rel) => rel.type.endsWith("/footnotes") && !rel.external);
   if (footnotesRel) {
@@ -131,12 +137,17 @@ export async function docxToDocument(data: Uint8Array, options: ImportOptions): 
       }
     }
   }
-  const converter = new DocxConverter(parts, rels);
   const body = find(document, "body");
   if (!body) throw new ImportError("The Word document has no body");
-  const blocks = await converter.blocks(body.children);
   const section = body.children.findLast((child) => child.name === "sectPr");
-  const attrs = section ? { ...pageSetup(section), ...(await headersAndFooters(section, rels, parts)) } : {};
+  const setup = section ? pageSetup(section) : {};
+  parts.margins = {
+    left: ((typeof setup.marginLeft === "number" ? setup.marginLeft : 72) * 96) / 72,
+    top: ((typeof setup.marginTop === "number" ? setup.marginTop : 72) * 96) / 72,
+  };
+  const converter = new DocxConverter(parts, rels);
+  const blocks = await converter.blocks(body.children);
+  const attrs = section ? { ...setup, ...columnSettings(section), ...(await headersAndFooters(section, rels, parts)) } : {};
   // The page colour (w:background, shown by Word with w:displayBackgroundShape).
   const background = val(child(child(document, "document"), "background"), "color")?.toLowerCase();
   if (background && isPageColor(`#${background}`) && background !== "ffffff") attrs.pageColor = `#${background}`;
@@ -152,6 +163,8 @@ type Parts = {
   storeImage: ImageStore;
   dropped: DroppedContent;
   footnotes: Map<string, { element: Element; rels: Map<string, Relationship> }>;
+  /** The page's left and top margin in CSS pixels, for images positioned from the page's margins. */
+  margins: { left: number; top: number };
 };
 
 function relationshipsPath(partPath: string): string {
@@ -625,7 +638,13 @@ class DocxConverter {
           break;
         case "br":
         case "cr":
-          result.push(element.attributes.type === "page" ? { type: "pageBreak" } : { type: "hardBreak" });
+          result.push(
+            element.attributes.type === "page"
+              ? { type: "pageBreak" }
+              : element.attributes.type === "column"
+                ? { type: "columnBreak" }
+                : { type: "hardBreak" },
+          );
           break;
         case "drawing":
         case "pict":
@@ -766,14 +785,18 @@ class DocxConverter {
     const extent = find(element, "extent");
     const width = number(extent?.attributes.cx);
     const height = number(extent?.attributes.cy);
-    const alt = find(element, "docPr")?.attributes.descr || null;
+    const properties = find(element, "docPr")?.attributes;
+    const alt = properties?.descr || null;
+    const title = properties?.title || null;
     return [
       {
         type: "image",
         attrs: {
           src,
           alt,
+          ...(title && { title }),
           ...(width && height && { width: Math.round(width / EMU_PER_PX), height: Math.round(height / EMU_PER_PX) }),
+          ...drawingLayout(element, this.parts.margins),
         },
       },
     ];
@@ -941,12 +964,22 @@ function revisionAttributes(element: Element): { id: string; author: string; cre
   };
 }
 
-const blockTypes = new Set(["image", "pageBreak"]);
+const blockTypes = new Set(["image", "pageBreak", "columnBreak"]);
 
-/** A paragraph with images or page breaks in it becomes text blocks around those blocks. */
-function splitParagraph(textBlock: JSONContent, inline: JSONContent[]): JSONContent[] {
-  if (!inline.some((node) => blockTypes.has(node.type ?? ""))) return [{ ...textBlock, ...(inline.length > 0 && { content: inline }) }];
-  const blocks: JSONContent[] = [];
+/** An image with a wrap mode other than in line: anchored to its paragraph, so it goes before it. */
+function isAnchored(node: JSONContent): boolean {
+  return node.type === "image" && typeof node.attrs?.wrap === "string" && node.attrs.wrap !== "inline";
+}
+
+/**
+ * A paragraph with images or page breaks in it becomes text blocks around those blocks. Images that
+ * are not in line with text are anchored to the paragraph: they go before all of it.
+ */
+function splitParagraph(textBlock: JSONContent, allInline: JSONContent[]): JSONContent[] {
+  const anchored = allInline.filter(isAnchored);
+  const inline = anchored.length > 0 ? allInline.filter((node) => !isAnchored(node)) : allInline;
+  if (!inline.some((node) => blockTypes.has(node.type ?? ""))) return [...anchored, { ...textBlock, ...(inline.length > 0 && { content: inline }) }];
+  const blocks: JSONContent[] = [...anchored];
   let run: JSONContent[] = [];
   const flush = () => {
     if (run.some((node) => node.type === "text" || node.type === "tab")) blocks.push({ ...textBlock, content: run });
@@ -998,6 +1031,68 @@ function resolvePath(directory: string, target: string): string {
     else if (part !== ".") resolved.push(part);
   }
   return resolved.join("/");
+}
+
+/**
+ * The rotation, crop and (for anchored drawings) text wrapping and position of a drawing, as image
+ * attributes. Positions from the margin are turned into positions from the column or the page.
+ */
+export function drawingLayout(element: Element, margins: { left: number; top: number }): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {};
+  const rotation = number(find(element, "xfrm")?.attributes.rot);
+  if (rotation) attrs.rotation = normalizeRotation(rotation / 60000);
+  const source = find(element, "srcRect")?.attributes;
+  if (source) {
+    const side = (name: string) => Math.max(0, (number(source[name]) ?? 0) / 100000);
+    const crop = { top: side("t"), right: side("r"), bottom: side("b"), left: side("l") };
+    if (isImageCrop(crop) && Object.values(crop).some((value) => value > 0)) attrs.crop = crop;
+  }
+  const anchor = find(element, "anchor");
+  if (!anchor) return attrs;
+  const wrapElement = anchor.children.find((candidate) => candidate.name.startsWith("wrap"));
+  const wrap =
+    wrapElement?.name === "wrapTopAndBottom"
+      ? "break"
+      : wrapElement && wrapElement.name !== "wrapNone"
+        ? "wrap"
+        : anchor.attributes.behindDoc === "1" || anchor.attributes.behindDoc === "true"
+          ? "behind"
+          : "front";
+  attrs.wrap = wrap;
+  const distance = Math.max(...["distT", "distB", "distL", "distR"].map((name) => number(anchor.attributes[name]) ?? 0));
+  attrs.wrapMargin = Math.min(Math.round((distance / EMU_PER_POINT) * 100) / 100, MAX_IMAGE_MARGIN_PT);
+  const horizontal = child(anchor, "positionH");
+  const vertical = child(anchor, "positionV");
+  const offset = (position: Element | undefined) => (number(child(position, "posOffset")?.text) ?? 0) / EMU_PER_PX;
+  const fromV = vertical?.attributes.relativeFrom ?? "paragraph";
+  const fromH = horizontal?.attributes.relativeFrom ?? "column";
+  const fixed = fromV === "page" || fromV === "margin" || fromV === "topMargin";
+  attrs.positioning = fixed ? "fixed" : "moveWithText";
+  let x = offset(horizontal);
+  let y = offset(vertical);
+  // Behind and in front of text, a fixed image is placed from the page's left edge; otherwise from the column.
+  const fromPageEdge = fixed && (wrap === "behind" || wrap === "front");
+  if (fromPageEdge && fromH !== "page") x += margins.left;
+  if (!fromPageEdge && fromH === "page") x -= margins.left;
+  if (fixed && fromV !== "page") y += margins.top;
+  attrs.offsetX = Math.round(x * 100) / 100;
+  attrs.offsetY = Math.round(y * 100) / 100;
+  return attrs;
+}
+
+const EMU_PER_POINT = 12700;
+
+/** Columns of the last section, up to three. */
+function columnSettings(section: Element): Record<string, unknown> {
+  const columns = child(section, "cols");
+  const count = number(val(columns, "num"));
+  if (!columns || !count || count < 2) return {};
+  const space = number(val(columns, "space"));
+  return {
+    columns: Math.min(count, MAX_COLUMNS),
+    ...(space !== undefined && isColumnSpacing(space / TWIPS_PER_POINT) && { columnSpacing: space / TWIPS_PER_POINT }),
+    ...(["1", "true", "on"].includes(val(columns, "sep") ?? "") && { columnLine: true }),
+  };
 }
 
 const MM_PER_TWIP = 25.4 / 1440;

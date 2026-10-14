@@ -37,6 +37,22 @@ function contentEdges(element: HTMLElement, zoom: number): { left: number; right
   return { left: rect.left + inset("Left"), right: rect.right - inset("Right") };
 }
 
+/**
+ * The left edge tab positions count from: the content edge of the page (or cell), or with columns
+ * (Format > Columns) the left edge of the paragraph's column.
+ */
+function columnOrigin(origin: HTMLElement, paragraphLeft: number, zoom: number): number {
+  const left = contentEdges(origin, zoom).left;
+  const stack = origin.classList.contains("page-content") ? origin.closest<HTMLElement>(".page-stack[data-columns]") : null;
+  if (!stack) return left;
+  const width = Number.parseFloat(stack.style.getPropertyValue("--column-width"));
+  const gap = Number.parseFloat(stack.style.getPropertyValue("--column-gap"));
+  if (!(width > 0) || !(gap >= 0)) return left;
+  const step = (width + gap) * zoom;
+  const column = Math.max(0, Math.floor((paragraphLeft - left + 1) / step));
+  return left + column * step;
+}
+
 function cssZoom(element: Element): number {
   const zoom = (element as Element & { currentCSSZoom?: number }).currentCSSZoom;
   return typeof zoom === "number" && zoom > 0 ? zoom : 1;
@@ -72,7 +88,7 @@ export function layoutTabsIn(containers: Iterable<Element>): void {
       tabs,
       stops: decodeTabStops(paragraph.dataset.tabStops),
       zoom,
-      originX: contentEdges(origin, zoom).left,
+      originX: columnOrigin(origin, own.left, zoom),
       indentX: own.left,
       lineEndX: own.right,
     });

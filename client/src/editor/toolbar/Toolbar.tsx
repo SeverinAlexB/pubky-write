@@ -150,7 +150,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     />,
     <Divider key="divider-zoom" />,
     // While an image is selected, image controls take the place of the text formatting controls.
-    ...(state.image ? imageControls() : textControls),
+    ...(state.image ? imageControls(actions) : textControls),
     <Divider key="divider-colour" />,
     <ToolButton key="link" label={withShortcut("Insert link", "insertLink")} onClick={actions.insertLink}>
       <Icon name="link" />
@@ -273,8 +273,8 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
   );
 }
 
-/** Border colour, weight and dash and cropping are not available yet: shown disabled. */
-function imageControls(): ReactNode[] {
+/** Border colour, weight and dash are not available yet: shown disabled. */
+function imageControls(actions: EditorActions): ReactNode[] {
   return [
     <ToolButton key="border-colour" label="Border colour" disabled>
       <Icon name="border_color" />
@@ -286,9 +286,36 @@ function imageControls(): ReactNode[] {
       <Icon name="line_style" />
     </ToolButton>,
     <Divider key="divider-border" />,
-    <ToolButton key="crop" label="Crop image" disabled>
+    <ToolButton key="crop" label="Crop image" onClick={actions.cropImage}>
       <Icon name="crop" />
     </ToolButton>,
+    <Divider key="divider-crop" />,
+    <button
+      key="image-options"
+      type="button"
+      className="tool-text-button"
+      disabled={!actions.imageOptions}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={actions.imageOptions}
+    >
+      Image options
+    </button>,
+    <Menu
+      key="replace-image"
+      label={
+        <>
+          <span>Replace image</span>
+          <Icon name="arrow_drop_down" size={16} className="tool-button-arrow" />
+        </>
+      }
+      ariaLabel="Replace image"
+      buttonClassName="tool-text-button"
+      disabled={!actions.replaceImage}
+      entries={[
+        { label: "Upload from computer", icon: "upload", onSelect: () => actions.replaceImage?.("upload") },
+        { label: "By URL", icon: "link", onSelect: () => actions.replaceImage?.("url") },
+      ]}
+    />,
   ];
 }
 

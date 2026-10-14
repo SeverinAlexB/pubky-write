@@ -467,6 +467,41 @@ describe("docxToDocument", () => {
     expect((await docxToDocument(white, { storeImage: imageStore().storeImage })).doc.attrs.pageColor).toBe("#ffffff");
   });
 
+  it("keeps columns, column breaks and the images' layout through an export and import", async () => {
+    const image = (attrs: Record<string, unknown>) => ({ type: "image", attrs: { src: "/uploads/a.png", width: 200, height: 100, ...attrs } });
+    const paragraph = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+    const original = Node.fromJSON(documentSchema, {
+      type: "doc",
+      attrs: { columns: 3, columnSpacing: 18, columnLine: true },
+      content: [
+        paragraph("Column one"),
+        { type: "columnBreak" },
+        image({ wrap: "wrap", wrapMargin: 18, offsetX: 10, offsetY: 20, rotation: 30, alt: "Chart", title: "Sales" }),
+        paragraph("Wrapped"),
+        image({ wrap: "front", positioning: "fixed", offsetX: 300, offsetY: 400 }),
+        paragraph("Under the image"),
+        image({ crop: { top: 0.1, right: 0.2, bottom: 0, left: 0.25 } }),
+      ],
+    });
+    const images = imageStore();
+    const word = await toDocx(original, "Layout", async () => PNG);
+    const { doc } = await docxToDocument(word, { storeImage: images.storeImage });
+    expect(doc.attrs).toMatchObject({ columns: 3, columnSpacing: 18, columnLine: true });
+    expect(outline(doc).filter((line) => ["columnBreak", "image"].some((type) => line.startsWith(type)) || line.startsWith("p:"))).toEqual([
+      "p: Column one",
+      "columnBreak",
+      "image",
+      "p: Wrapped",
+      "image",
+      "p: Under the image",
+      "image",
+    ]);
+    const [wrapped, fixed, cropped] = doc.content.content.filter((node) => node.type.name === "image");
+    expect(wrapped!.attrs).toMatchObject({ wrap: "wrap", wrapMargin: 18, positioning: "moveWithText", offsetX: 10, offsetY: 20, rotation: 30, alt: "Chart", title: "Sales" });
+    expect(fixed!.attrs).toMatchObject({ wrap: "front", positioning: "fixed", offsetX: 300, offsetY: 400 });
+    expect(cropped!.attrs).toMatchObject({ wrap: "inline", crop: { top: 0.1, right: 0.2, bottom: 0, left: 0.25 }, width: 200, height: 100 });
+  });
+
   it("keeps tab stops and tabs through an export and import, in the body and headers", async () => {
     const stops = [
       { pos: 170.1, kind: "left" },
