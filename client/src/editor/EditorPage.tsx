@@ -2,6 +2,10 @@ import type { OpenedDocument } from "@docs/shared";
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { Link, useParams } from "react-router";
 import { api, ApiError } from "../api.ts";
+import { lazyComponent } from "../components/lazyComponent.tsx";
+import type { PendingEntry } from "./pendingSteps.ts";
+
+const UnsavedChangesDialog = lazyComponent(() => import("./UnsavedChangesDialog.tsx").then((module) => module.UnsavedChangesDialog));
 
 type DocumentEditorComponent = ComponentType<{ document: OpenedDocument; onReload: () => Promise<void> }>;
 
@@ -19,6 +23,8 @@ export function EditorPage() {
     generation: number;
   } | null>(null);
   const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
+  // Edits kept in this browser for a document that no longer exists.
+  const [orphaned, setOrphaned] = useState<PendingEntry[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -26,10 +32,12 @@ export function EditorPage() {
       setLoaded((previous) => ({ document, DocumentEditor, generation: (previous?.generation ?? 0) + 1 }));
       setError(null);
     } catch (loadError) {
-      setError({
-        notFound: loadError instanceof ApiError && loadError.status === 404,
-        message: (loadError as Error).message,
-      });
+      const notFound = loadError instanceof ApiError && loadError.status === 404;
+      setError({ notFound, message: (loadError as Error).message });
+      if (notFound) {
+        const { pendingStore } = await import("./pendingSteps.ts");
+        setOrphaned(await pendingStore.list(id).catch(() => []));
+      }
     }
   }, [id]);
 
@@ -44,6 +52,9 @@ export function EditorPage() {
         <h1>{error.notFound ? "Document not found" : "Couldn't open the document"}</h1>
         {!error.notFound && <p>{error.message}</p>}
         <Link to="/">Back to Docs</Link>
+        {orphaned.length > 0 && (
+          <UnsavedChangesDialog entries={orphaned} documentTitle="Deleted document" deleted onClose={() => setOrphaned([])} />
+        )}
       </div>
     );
   }

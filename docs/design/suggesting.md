@@ -67,6 +67,12 @@ All steps produced are ordinary `ReplaceStep`, `AddMarkStep`, `RemoveMarkStep`, 
 see nothing new. Marking text as deleted does not move positions, so comments on it keep their
 anchors on the server and in the editor.
 
+Automatic formatting (`autoformat.ts`, see [everyday-editing.md](everyday-editing.md)) can both
+delete and format text in one change (a Markdown shortcut removes `**` and makes the text bold), or
+delete text and change a paragraph (`## ` starts a heading). `suggestParts` builds such a change
+from parts that are rewritten one after the other and combined into one transaction, so each part
+becomes the right kind of suggestion; the dispatch hook passes the result through.
+
 ### Grouping
 
 The editor keeps the current group `{ id, time }`. A content change reuses the group's id when it

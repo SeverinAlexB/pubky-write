@@ -369,14 +369,16 @@ button:disabled {
 }
 
 /* Pages / Pageless */
-.page-setup-tabs {
+.page-setup-tabs,
+.dialog-tabs {
   display: flex;
   margin: 0 -24px 20px;
   padding: 0 24px;
   border-bottom: 1px solid var(--divider);
 }
 
-.page-setup-tab {
+.page-setup-tab,
+.dialog-tab {
   flex: 1;
   height: 40px;
   padding: 0 12px;
@@ -388,11 +390,13 @@ button:disabled {
   font-weight: 500;
 }
 
-.page-setup-tab:hover {
+.page-setup-tab:hover,
+.dialog-tab:hover {
   background: var(--hover);
 }
 
-.page-setup-tab[aria-selected="true"] {
+.page-setup-tab[aria-selected="true"],
+.dialog-tab[aria-selected="true"] {
   border-bottom-color: var(--primary);
   color: var(--primary);
 }
@@ -4489,4 +4493,241 @@ body.is-column-resizing * {
   padding: 0 8px;
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+/* Tools > Preferences (docs/spec/17-everyday-editing.md) */
+
+.preferences-dialog {
+  width: min(498px, 90vw);
+}
+
+/* The same height on both tabs, so the dialog does not jump when switching. */
+.preferences-panel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  height: min(420px, 55vh);
+  overflow-y: auto;
+}
+
+.substitutions {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.substitutions th {
+  padding: 0 4px 4px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-align: left;
+}
+
+.substitutions td {
+  padding: 2px 4px;
+}
+
+.substitutions td:first-child,
+.substitutions td:last-child {
+  width: 32px;
+}
+
+.substitution-field {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+  font: inherit;
+}
+
+.substitution-field:focus {
+  border-color: var(--primary);
+  outline: 1px solid var(--primary);
+}
+
+/* Keyboard shortcuts (⌘+/) */
+
+.shortcuts-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, 90vw);
+  max-height: 80vh;
+  padding-bottom: 8px;
+}
+
+.shortcuts-dialog:not([open]) {
+  display: none;
+}
+
+.shortcuts-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  margin-bottom: 8px;
+  padding: 0 16px;
+  border-radius: 24px;
+  background: #e9eef6;
+  color: var(--text-secondary);
+}
+
+.shortcuts-search:focus-within {
+  outline: 2px solid var(--primary);
+}
+
+.shortcuts-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.shortcuts-list {
+  overflow-y: auto;
+  margin: 0 -24px;
+  padding: 0 24px 16px;
+}
+
+.shortcuts-list h3 {
+  margin: 16px 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.shortcuts-list table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.shortcuts-list th {
+  padding: 6px 0;
+  font-size: 14px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.shortcuts-list td {
+  padding: 6px 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.key-cap {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 2px 6px;
+  border: 1px solid #747775;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.key-or {
+  margin-left: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.shortcuts-empty {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* The link bubble: a card under a link at the cursor */
+
+.link-bubble {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 324px;
+  height: 67px;
+  padding: 0 8px 0 16px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+}
+
+.link-bubble-site {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.link-bubble-site img {
+  width: 16px;
+  height: 16px;
+}
+
+.link-bubble-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.link-bubble-title {
+  overflow: hidden;
+  color: var(--primary);
+  font-size: 14px;
+  line-height: 20px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-bubble-title:hover {
+  text-decoration: underline;
+}
+
+.link-bubble-url {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-bubble .icon-button {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+/* A pasted image while it is uploaded */
+
+.image-frame.is-uploading img {
+  visibility: hidden;
+}
+
+.image-frame.is-uploading {
+  background: #e3e3e3;
+}
+
+/* The offline snackbar's dismiss button */
+
+.snackbar-action {
+  margin-left: auto;
+  padding: 0 0 0 16px;
+  border: 0;
+  background: none;
+  color: #a8c7fa;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
 }

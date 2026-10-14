@@ -39,7 +39,10 @@ type DocumentRow = {
 
 export class InvalidStepsError extends Error {}
 
-export type ApplyStepsResult = { kind: "applied"; version: number } | ({ kind: "conflict" } & StepsConflictResponse);
+/** `alreadyApplied`: the batch had been applied before (a client resending it after losing the answer). */
+export type ApplyStepsResult =
+  | { kind: "applied"; version: number; alreadyApplied?: true }
+  | ({ kind: "conflict" } & StepsConflictResponse);
 
 const summaryColumns = "id, title, created_at, updated_at, last_opened_at";
 
@@ -191,6 +194,9 @@ export function applySteps(
 
     if (request.version !== row.version) {
       if (request.version > row.version) throw new InvalidStepsError("Version is ahead of the server");
+      if (isAlreadyApplied(db, id, request)) {
+        return { kind: "applied", version: request.version + request.steps.length, alreadyApplied: true };
+      }
       return { kind: "conflict", ...stepsSince(db, id, request.version), version: row.version };
     }
     if (request.steps.length === 0) return { kind: "applied", version: row.version };
@@ -242,6 +248,35 @@ export function restoreRevision(db: Database, id: string, revisionId: number, no
     revisionId,
   );
   return result?.kind === "applied" ? { version: result.version } : null;
+}
+
+/**
+ * Whether the same client already submitted exactly these steps on top of `version`: they are the
+ * steps right after it. A batch is applied whole or not at all, so its steps are either all there
+ * or none of them.
+ */
+function isAlreadyApplied(db: Database, id: string, request: { clientId: string; version: number; steps: unknown[] }): boolean {
+  if (request.steps.length === 0) return false;
+  const rows = db
+    .prepare("SELECT step, client_id FROM steps WHERE document_id = ? AND version > ? ORDER BY version LIMIT ?")
+    .all(id, request.version, request.steps.length) as { step: string; client_id: string }[];
+  if (rows.length !== request.steps.length) return false;
+  return rows.every((row, index) => {
+    if (row.client_id !== request.clientId) return false;
+    try {
+      return JSON.stringify(Step.fromJSON(documentSchema, request.steps[index]).toJSON()) === row.step;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** The steps after `version` and the clients that sent them, with the current version; null for an unknown document. */
+export function getStepsSince(db: Database, id: string, version: number): StepsConflictResponse | null {
+  const row = findRow(db, id);
+  if (!row) return null;
+  if (version > row.version || version < 0) throw new InvalidStepsError("Version is not known to the server");
+  return { version: row.version, ...stepsSince(db, id, version) };
 }
 
 function stepsSince(db: Database, id: string, version: number): { steps: unknown[]; clientIds: string[] } {

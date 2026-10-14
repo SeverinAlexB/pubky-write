@@ -4,7 +4,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { Menu, type MenuEntry } from "../../components/Menu.tsx";
 import { MenuList } from "../../components/MenuList.tsx";
 import { usePopover } from "../../components/usePopover.ts";
-import { shortcut, withShortcut } from "../../components/shortcuts.ts";
+import { shortcutText, withShortcut } from "../../shortcuts.ts";
 import type { EditorActions } from "../actions.ts";
 import { changeFontSize, setFontSize } from "../extensions.ts";
 import { DEFAULT_FONT, fontFamilies, fontSizes, recentFonts, rememberRecentFont } from "../fonts.ts";
@@ -62,7 +62,7 @@ export function styleEntry(editor: Editor, style: ParagraphStyle, current: Parag
     checked: current?.id === style.id,
     onSelect: apply,
     submenu: [
-      { label: `Apply '${style.label}'`, shortcut: style.shortcut && shortcut(style.shortcut), onSelect: apply },
+      { label: `Apply '${style.label}'`, shortcut: style.shortcut && shortcutText(style.shortcut), onSelect: apply },
       // P2: { label: `Update '${style.label}' to match` }
     ],
   };
@@ -116,7 +116,7 @@ export function FontSizeControl({ editor, size }: { editor: Editor; size: number
   return (
     <>
       <ToolButton
-        label={withShortcut("Decrease font size", "⌘+Shift+comma")}
+        label={withShortcut("Decrease font size", "decreaseFontSize")}
         className="font-size-step"
         onClick={() => changeFontSize(editor, -1)}
       >
@@ -157,7 +157,7 @@ export function FontSizeControl({ editor, size }: { editor: Editor; size: number
         )}
       </div>
       <ToolButton
-        label={withShortcut("Increase font size", "⌘+Shift+full stop")}
+        label={withShortcut("Increase font size", "increaseFontSize")}
         className="font-size-step"
         onClick={() => changeFontSize(editor, 1)}
       >

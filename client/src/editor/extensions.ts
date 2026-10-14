@@ -5,6 +5,9 @@ import type { Mark, Node } from "@tiptap/pm/model";
 import { UndoRedo } from "@tiptap/extensions";
 import { collab } from "prosemirror-collab";
 import { clampFontSize, DEFAULT_FONT, parseFontSize, stepFontSize } from "./fonts.ts";
+import { keyBinding } from "../shortcuts.ts";
+import { Autoformat } from "./autoformat.ts";
+import { PasteCleanup } from "./paste.ts";
 import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
 import { EditorImage } from "./imageView.ts";
 import { Pagination } from "./pagination.ts";
@@ -26,6 +29,7 @@ type EditorExtensionOptions = {
   onCommentClick: (id: number | null) => void;
   mode: EditorMode;
   onSuggestionClick: (id: string | null) => void;
+  onImageError?: (message: string) => void;
 };
 
 /** The shared document schema plus the editor-only behaviour: undo, step tracking, search, pages and shortcuts. */
@@ -40,6 +44,7 @@ export function editorExtensions({
   onCommentClick,
   mode,
   onSuggestionClick,
+  onImageError = () => {},
 }: EditorExtensionOptions): AnyExtension[] {
   return [
     // The shared schema, with the editor's own views of tables and images.
@@ -62,28 +67,30 @@ export function editorExtensions({
       name: "documentShortcuts",
       addKeyboardShortcuts() {
         return {
-          "Mod-k": () => {
+          [keyBinding("insertLink")]: () => {
             onLinkShortcut();
             return true;
           },
-          "Mod-Alt-m": () => {
+          [keyBinding("addComment")]: () => {
             onCommentShortcut();
             return true;
           },
-          "Mod-Alt-f": () => {
+          [keyBinding("footnote")]: () => {
             onFootnoteShortcut();
             return true;
           },
-          "Mod-\\": () => clearFormatting(this.editor),
-          "Mod-]": () => this.editor.commands.changeIndent(1) || true,
-          "Mod-[": () => this.editor.commands.changeIndent(-1) || true,
-          "Mod-Shift-.": () => changeFontSize(this.editor, 1),
-          "Mod-Shift-,": () => changeFontSize(this.editor, -1),
+          [keyBinding("clearFormatting")]: () => clearFormatting(this.editor),
+          [keyBinding("increaseIndent")]: () => this.editor.commands.changeIndent(1) || true,
+          [keyBinding("decreaseIndent")]: () => this.editor.commands.changeIndent(-1) || true,
+          [keyBinding("increaseFontSize")]: () => changeFontSize(this.editor, 1),
+          [keyBinding("decreaseFontSize")]: () => changeFontSize(this.editor, -1),
         };
       },
     }),
     TocLinks,
     TabKey,
+    Autoformat,
+    PasteCleanup.configure({ onImageError }),
   ];
 }
 

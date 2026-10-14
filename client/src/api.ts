@@ -11,6 +11,7 @@ import {
   type OpenedDocument,
   type Revision,
   type RevisionWithContent,
+  type StepsConflictResponse,
   type UploadResponse,
 } from "@docs/shared";
 import { storedPageSetupDefaults } from "./pageSetupDefaults.ts";
@@ -64,6 +65,12 @@ export const api = {
   /** `updatedAt` makes the URL change with the document, so the browser may cache each preview. */
   getPreview: (id: string, updatedAt: number) =>
     request<DocumentPreview>(`/api/documents/${id}/preview?v=${updatedAt}`),
+  /** The title of a web page, fetched by the server; null when it has none or cannot be read. */
+  linkTitle: async (url: string) => (await request<{ title: string | null }>(`/api/link-preview?url=${encodeURIComponent(url)}`)).title,
+  /** The server's steps after `since`, for restoring edits kept in the browser. */
+  stepsSince: (id: string, since: number) => request<StepsConflictResponse>(`/api/documents/${id}/steps?since=${since}`),
+  /** Copies an image from the web into the uploads (for pasted images). */
+  uploadRemoteImage: (url: string) => request<UploadResponse>("/api/uploads/remote", { method: "POST", body: JSON.stringify({ url }) }),
   copyDocument: (id: string) => request<DocumentSummary>(`/api/documents/${id}/copy`, { method: "POST" }),
   openDocument: (id: string) => request<OpenedDocument>(`/api/documents/${id}`),
   renameDocument: (id: string, title: string) =>

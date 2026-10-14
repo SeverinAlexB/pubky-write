@@ -27,6 +27,7 @@ import {
   deleteDocument,
   getDocumentContent,
   getDocumentPreview,
+  getStepsSince,
   InvalidStepsError,
   listDocuments,
   nameCurrentVersion,
@@ -37,6 +38,7 @@ import {
 } from "./documents.ts";
 import { toDocx } from "./export/docx.ts";
 import { ImportError, importedTitle, importFile, isImportable, MAX_IMPORT_BYTES } from "./import/index.ts";
+import { createRemoteFetcher, LinkTitles, RemoteFetchError, type RemoteFetcher } from "./remote.ts";
 import { getRevision, listRevisions, nameRevision } from "./revisions.ts";
 import { imageTypes, readUpload, sniffImageType, storeUpload } from "./uploads.ts";
 
@@ -44,9 +46,22 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const contentTypes = Object.fromEntries(Object.entries(imageTypes).map(([type, ext]) => [ext, type]));
 const sorts: DocumentSort[] = ["lastOpened", "lastModifiedByMe", "lastModified", "title"];
 
-export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string }): Hono {
+type AppOptions = {
+  db: Database;
+  uploadsDir: string;
+  /** Fetches web pages and images; tests replace it. */
+  remote?: RemoteFetcher;
+};
+
+export function createApp({
+  db,
+  uploadsDir,
+  // REMOTE_FETCH_ALLOW_PRIVATE=1 lets the end-to-end tests paste images served from this machine.
+  remote = createRemoteFetcher({ allowPrivate: process.env.REMOTE_FETCH_ALLOW_PRIVATE === "1" }),
+}: AppOptions): Hono {
   mkdirSync(uploadsDir, { recursive: true });
   const app = new Hono();
+  const linkTitles = new LinkTitles(remote);
 
   app.onError((error, c) => {
     // As JSON, so the client can show the message.
@@ -56,6 +71,7 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
     }
     if (error instanceof CommentVersionConflictError) return c.json({ error: error.message }, 409);
     if (error instanceof ImportError) return c.json({ error: error.message }, 422);
+    if (error instanceof RemoteFetchError) return c.json({ error: error.message }, error.status);
     console.error(error);
     return c.json({ error: "Internal server error" }, 500);
   });
@@ -134,7 +150,32 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
       const { kind: _kind, ...conflict } = result;
       return c.json(conflict, 409);
     }
-    return c.json({ version: result.version });
+    return c.json({ version: result.version, ...(result.alreadyApplied && { alreadyApplied: true }) });
+  });
+
+  // The steps after a version, for restoring edits kept in the browser while offline (see sync.ts).
+  app.get("/api/documents/:id/steps", (c) => {
+    const since = Number(c.req.query("since"));
+    if (!Number.isInteger(since)) throw new HTTPException(400, { message: "since must be a version" });
+    return c.json(found(getStepsSince(db, c.req.param("id"), since)));
+  });
+
+  // The title of a web page, for the link bubble.
+  app.get("/api/link-preview", async (c) => {
+    const url = c.req.query("url");
+    if (!url) throw new HTTPException(400, { message: "url is required" });
+    return c.json({ title: await linkTitles.title(url) });
+  });
+
+  // An image pasted from a web page is copied into the uploads, so documents never depend on other sites.
+  app.post("/api/uploads/remote", async (c) => {
+    const { url } = await c.req.json<{ url?: unknown }>().catch(() => ({ url: undefined }));
+    if (typeof url !== "string") throw new HTTPException(400, { message: "url is required" });
+    const response = await remote(url, { maxBytes: MAX_UPLOAD_BYTES, timeoutMs: 15_000, accept: "image/*" });
+    if (response.status < 200 || response.status >= 300) throw new HTTPException(502, { message: `The image could not be loaded (${response.status})` });
+    const type = sniffImageType(response.body);
+    if (!type) throw new HTTPException(415, { message: "Only PNG, JPEG, GIF and WebP images are supported" });
+    return c.json({ url: await storeUpload(uploadsDir, new Uint8Array(response.body), type) }, 201);
   });
 
   app.post("/api/documents/:id/comments", async (c) => {

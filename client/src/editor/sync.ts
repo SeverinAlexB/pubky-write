@@ -2,8 +2,12 @@
 // edits are debounced into batches, only one batch is in flight at a time, and each batch is stamped
 // with the version it was built on. If the server has moved on, it answers with the steps this client
 // is missing; prosemirror-collab rebases the local steps on top of them and they are sent again.
+//
+// Before each batch is sent, the unconfirmed steps are kept in the browser (`persist`, see
+// pendingSteps.ts), so they survive a closed tab or a crash. The kept version is always the one
+// the batch is built on, so after a crash the server's steps from that version show which of the
+// kept steps it had already applied (they carry this client's id) and none is applied twice.
 import type { SubmitStepsRequest } from "@docs/shared";
-import { documentSchema } from "@docs/shared";
 import { receiveTransaction, sendableSteps } from "prosemirror-collab";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { Step } from "@tiptap/pm/transform";
@@ -11,7 +15,7 @@ import { Step } from "@tiptap/pm/transform";
 export type SaveStatus = "saved" | "saving" | "offline" | "error";
 
 export type SubmitResult =
-  | { kind: "accepted"; version: number }
+  | { kind: "accepted"; version: number; alreadyApplied?: boolean }
   | { kind: "conflict"; version: number; steps: unknown[]; clientIds: string[] };
 
 export interface StepsTransport {
@@ -33,6 +37,8 @@ export type SyncOptions = {
   initialRetryMs?: number;
   maxRetryMs?: number;
   onStatusChange?: (status: SaveStatus) => void;
+  /** Keeps the unconfirmed steps in the browser; awaited before every batch. */
+  persist?: () => Promise<void>;
 };
 
 export class DocumentSync {
@@ -43,11 +49,14 @@ export class DocumentSync {
   private retryMs: number;
   private destroyed = false;
   private idleWaiters: (() => void)[] = [];
+  /** While above 0 (see `exclusive`), nothing is sent. */
+  private paused = 0;
 
   private readonly debounceMs: number;
   private readonly initialRetryMs: number;
   private readonly maxRetryMs: number;
   private readonly onStatusChange: (status: SaveStatus) => void;
+  private readonly persist: () => Promise<void>;
 
   constructor(
     private readonly target: CollabTarget,
@@ -59,6 +68,7 @@ export class DocumentSync {
     this.maxRetryMs = options.maxRetryMs ?? 30_000;
     this.retryMs = this.initialRetryMs;
     this.onStatusChange = options.onStatusChange ?? (() => {});
+    this.persist = options.persist ?? (async () => {});
   }
 
   get saveStatus(): SaveStatus {
@@ -86,6 +96,35 @@ export class DocumentSync {
     return idle;
   }
 
+  /** The browser lost its connection: show it, even with nothing to save. */
+  connectionLost(): void {
+    if (this.destroyed || this.status === "error") return;
+    this.setStatus("offline");
+  }
+
+  /** The connection is back: send now instead of waiting for the next retry. */
+  connectionRestored(): void {
+    if (this.destroyed || this.status === "error") return;
+    clearTimeout(this.retryTimer);
+    this.retryMs = this.initialRetryMs;
+    void this.flush();
+  }
+
+  /**
+   * Runs `task` with nothing in flight and nothing sent meanwhile, so the editor's version does
+   * not change under it (restoring edits kept from an earlier session). Sending resumes after it.
+   */
+  async exclusive<T>(task: () => Promise<T>): Promise<T> {
+    this.paused++;
+    try {
+      while (this.inFlight) await new Promise((resolve) => setTimeout(resolve, 20));
+      return await task();
+    } finally {
+      this.paused--;
+      if (this.paused === 0) void this.flush();
+    }
+  }
+
   destroy(): void {
     this.destroyed = true;
     clearTimeout(this.flushTimer);
@@ -94,15 +133,19 @@ export class DocumentSync {
   }
 
   private async flush(): Promise<void> {
-    if (this.destroyed || this.inFlight || this.status === "error") return;
+    if (this.destroyed || this.inFlight || this.status === "error" || this.paused > 0) return;
+    this.inFlight = true;
+    // Kept in the browser first, at the version the batch is built on (see the top of this file).
+    await this.persist().catch(() => {});
     const sendable = sendableSteps(this.target.state);
-    if (!sendable) {
-      this.setStatus("saved");
+    if (!sendable || this.destroyed) {
+      this.inFlight = false;
+      // Nothing to save; while the browser reports no connection the indicator stays offline.
+      if (!this.destroyed && (this.status !== "offline" || browserOnline())) this.setStatus("saved");
       this.resolveIdleWaiters();
       return;
     }
 
-    this.inFlight = true;
     this.setStatus("saving");
     let result: SubmitResult;
     try {
@@ -132,7 +175,8 @@ export class DocumentSync {
       this.receive(sendable.steps, sendable.steps.map(() => sendable.clientID));
     } else {
       this.receive(
-        result.steps.map((json) => Step.fromJSON(documentSchema, json)),
+        // The editor's own schema: steps apply only to documents of the schema they were read with.
+        result.steps.map((json) => Step.fromJSON(this.target.state.schema, json)),
         result.clientIds,
       );
     }
@@ -161,4 +205,8 @@ export class DocumentSync {
     this.idleWaiters = [];
     for (const resolve of waiters) resolve();
   }
+}
+
+function browserOnline(): boolean {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
 }

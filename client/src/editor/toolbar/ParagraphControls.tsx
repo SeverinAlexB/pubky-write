@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/react";
 import { Icon, type IconName } from "../../components/Icon.tsx";
 import { Menu } from "../../components/Menu.tsx";
 import { usePopover } from "../../components/usePopover.ts";
-import { withShortcut } from "../../components/shortcuts.ts";
+import { withShortcut, type ShortcutId } from "../../shortcuts.ts";
 import type { EditorActions, ListKind } from "../actions.ts";
 import { lineSpacingEntries, type ParagraphSpacingState } from "../formatMenus.ts";
 import { ListPresetMenu } from "../ListPresets.tsx";
@@ -10,11 +10,11 @@ import { ToolButton } from "./ToolButton.tsx";
 
 export type Alignment = "left" | "center" | "right" | "justify";
 
-export const alignments: { value: Alignment; label: string; shortcut: string; icon: IconName }[] = [
-  { value: "left", label: "Left align", shortcut: "⌘+Shift+L", icon: "format_align_left" },
-  { value: "center", label: "Centre align", shortcut: "⌘+Shift+E", icon: "format_align_center" },
-  { value: "right", label: "Right align", shortcut: "⌘+Shift+R", icon: "format_align_right" },
-  { value: "justify", label: "Justify", shortcut: "⌘+Shift+J", icon: "format_align_justify" },
+export const alignments: { value: Alignment; label: string; shortcut: ShortcutId; icon: IconName }[] = [
+  { value: "left", label: "Left align", shortcut: "alignLeft", icon: "format_align_left" },
+  { value: "center", label: "Centre align", shortcut: "alignCenter", icon: "format_align_center" },
+  { value: "right", label: "Right align", shortcut: "alignRight", icon: "format_align_right" },
+  { value: "justify", label: "Justify", shortcut: "alignJustify", icon: "format_align_justify" },
 ];
 
 /** Shows the current alignment; opens a row of the four alignment buttons. */

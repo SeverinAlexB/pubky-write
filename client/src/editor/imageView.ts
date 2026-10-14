@@ -6,6 +6,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
+import { PENDING_IMAGE } from "./paste.ts";
 
 /** Handle names and the direction each one moves the right/bottom edge: -1, 0 or 1. */
 const handles = {
@@ -22,6 +23,9 @@ const handles = {
 export type ImageHandle = keyof typeof handles;
 
 export type ImageSize = { width: number; height: number };
+
+/** The placeholder of a pasted image of unknown size. */
+const PLACEHOLDER_SIZE: ImageSize = { width: 240, height: 160 };
 
 /**
  * The size after dragging `handle` by `dx`, `dy` CSS pixels from `start`, at most `maxWidth` wide.
@@ -106,6 +110,15 @@ class ImageView implements NodeView {
 
   private render() {
     const { src, alt, title, width, height } = this.node.attrs;
+    // A pasted image being uploaded (paste.ts): a grey box of its size until the upload is there.
+    const uploading = typeof src === "string" && src.startsWith(PENDING_IMAGE);
+    this.dom.classList.toggle("is-uploading", uploading);
+    if (uploading) {
+      this.image.removeAttribute("src");
+      this.image.setAttribute("style", imageSizeStyle(width ?? PLACEHOLDER_SIZE.width, height ?? PLACEHOLDER_SIZE.height)!);
+      this.image.alt = "Uploading image";
+      return;
+    }
     if (this.image.getAttribute("src") !== src) this.image.src = src ?? "";
     setAttribute(this.image, "alt", alt);
     setAttribute(this.image, "title", title);

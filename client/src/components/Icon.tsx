@@ -94,6 +94,8 @@ import tagSvg from "@material-symbols/svg-400/outlined/tag.svg?raw";
 import textFormatSvg from "@material-symbols/svg-400/outlined/text_format.svg?raw";
 import tocSvg from "@material-symbols/svg-400/outlined/toc.svg?raw";
 import tuneSvg from "@material-symbols/svg-400/outlined/tune.svg?raw";
+import keyboardSvg from "@material-symbols/svg-400/outlined/keyboard.svg?raw";
+import languageSvg from "@material-symbols/svg-400/outlined/language.svg?raw";
 import undoSvg from "@material-symbols/svg-400/outlined/undo.svg?raw";
 import unfoldLessSvg from "@material-symbols/svg-400/outlined/unfold_less.svg?raw";
 import unfoldMoreSvg from "@material-symbols/svg-400/outlined/unfold_more.svg?raw";
@@ -200,6 +202,8 @@ const symbols = {
   text_format: textFormatSvg,
   toc: tocSvg,
   tune: tuneSvg,
+  keyboard: keyboardSvg,
+  language: languageSvg,
   undo: undoSvg,
   unfold_less: unfoldLessSvg,
   unfold_more: unfoldMoreSvg,

@@ -6,6 +6,19 @@ import { defineConfig } from "@playwright/test";
 const apiPort = 3101;
 const webPort = 5273;
 const dataDir = join(tmpdir(), `docs-e2e-${process.pid}`);
+const baseURL = `http://localhost:${webPort}`;
+
+/**
+ * Tests type exact text, so automatic capitals, smart quotes, substitutions and links (Tools >
+ * Preferences) are off unless a test turns them on; e2e/everyday-editing.spec.ts tests them with
+ * the defaults. Lists and Markdown stay on, as before the preferences existed.
+ */
+const plainTypingPreferences = {
+  autoCapitalise: false,
+  smartQuotes: false,
+  autoLinks: false,
+  substitutionsEnabled: false,
+};
 
 export default defineConfig({
   testDir: "e2e",
@@ -15,7 +28,11 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: `http://localhost:${webPort}`,
+    baseURL,
+    storageState: {
+      cookies: [],
+      origins: [{ origin: baseURL, localStorage: [{ name: "docs.preferences", value: JSON.stringify(plainTypingPreferences) }] }],
+    },
     // Uses the installed Chrome instead of downloading a browser.
     channel: "chrome",
     // The spec's measurements are for en-GB: A4 paper and centimetres.
@@ -26,7 +43,8 @@ export default defineConfig({
   webServer: [
     {
       // A short session gap lets the version history test create separate versions quickly.
-      command: `DATA_DIR=${dataDir} PORT=${apiPort} REVISION_SESSION_GAP_MS=1000 npx tsx server/src/index.ts`,
+      // REMOTE_FETCH_ALLOW_PRIVATE lets the paste test copy an image served by this machine.
+      command: `DATA_DIR=${dataDir} PORT=${apiPort} REVISION_SESSION_GAP_MS=1000 REMOTE_FETCH_ALLOW_PRIVATE=1 npx tsx server/src/index.ts`,
       url: `http://localhost:${apiPort}/api/documents`,
       reuseExistingServer: false,
     },

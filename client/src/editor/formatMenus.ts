@@ -1,7 +1,7 @@
 import { DEFAULT_LINE_SPACING, lineSpacings, paragraphSpace } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import type { MenuEntry, MenuItem } from "../components/MenuList.tsx";
-import { shortcut } from "../components/shortcuts.ts";
+import { shortcutText } from "../shortcuts.ts";
 import type { EditorActions } from "./actions.ts";
 import { changeFontSize } from "./extensions.ts";
 import { paragraphStyles, type ParagraphStyle } from "./paragraphStyles.ts";
@@ -60,29 +60,29 @@ export function textMenu(editor: Editor, actions: EditorActions): MenuItem {
     label: "Text",
     icon: "format_bold",
     submenu: [
-      { label: "Bold", icon: "format_bold", shortcut: shortcut("⌘B"), onSelect: () => run().toggleBold().run() },
-      { label: "Italic", icon: "format_italic", shortcut: shortcut("⌘I"), onSelect: () => run().toggleItalic().run() },
+      { label: "Bold", icon: "format_bold", shortcut: shortcutText("bold"), onSelect: () => run().toggleBold().run() },
+      { label: "Italic", icon: "format_italic", shortcut: shortcutText("italic"), onSelect: () => run().toggleItalic().run() },
       {
         label: "Underline",
         icon: "format_underlined",
-        shortcut: shortcut("⌘U"),
+        shortcut: shortcutText("underline"),
         onSelect: () => run().toggleUnderline().run(),
       },
       {
         label: "Strikethrough",
         icon: "strikethrough_s",
-        shortcut: shortcut("⌘+Shift+X"),
+        shortcut: shortcutText("strikethrough"),
         onSelect: () => run().toggleStrike().run(),
       },
-      { label: "Superscript", icon: "superscript", shortcut: shortcut("⌘."), onSelect: actions.toggleSuperscript },
-      { label: "Subscript", icon: "subscript", shortcut: shortcut("⌘,"), onSelect: actions.toggleSubscript },
+      { label: "Superscript", icon: "superscript", shortcut: shortcutText("superscript"), onSelect: actions.toggleSuperscript },
+      { label: "Subscript", icon: "subscript", shortcut: shortcutText("subscript"), onSelect: actions.toggleSubscript },
       "separator",
       {
         label: "Size",
         icon: "format_size",
         submenu: [
-          { label: "Increase font size", shortcut: shortcut("⌘+Shift+."), onSelect: () => changeFontSize(editor, 1) },
-          { label: "Decrease font size", shortcut: shortcut("⌘+Shift+,"), onSelect: () => changeFontSize(editor, -1) },
+          { label: "Increase font size", shortcut: shortcutText("increaseFontSize"), onSelect: () => changeFontSize(editor, 1) },
+          { label: "Decrease font size", shortcut: shortcutText("decreaseFontSize"), onSelect: () => changeFontSize(editor, -1) },
         ],
       },
       {
@@ -118,13 +118,13 @@ export function alignAndIndentMenu(editor: Editor, actions: EditorActions): Menu
     label: "Align and indent",
     icon: "format_align_left",
     submenu: [
-      { label: "Left", shortcut: shortcut("⌘+Shift+L"), onSelect: () => run().setTextAlign("left").run() },
-      { label: "Centre", shortcut: shortcut("⌘+Shift+E"), onSelect: () => run().setTextAlign("center").run() },
-      { label: "Right", shortcut: shortcut("⌘+Shift+R"), onSelect: () => run().setTextAlign("right").run() },
-      { label: "Justified", shortcut: shortcut("⌘+Shift+J"), onSelect: () => run().setTextAlign("justify").run() },
+      { label: "Left", shortcut: shortcutText("alignLeft"), onSelect: () => run().setTextAlign("left").run() },
+      { label: "Centre", shortcut: shortcutText("alignCenter"), onSelect: () => run().setTextAlign("center").run() },
+      { label: "Right", shortcut: shortcutText("alignRight"), onSelect: () => run().setTextAlign("right").run() },
+      { label: "Justified", shortcut: shortcutText("alignJustify"), onSelect: () => run().setTextAlign("justify").run() },
       "separator",
-      { label: "Increase indent", shortcut: shortcut("⌘+]"), onSelect: () => run().changeIndent(1).run() },
-      { label: "Decrease indent", shortcut: shortcut("⌘+["), onSelect: () => run().changeIndent(-1).run() },
+      { label: "Increase indent", shortcut: shortcutText("increaseIndent"), onSelect: () => run().changeIndent(1).run() },
+      { label: "Decrease indent", shortcut: shortcutText("decreaseIndent"), onSelect: () => run().changeIndent(-1).run() },
       { label: "Indentation options", onSelect: actions.indentationOptions },
     ],
   };

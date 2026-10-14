@@ -6,7 +6,7 @@ import { CellSelection } from "@tiptap/pm/tables";
 import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MenuList, type MenuEntry } from "../components/MenuList.tsx";
-import { shortcut } from "../components/shortcuts.ts";
+import { shortcutText } from "../shortcuts.ts";
 import { useDismiss } from "../components/useDismiss.ts";
 import type { EditorActions } from "./actions.ts";
 import { clearFormatting } from "./extensions.ts";
@@ -97,11 +97,11 @@ export function contextMenuEntries(editor: Editor, actions: EditorActions, onCop
   const commentable = !noSelection && commentQuote(editor.state.doc, selection.from, selection.to) !== "";
 
   return [
-    { label: "Cut", icon: "content_cut", shortcut: shortcut("⌘X"), disabled: noSelection, onSelect: actions.cut },
-    { label: "Copy", icon: "content_copy", shortcut: shortcut("⌘C"), disabled: noSelection, onSelect: actions.copy },
+    { label: "Cut", icon: "content_cut", shortcut: shortcutText("cut"), disabled: noSelection, onSelect: actions.cut },
+    { label: "Copy", icon: "content_copy", shortcut: shortcutText("copy"), disabled: noSelection, onSelect: actions.copy },
     { label: "Copy as Markdown", icon: "markdown", disabled: noSelection, onSelect: actions.copyAsMarkdown },
-    { label: "Paste", icon: "content_paste", shortcut: shortcut("⌘V"), onSelect: actions.paste },
-    { label: "Paste without formatting", shortcut: shortcut("⌘+Shift+V"), onSelect: actions.pasteWithoutFormatting },
+    { label: "Paste", icon: "content_paste", shortcut: shortcutText("paste"), onSelect: actions.paste },
+    { label: "Paste without formatting", shortcut: shortcutText("pasteWithoutFormatting"), onSelect: actions.pasteWithoutFormatting },
     { label: "Paste from Markdown", onSelect: actions.pasteFromMarkdown },
     { label: "Delete", icon: "delete", disabled: noSelection, onSelect: () => run().deleteSelection().run() },
     "separator",
@@ -109,12 +109,12 @@ export function contextMenuEntries(editor: Editor, actions: EditorActions, onCop
     {
       label: "Comment",
       icon: "add_comment",
-      shortcut: shortcut("⌘+Option+M"),
+      shortcut: shortcutText("addComment"),
       disabled: !commentable,
       onSelect: actions.addComment,
     },
     "separator",
-    { label: onLink ? "Edit link" : "Insert link", icon: "link", shortcut: shortcut("⌘K"), onSelect: actions.insertLink },
+    { label: onLink ? "Edit link" : "Insert link", icon: "link", shortcut: shortcutText("insertLink"), onSelect: actions.insertLink },
     ...(onLink
       ? [
           { label: "Copy link", icon: "content_copy" as const, onSelect: () => onCopyLink(href!) },
@@ -136,6 +136,6 @@ export function contextMenuEntries(editor: Editor, actions: EditorActions, onCop
         },
       ],
     },
-    { label: "Clear formatting", icon: "format_clear", shortcut: shortcut("⌘\\"), onSelect: () => clearFormatting(editor) },
+    { label: "Clear formatting", icon: "format_clear", shortcut: shortcutText("clearFormatting"), onSelect: () => clearFormatting(editor) },
   ];
 }

@@ -12,6 +12,7 @@ import {
   deleteDocument,
   getDocumentContent,
   getDocumentPreview,
+  getStepsSince,
   InvalidStepsError,
   listDocuments,
   nameCurrentVersion,
@@ -59,6 +60,48 @@ describe("applySteps", () => {
 
     expect(result).toEqual({ kind: "conflict", version: 1, steps: firstSteps, clientIds: ["a"] });
     expect(textOf(id)).toBe("Hello");
+  });
+
+  it("recognises a batch sent again after it was applied, and does not apply it twice", () => {
+    const { id } = createDocument(db);
+    const steps = insertTextSteps(id, "Hello");
+    applySteps(db, id, { clientId: "a", version: 0, steps });
+
+    // The client never got the answer (the connection dropped, or the tab crashed) and sends it again.
+    expect(applySteps(db, id, { clientId: "a", version: 0, steps })).toEqual({ kind: "applied", version: 1, alreadyApplied: true });
+    expect(textOf(id)).toBe("Hello");
+    expect(openDocument(db, id)!.version).toBe(1);
+
+    // Also when other clients' steps followed it.
+    applySteps(db, id, { clientId: "b", version: 1, steps: insertTextSteps(id, " world") });
+    expect(applySteps(db, id, { clientId: "a", version: 0, steps })).toEqual({ kind: "applied", version: 1, alreadyApplied: true });
+    expect(textOf(id)).toBe("Hello world");
+  });
+
+  it("treats the same steps from another client, or different steps, as a conflict", () => {
+    const { id } = createDocument(db);
+    const steps = insertTextSteps(id, "Hello");
+    applySteps(db, id, { clientId: "a", version: 0, steps });
+
+    expect(applySteps(db, id, { clientId: "b", version: 0, steps })).toMatchObject({ kind: "conflict", version: 1 });
+    const other = new Transform(getDocumentContent(db, id)!.doc).insert(1, documentSchema.text("x")).steps.map((step) => step.toJSON());
+    expect(applySteps(db, id, { clientId: "a", version: 0, steps: other })).toMatchObject({ kind: "conflict", version: 1 });
+    // A longer batch whose start was applied is not "already applied" either.
+    expect(applySteps(db, id, { clientId: "a", version: 0, steps: [...steps, ...steps] })).toMatchObject({ kind: "conflict" });
+    expect(textOf(id)).toBe("Hello");
+  });
+
+  it("lists the steps after a version with their clients", () => {
+    const { id } = createDocument(db);
+    const first = insertTextSteps(id, "Hello");
+    applySteps(db, id, { clientId: "a", version: 0, steps: first });
+    const second = insertTextSteps(id, "!");
+    applySteps(db, id, { clientId: "b", version: 1, steps: second });
+
+    expect(getStepsSince(db, id, 0)).toEqual({ version: 2, steps: [...first, ...second], clientIds: ["a", "b"] });
+    expect(getStepsSince(db, id, 2)).toEqual({ version: 2, steps: [], clientIds: [] });
+    expect(() => getStepsSince(db, id, 3)).toThrow(InvalidStepsError);
+    expect(getStepsSince(db, "missing", 0)).toBeNull();
   });
 
   it("rejects steps that do not fit the document", () => {

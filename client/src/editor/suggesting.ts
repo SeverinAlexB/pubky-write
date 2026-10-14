@@ -21,7 +21,7 @@ import { Extension, type Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import { ChangeSet } from "@tiptap/pm/changeset";
 import type { Mark, MarkType, Node, Schema, Slice } from "@tiptap/pm/model";
-import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { EditorState, NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import {
   AddMarkStep,
   AttrStep,
@@ -103,6 +103,7 @@ function passesThrough(tr: Transaction): boolean {
     tr.getMeta("history$") !== undefined ||
     tr.getMeta("addToHistory") === false ||
     tr.getMeta(SUGGESTION_COMMAND) === true ||
+    tr.getMeta(REWRITTEN) === true ||
     tr.steps.every((step) => step instanceof DocAttrStep)
   );
 }
@@ -121,6 +122,46 @@ export function suggestTransaction(state: EditorState, tr: Transaction, context:
   result.tr.setMeta(REWRITTEN, true);
   setSuggesting(result.tr, result.made ? { group: result.group, activeId: result.made, activeFollowsCursor: true } : { group: result.group });
   return result;
+}
+
+/** One part of a composite edit. `map` maps positions of the state the edit started from to `tr`'s document. */
+export type Part = (tr: Transaction, map: (pos: number, assoc?: number) => number) => void;
+
+/**
+ * One transaction made of `parts`, each applied to the result of the ones before. In Suggesting
+ * mode each part is rewritten into suggestions on its own: a single transaction that both deletes
+ * text and formats text (as Markdown shortcuts do) would lose its formatting in the rewrite. The
+ * result passes the dispatch hook as it is. Null when nothing changes.
+ */
+export function suggestParts(state: EditorState, parts: Part[], now = Date.now()): Transaction | null {
+  const suggesting = getSuggesting(state);
+  const out = state.tr;
+  const map = (pos: number, assoc = 1) => out.mapping.map(pos, assoc);
+  if (suggesting.mode !== "suggesting") {
+    for (const part of parts) part(out, map);
+    return out.docChanged ? out : null;
+  }
+  let current = state;
+  let group = suggesting.group;
+  let made: string | null = null;
+  for (const part of parts) {
+    const tr = current.tr;
+    part(tr, map);
+    if (!tr.docChanged) continue;
+    const result = suggestTransaction(current, tr, { author: SUGGESTION_AUTHOR, now, group });
+    const applied = result?.tr ?? tr;
+    for (const step of applied.steps) out.step(step);
+    if (result) {
+      group = result.group;
+      made = result.made ?? made;
+    }
+    // Only the document and the selection are read by the rewriting.
+    current = EditorState.create({ doc: applied.doc, selection: applied.selection });
+  }
+  if (!out.docChanged) return null;
+  out.setSelection(Selection.fromJSON(out.doc, current.selection.toJSON()));
+  out.setMeta(REWRITTEN, true);
+  return setSuggesting(out, made ? { group, activeId: made, activeFollowsCursor: true } : { group });
 }
 
 function copyTransactionState(from: Transaction, to: Transaction): void {

@@ -191,7 +191,28 @@ To restore a backup:
   [docs/design/suggesting.md](docs/design/suggesting.md).
 - **Autosave:** edits are sent about 300 ms after you stop typing. The header
   shows whether changes are saving, saved, or waiting for the connection to come
-  back.
+  back. Edits the server has not confirmed are also kept in the browser
+  (IndexedDB): after a lost connection, a closed tab or a crash they are sent
+  the next time the document opens, rebased on newer changes and never applied
+  twice. If that is impossible (the document was deleted), a dialog offers
+  the unsaved text as a file.
+- **Automatic formatting** (Tools > Preferences, kept in the browser):
+  capitals at the start of sentences and for "i", smart quotes, links for
+  typed addresses, lists from `1. `, `1) `, `a. `, `* ` and `- `, Markdown
+  (`#`–`######` headings, `**bold**`, `*italic*`, `~~strikethrough~~`,
+  `` `code` ``, `---`), and an editable list of substitutions (`(c)` ©, `-->`
+  →, `1/2` ½…). ⌘Z right after an automatic change restores what was typed. In
+  Suggesting mode the changes are suggestions too.
+- **Link bubble:** with the cursor in a link, a card shows the page's title
+  (fetched by the server), the address, and Copy, Edit and Remove.
+- **Keyboard shortcuts** (⌘+/ or Tools > Keyboard shortcuts): every shortcut
+  by group, with a search. Menus, tooltips, the editor and the dialog read them
+  from one list (`client/src/shortcuts.ts`).
+- **Paste:** HTML from web pages and word processors keeps its structure and
+  basic formatting without Word's markup, classes or default fonts; pasted web
+  and data images are copied into the uploads (a grey placeholder shows
+  meanwhile). ⌘+Shift+V pastes plain text; a URL pasted on selected text links
+  it. See [docs/design/everyday-editing.md](docs/design/everyday-editing.md).
 - **Version history** (File > Version history > See version history, ⌘⌥⇧H or
   the clock button): edits are grouped into sessions separated by 5 minutes of
   inactivity. History mode replaces the header and toolbar with a top bar (Back,
@@ -246,6 +267,12 @@ step. `client/src/editor/sync.ts` sends unsaved steps in batches:
    top of them and the batch is sent again.
 5. Network errors are retried with backoff. A rejected batch (invalid step)
    stops saving and asks the user to reload.
+6. Before each batch is sent, the unconfirmed steps are written to IndexedDB with
+   the version they are built on, so they survive a closed tab. A batch sent again
+   after its answer was lost is recognised by the server (`alreadyApplied`), and
+   when kept steps are restored, the server's steps from this session's client id
+   show which of them it already has (see
+   [docs/design/everyday-editing.md](docs/design/everyday-editing.md)).
 
 The server validates every step against the same schema as the editor
 (`shared/src/schema.ts`), so stored documents are always valid.
@@ -373,6 +400,7 @@ removed text, struck through, where it was.
 | `PATCH /api/documents/:id`                           | Rename                                  |
 | `DELETE /api/documents/:id`                          | Delete                                  |
 | `POST /api/documents/:id/steps`                      | Submit a batch of steps                 |
+| `GET /api/documents/:id/steps?since=`                | The steps after a version, with their client ids |
 | `GET /api/documents/:id/revisions`                   | List versions                           |
 | `GET /api/documents/:id/revisions/:revisionId`       | Get one version's content               |
 | `POST /api/documents/:id/revisions/:revisionId/restore` | Restore a version                    |
@@ -389,6 +417,8 @@ removed text, struck through, where it was.
 | `POST /api/documents/:id/suggestions/:suggestionId/replies` | Reply to a suggestion                |
 | `DELETE /api/documents/:id/suggestions/:suggestionId/replies/:replyId` | Delete a reply to a suggestion |
 | `POST /api/uploads`                                  | Upload an image (PNG, JPEG, GIF, WebP)  |
+| `POST /api/uploads/remote`                           | Copy an image from a public web address into the uploads |
+| `GET /api/link-preview?url=`                         | The title of a public web page (cached) |
 
 ## Tests
 

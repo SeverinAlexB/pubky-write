@@ -6,7 +6,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { Menu } from "../../components/Menu.tsx";
 import { usePopover } from "../../components/usePopover.ts";
 import { useRovingToolbar } from "../../components/useRovingToolbar.ts";
-import { withShortcut } from "../../components/shortcuts.ts";
+import { withShortcut } from "../../shortcuts.ts";
 import type { EditorActions } from "../actions.ts";
 import { isImage } from "../imageView.ts";
 import { ModeButton } from "../modes.tsx";
@@ -82,12 +82,12 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     <Divider key="divider-font" />,
     <FontSizeControl key="font-size" editor={editor} size={state.fontSize} />,
     <Divider key="divider-size" />,
-    <ToolButton key="bold" label={withShortcut("Bold", "⌘B")} active={state.bold} onClick={() => run().toggleBold().run()}>
+    <ToolButton key="bold" label={withShortcut("Bold", "bold")} active={state.bold} onClick={() => run().toggleBold().run()}>
       <Icon name="format_bold" />
     </ToolButton>,
     <ToolButton
       key="italic"
-      label={withShortcut("Italic", "⌘I")}
+      label={withShortcut("Italic", "italic")}
       active={state.italic}
       onClick={() => run().toggleItalic().run()}
     >
@@ -95,7 +95,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     </ToolButton>,
     <ToolButton
       key="underline"
-      label={withShortcut("Underline", "⌘U")}
+      label={withShortcut("Underline", "underline")}
       active={state.underline}
       onClick={() => run().toggleUnderline().run()}
     >
@@ -119,16 +119,16 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
   ];
 
   const items: ReactNode[] = [
-    <ToolButton key="search" label={withShortcut("Search the menus", "Option+/")} onClick={actions.searchMenus}>
+    <ToolButton key="search" label={withShortcut("Search the menus", "searchMenus")} onClick={actions.searchMenus}>
       <Icon name="search" />
     </ToolButton>,
-    <ToolButton key="undo" label={withShortcut("Undo", "⌘Z")} disabled={!state.canUndo} onClick={() => run().undo().run()}>
+    <ToolButton key="undo" label={withShortcut("Undo", "undo")} disabled={!state.canUndo} onClick={() => run().undo().run()}>
       <Icon name="undo" />
     </ToolButton>,
-    <ToolButton key="redo" label={withShortcut("Redo", "⌘Y")} disabled={!state.canRedo} onClick={() => run().redo().run()}>
+    <ToolButton key="redo" label={withShortcut("Redo", "redo")} disabled={!state.canRedo} onClick={() => run().redo().run()}>
       <Icon name="redo" />
     </ToolButton>,
-    <ToolButton key="print" label={withShortcut("Print", "⌘P")} onClick={actions.print}>
+    <ToolButton key="print" label={withShortcut("Print", "print")} onClick={actions.print}>
       <Icon name="print" />
     </ToolButton>,
     <ToolButton
@@ -152,12 +152,12 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     // While an image is selected, image controls take the place of the text formatting controls.
     ...(state.image ? imageControls() : textControls),
     <Divider key="divider-colour" />,
-    <ToolButton key="link" label={withShortcut("Insert link", "⌘K")} onClick={actions.insertLink}>
+    <ToolButton key="link" label={withShortcut("Insert link", "insertLink")} onClick={actions.insertLink}>
       <Icon name="link" />
     </ToolButton>,
     <ToolButton
       key="comment"
-      label={withShortcut("Add comment", "⌘+Option+M")}
+      label={withShortcut("Add comment", "addComment")}
       disabled={!state.hasSelection}
       onClick={actions.addComment}
     >
@@ -184,7 +184,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     <ListControl
       key="checklist"
       kind="checklist"
-      label={withShortcut("Checklist", "⌘+Shift+9")}
+      label={withShortcut("Checklist", "checklist")}
       icon="checklist"
       active={state.checklist}
       onToggle={actions.toggleChecklist}
@@ -194,7 +194,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     <ListControl
       key="bulleted"
       kind="bullet"
-      label={withShortcut("Bulleted list", "⌘+Shift+8")}
+      label={withShortcut("Bulleted list", "bulletedList")}
       icon="format_list_bulleted"
       active={state.bulletList}
       onToggle={() => run().toggleBulletList().run()}
@@ -204,20 +204,20 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
     <ListControl
       key="numbered"
       kind="numbered"
-      label={withShortcut("Numbered list", "⌘+Shift+7")}
+      label={withShortcut("Numbered list", "numberedList")}
       icon="format_list_numbered"
       active={state.orderedList}
       onToggle={() => run().toggleOrderedList().run()}
       presets={state.listPresets}
       onPickPreset={actions.applyListPreset}
     />,
-    <ToolButton key="outdent" label={withShortcut("Decrease indent", "⌘+[")} onClick={() => run().changeIndent(-1).run()}>
+    <ToolButton key="outdent" label={withShortcut("Decrease indent", "decreaseIndent")} onClick={() => run().changeIndent(-1).run()}>
       <Icon name="format_indent_decrease" />
     </ToolButton>,
-    <ToolButton key="indent" label={withShortcut("Increase indent", "⌘+]")} onClick={() => run().changeIndent(1).run()}>
+    <ToolButton key="indent" label={withShortcut("Increase indent", "increaseIndent")} onClick={() => run().changeIndent(1).run()}>
       <Icon name="format_indent_increase" />
     </ToolButton>,
-    <ToolButton key="clear" label={withShortcut("Clear formatting", "⌘+\\")} onClick={() => clearFormatting(editor)}>
+    <ToolButton key="clear" label={withShortcut("Clear formatting", "clearFormatting")} onClick={() => clearFormatting(editor)}>
       <Icon name="format_clear" />
     </ToolButton>,
   ];
@@ -263,7 +263,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
       )}
       <ModeButton mode={mode} onChange={onModeChange} />
       <ToolButton
-        label={withShortcut(menusHidden ? "Show the menus" : "Hide the menus", "⌘+Shift+F")}
+        label={withShortcut(menusHidden ? "Show the menus" : "Hide the menus", "hideMenus")}
         className="hide-menus-button"
         onClick={onToggleMenus}
       >

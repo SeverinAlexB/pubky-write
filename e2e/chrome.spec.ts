@@ -319,7 +319,7 @@ test("menus list their items in order without omitted ones", async ({ page }) =>
   await items("Symbols").toEqual(["Special characters", "Emoji"]);
 
   await menuBarItem(page, "Tools").hover();
-  await items("Tools").toEqual(["Word count", "Review suggested edits", "Preferences"]);
+  await items("Tools").toEqual(["Word count", "Review suggested edits", "Preferences", "Keyboard shortcuts"]);
 
   for (const omitted of [
     "Share",

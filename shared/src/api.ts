@@ -69,7 +69,8 @@ export type SubmitStepsRequest = {
   steps: unknown[];
 };
 
-export type SubmitStepsResponse = { version: number };
+/** `alreadyApplied`: the server had applied this batch before (it was sent again after the answer was lost). */
+export type SubmitStepsResponse = { version: number; alreadyApplied?: boolean };
 
 /** Returned with status 409 when `version` is behind the server. */
 export type StepsConflictResponse = {

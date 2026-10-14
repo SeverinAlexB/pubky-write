@@ -85,6 +85,7 @@ export type EditorActions = {
   wordCount: () => void;
   reviewSuggestedEdits?: () => void;
   preferences?: () => void;
+  keyboardShortcuts?: () => void;
 
   // Toolbar only
   searchMenus?: () => void;

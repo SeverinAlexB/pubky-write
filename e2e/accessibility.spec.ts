@@ -289,3 +289,43 @@ test("the mode menu, suggestions, their cards and the review card have no seriou
   await expect(editor(page)).toHaveAttribute("contenteditable", "false");
   await expectAccessible(page, "Viewing mode");
 });
+
+test("the link bubble, Preferences, Keyboard shortcuts and the offline snackbar have no serious accessibility violations", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("Read ");
+  await page.keyboard.press(`${mod}+k`);
+  await page.getByLabel("Link URL").fill("example.com");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await editor(page).locator("a").click();
+  await expect(page.getByRole("dialog", { name: "Change or remove link." })).toBeVisible();
+  await expectAccessible(page, "Link bubble");
+
+  await menuBarItem(page, "Tools").click();
+  await page.getByRole("menuitem", { name: "Preferences" }).click();
+  const preferences = page.getByRole("dialog", { name: "Preferences" });
+  await expect(preferences).toBeVisible();
+  await expectAccessible(page, "Preferences, General tab");
+  // The tabs follow the tabs pattern: ← → move between them.
+  await preferences.getByRole("tab", { name: "General" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(preferences.getByRole("tab", { name: "Substitutions" })).toBeFocused();
+  await expect(preferences.getByRole("tab", { name: "Substitutions" })).toHaveAttribute("aria-selected", "true");
+  await expectAccessible(page, "Preferences, Substitutions tab");
+  await page.keyboard.press("Escape");
+  await expect(preferences).toBeHidden();
+
+  await editor(page).click();
+  await page.keyboard.press(`${mod}+Slash`);
+  const shortcuts = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect(shortcuts).toBeVisible();
+  await expectAccessible(page, "Keyboard shortcuts");
+  await page.keyboard.press("Escape");
+  await expect(shortcuts).toBeHidden();
+
+  await page.route("**/api/documents/*/steps", (route) => route.abort("internetdisconnected"));
+  await editor(page).click();
+  await page.keyboard.type(" offline");
+  await expect(page.getByRole("status").filter({ hasText: "You're offline." })).toBeVisible();
+  await expectAccessible(page, "Offline indicator and snackbar");
+});

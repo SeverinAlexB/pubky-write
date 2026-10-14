@@ -75,3 +75,61 @@ describe("templates and previews", () => {
     expect((await app.request("/api/documents/missing/preview")).status).toBe(404);
   });
 });
+
+describe("fetching from the web", () => {
+  const PNG = Buffer.from(PNG_DATA_URL.split(",")[1]!, "base64");
+  const fakeWeb = (pages: Record<string, { contentType: string; body: Buffer | string }>) =>
+    createApp({
+      db: openDatabase(":memory:"),
+      uploadsDir,
+      remote: async (url) => {
+        const page = pages[url];
+        if (!page) return { url, status: 404, contentType: "text/plain", body: Buffer.from("") };
+        return { url, status: 200, contentType: page.contentType, body: Buffer.from(page.body) };
+      },
+    });
+
+  it("GET /api/link-preview answers a page's title", async () => {
+    const web = fakeWeb({ "https://example.com/": { contentType: "text/html", body: "<title>Example Domain</title>" } });
+    const response = await web.request(`/api/link-preview?url=${encodeURIComponent("https://example.com/")}`);
+    expect(await response.json()).toEqual({ title: "Example Domain" });
+    expect(await (await web.request(`/api/link-preview?url=${encodeURIComponent("https://example.com/none")}`)).json()).toEqual({ title: null });
+    expect((await web.request("/api/link-preview")).status).toBe(400);
+  });
+
+  it("GET /api/link-preview refuses addresses on this machine or the local network", async () => {
+    for (const url of ["http://127.0.0.1:3001/api/documents", "http://192.168.0.1/", "file:///etc/passwd"]) {
+      const response = await app.request(`/api/link-preview?url=${encodeURIComponent(url)}`);
+      expect(response.status, url).toBe(400);
+    }
+  });
+
+  it("POST /api/uploads/remote copies a web image into the uploads", async () => {
+    const web = fakeWeb({
+      "https://example.com/dot.png": { contentType: "image/png", body: PNG },
+      "https://example.com/page.html": { contentType: "text/html", body: "<p>not an image</p>" },
+    });
+    const post = (url: string) => web.request("/api/uploads/remote", { method: "POST", body: JSON.stringify({ url }), headers: { "Content-Type": "application/json" } });
+    const response = await post("https://example.com/dot.png");
+    expect(response.status).toBe(201);
+    const { url } = await response.json();
+    expect(url).toMatch(/^\/uploads\/[\w-]+\.png$/);
+    expect(readdirSync(uploadsDir)).toHaveLength(1);
+    expect((await post("https://example.com/page.html")).status).toBe(415);
+    expect((await post("https://example.com/missing.png")).status).toBe(502);
+    const refused = await app.request("/api/uploads/remote", { method: "POST", body: JSON.stringify({ url: "http://10.0.0.1/x.png" }), headers: { "Content-Type": "application/json" } });
+    expect(refused.status).toBe(400);
+  });
+
+  it("GET /api/documents/:id/steps lists the steps after a version", async () => {
+    const created = (await (await app.request("/api/documents", { method: "POST" })).json()) as DocumentSummary;
+    const step = { stepType: "replace", from: 1, to: 1, slice: { content: [{ type: "text", text: "Hi" }] } };
+    await app.request(`/api/documents/${created.id}/steps`, { method: "POST", body: JSON.stringify({ clientId: "c1", version: 0, steps: [step] }), headers: { "Content-Type": "application/json" } });
+    const again = await app.request(`/api/documents/${created.id}/steps`, { method: "POST", body: JSON.stringify({ clientId: "c1", version: 0, steps: [step] }), headers: { "Content-Type": "application/json" } });
+    expect(await again.json()).toEqual({ version: 1, alreadyApplied: true });
+    const since = await app.request(`/api/documents/${created.id}/steps?since=0`);
+    expect(await since.json()).toEqual({ version: 1, steps: [step], clientIds: ["c1"] });
+    expect((await app.request(`/api/documents/${created.id}/steps?since=5`)).status).toBe(400);
+    expect((await app.request(`/api/documents/missing/steps?since=0`)).status).toBe(404);
+  });
+});

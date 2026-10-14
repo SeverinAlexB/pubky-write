@@ -23,7 +23,8 @@ import { Tab, TabStops } from "./tabStops.ts";
 export const documentExtensions: AnyExtension[] = [
   StarterKit.configure({
     heading: { levels: [...headingLevels] },
-    link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
+    // Typed addresses become links in the editor (Tools > Preferences), not through the extension.
+    link: { openOnClick: false, autolink: false, defaultProtocol: "https" },
     // Undo history is configured by the editor so it can be left out on the server.
     undoRedo: false,
     strike: false,

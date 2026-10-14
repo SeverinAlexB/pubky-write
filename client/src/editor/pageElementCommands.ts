@@ -18,6 +18,9 @@ import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { closeHistory } from "@tiptap/pm/history";
+import { keyBinding, keyBindings } from "../shortcuts.ts";
+import { AUTOFORMAT, Autoformat } from "./autoformat.ts";
+import { PasteCleanup } from "./paste.ts";
 import { documentFootnotes, layOutNow, pageIndexAt } from "./pagination.ts";
 import { TabKey, TabLayout } from "./tabLayout.ts";
 
@@ -95,8 +98,9 @@ export function createRegionEditor({ main, binding, element, className, onEscape
 
   const region: Editor = new Editor({
     element,
-    extensions: [...documentExtensions, TabLayout, TabKey, regionBehaviour(main, binding.kind, onEscape)],
+    extensions: [...documentExtensions, TabLayout, TabKey, Autoformat, PasteCleanup, regionBehaviour(main, binding.kind, onEscape)],
     content: { type: "doc", content: stored ?? emptyRegion() },
+    enableInputRules: false,
     editorProps: {
       attributes: { class: `page-content page-region ${className}`, "aria-label": binding.label, role: "textbox", "aria-multiline": "true" },
     },
@@ -104,7 +108,8 @@ export function createRegionEditor({ main, binding, element, className, onEscape
       if (!transaction.docChanged || transaction.getMeta(fromMain)) return;
       const content = region.state.doc.content.toJSON() as RegionContent;
       const now = Date.now();
-      if (!group || now - lastChange > UNDO_GROUP_DELAY) group = newUndoGroup();
+      // An automatic change (autoformat.ts) is an undo step of its own, as in the main editor.
+      if (!group || now - lastChange > UNDO_GROUP_DELAY || transaction.getMeta(AUTOFORMAT)) group = newUndoGroup();
       lastChange = now;
       const tr = binding.write(main.state.tr, content);
       if (!tr) return;
@@ -168,17 +173,16 @@ function regionBehaviour(main: Editor, kind: "header" | "footnote", onEscape: ()
     },
     addKeyboardShortcuts() {
       return {
-        "Mod-z": () => main.commands.undo() || true,
-        "Mod-y": () => main.commands.redo() || true,
-        "Shift-Mod-z": () => main.commands.redo() || true,
+        [keyBinding("undo")]: () => main.commands.undo() || true,
+        ...Object.fromEntries(keyBindings("redo").map((key) => [key, () => main.commands.redo() || true])),
         Escape: () => {
           onEscape();
           return true;
         },
-        "Mod-Enter": () => true,
-        "Mod-Alt-f": () => true,
-        "Mod-]": () => this.editor.commands.changeIndent(1) || true,
-        "Mod-[": () => this.editor.commands.changeIndent(-1) || true,
+        [keyBinding("pageBreak")]: () => true,
+        [keyBinding("footnote")]: () => true,
+        [keyBinding("increaseIndent")]: () => this.editor.commands.changeIndent(1) || true,
+        [keyBinding("decreaseIndent")]: () => this.editor.commands.changeIndent(-1) || true,
       };
     },
     addProseMirrorPlugins() {

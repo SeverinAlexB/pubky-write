@@ -13,7 +13,8 @@ import {
 import { getText, getTextSerializersFromSchema } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { closeHistory as startUndoStep } from "@tiptap/pm/history";
-import { getVersion } from "prosemirror-collab";
+import type { Transaction } from "@tiptap/pm/state";
+import { getVersion, receiveTransaction, sendableSteps } from "prosemirror-collab";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -22,7 +23,15 @@ import { Icon } from "../components/Icon.tsx";
 import { lazyComponent } from "../components/lazyComponent.tsx";
 import { focusToolbar } from "../components/useRovingToolbar.ts";
 import { PromptDialog } from "../components/PromptDialog.tsx";
-import { isMac, shortcut } from "../components/shortcuts.ts";
+import {
+  chordSteps,
+  matchesCombination,
+  matchesShortcut,
+  shortcutList,
+  shortcutText,
+  type Shortcut,
+  type WindowShortcutId,
+} from "../shortcuts.ts";
 import type { EditorActions } from "./actions.ts";
 import { capitaliseSelection } from "./capitalisation.ts";
 import { getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
@@ -31,6 +40,7 @@ import { COMMENT_MARGIN_WIDTH, CommentMargin, useCommentAnchors } from "./Commen
 import { CommentPill } from "./CommentPill.tsx";
 import { ContextMenu } from "./ContextMenu.tsx";
 import { ImagePill } from "./ImagePill.tsx";
+import { LinkBubble } from "./LinkBubble.tsx";
 import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
 import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
@@ -51,6 +61,15 @@ import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { cursorPage, resetPagination } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
 import { stepsTransport } from "./stepsTransport.ts";
+import {
+  claimEntry,
+  holdEntry,
+  parseSteps,
+  PendingPersister,
+  pendingStore,
+  rebasePending,
+  type PendingEntry,
+} from "./pendingSteps.ts";
 import {
   getSuggesting,
   resolveSuggestions,
@@ -76,6 +95,11 @@ const TableOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then
 const ImageOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.ImageOptionsPanel));
 const PageNumbersDialog = lazyComponent(() => import("./PageNumbersDialog.tsx").then((module) => module.PageNumbersDialog));
 const ReviewSuggestions = lazyComponent(() => import("./ReviewSuggestions.tsx").then((module) => module.ReviewSuggestions));
+const UnsavedChangesDialog = lazyComponent(() => import("./UnsavedChangesDialog.tsx").then((module) => module.UnsavedChangesDialog));
+const PreferencesDialog = lazyComponent(() => import("./PreferencesDialog.tsx").then((module) => module.PreferencesDialog));
+const KeyboardShortcutsDialog = lazyComponent(() =>
+  import("./KeyboardShortcutsDialog.tsx").then((module) => module.KeyboardShortcutsDialog),
+);
 const SpecialCharactersDialog = lazyComponent(() =>
   import("./characters/SpecialCharactersDialog.tsx").then((module) => module.SpecialCharactersDialog),
 );
@@ -91,6 +115,8 @@ const onDemand = [
   PageNumbersDialog,
   SpecialCharactersDialog,
   ReviewSuggestions,
+  PreferencesDialog,
+  KeyboardShortcutsDialog,
 ];
 
 /** The second key of a header (H), footer (F) or review (U) chord must follow Ctrl+⌘O within this time. */
@@ -137,6 +163,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [regionEditor, setRegionEditor] = useState<Editor | null>(null);
   const [pageNumbersDialog, setPageNumbersDialog] = useState<Required<PageNumberOptions> | null>(null);
   // Insert > Symbols > Special characters (or Emoji), opened on that category.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [specialCharacters, setSpecialCharacters] = useState<{ category: string } | null>(null);
   // Editing, Suggesting or Viewing, remembered per document.
   const [mode, setMode] = useState<EditorMode>(() => storedMode(doc.id));
@@ -151,6 +179,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   );
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
   const sync = useRef<DocumentSync | null>(null);
+  const persister = useRef<PendingPersister | null>(null);
+  const restoring = useRef(false);
+  const offlineNoticeShown = useRef(false);
+  const [offlineSnackbar, setOfflineSnackbar] = useState(false);
+  // Edits kept from an earlier session that could not be restored.
+  const [unsavedEntries, setUnsavedEntries] = useState<PendingEntry[]>([]);
+  const windowShortcuts = useRef<Record<WindowShortcutId, (() => void) | null>>({} as never);
   const scrollBeforeHistory = useRef(0);
   const titleInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -161,22 +196,19 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     startComment: () => {},
     selectComment: (_id: number) => {},
     activateComment: (_id: number | null) => {},
-    openHistory: () => {},
-    toggleCommentsHidden: () => {},
     insertFootnote: () => {},
-    editRegion: (_kind: "header" | "footer") => {},
     activateSuggestion: (_id: string | null) => {},
-    changeMode: (_mode: EditorMode) => {},
-    toggleSuggesting: () => {},
-    openReview: () => {},
+    notify: (_message: string) => {},
     historyOpen: false,
   });
 
+  // This editor session's id in the step log; edits kept in the browser are filed under it.
+  const clientId = useMemo(() => crypto.randomUUID(), []);
   const extensions = useMemo(
     () =>
       editorExtensions({
         version: doc.version,
-        clientId: crypto.randomUUID(),
+        clientId,
         onLinkShortcut: () => handlers.current.openLinkDialog(),
         onCommentShortcut: () => handlers.current.startComment(),
         onFootnoteShortcut: () => handlers.current.insertFootnote(),
@@ -185,6 +217,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         onCommentClick: (id) => handlers.current.activateComment(id),
         mode: storedMode(doc.id),
         onSuggestionClick: (id) => handlers.current.activateSuggestion(id),
+        onImageError: (message) => handlers.current.notify(message),
       }),
     // The document is fixed for the life of this component; a reload remounts it.
     [],
@@ -194,6 +227,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     extensions,
     content: doc.content,
     autofocus: "start",
+    // Automatic formatting follows Tools > Preferences (autoformat.ts) instead of the extensions' input rules.
+    enableInputRules: false,
     editorProps: {
       attributes: { class: "page-content", "aria-label": "Document content" },
       handlePaste: (_view, event) => {
@@ -210,23 +245,29 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         return true;
       },
     },
-    onUpdate: () => sync.current?.notifyChange(),
+    onUpdate: () => {
+      sync.current?.notifyChange();
+      persister.current?.schedule();
+    },
   });
 
   useEffect(() => {
-    const documentSync = new DocumentSync(
-      {
-        get state() {
-          return editor.state;
-        },
-        dispatch: (transaction) => {
-          if (!editor.isDestroyed) editor.view.dispatch(transaction);
-        },
+    const target = {
+      get state() {
+        return editor.state;
       },
-      stepsTransport(doc.id),
-      { onStatusChange: setStatus },
-    );
+      dispatch: (transaction: Transaction) => {
+        if (!editor.isDestroyed) editor.view.dispatch(transaction);
+      },
+    };
+    const pending = new PendingPersister(doc.id, clientId, target);
+    const releaseEntry = holdEntry(doc.id, clientId);
+    const documentSync = new DocumentSync(target, stepsTransport(doc.id), {
+      onStatusChange: setStatus,
+      persist: () => pending.save(),
+    });
     sync.current = documentSync;
+    persister.current = pending;
 
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       if (documentSync.hasUnsavedChanges) event.preventDefault();
@@ -234,14 +275,102 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     const saveWhenHidden = () => {
       if (document.visibilityState === "hidden") void documentSync.flushNow();
     };
+    const goneOffline = () => documentSync.connectionLost();
+    const backOnline = () => {
+      documentSync.connectionRestored();
+      void restorePendingEdits();
+    };
     window.addEventListener("beforeunload", warnBeforeLeaving);
     document.addEventListener("visibilitychange", saveWhenHidden);
+    window.addEventListener("offline", goneOffline);
+    window.addEventListener("online", backOnline);
+    if (navigator.onLine === false) documentSync.connectionLost();
+    void restorePendingEdits();
     return () => {
       window.removeEventListener("beforeunload", warnBeforeLeaving);
       document.removeEventListener("visibilitychange", saveWhenHidden);
-      void documentSync.flushNow().then(() => documentSync.destroy());
+      window.removeEventListener("offline", goneOffline);
+      window.removeEventListener("online", backOnline);
+      pending.destroy();
+      void documentSync
+        .flushNow()
+        .then(() => documentSync.destroy())
+        .finally(releaseEntry);
     };
   }, [editor, doc.id]);
+
+  // The first time saving finds no connection, a snackbar says so (the indicator stays until it is back).
+  useEffect(() => {
+    if (status === "offline" && !offlineNoticeShown.current) {
+      offlineNoticeShown.current = true;
+      setOfflineSnackbar(true);
+    }
+    if (status === "saved") setOfflineSnackbar(false);
+  }, [status]);
+
+  /**
+   * Edits kept in the browser by earlier sessions of this document that have ended (a closed tab,
+   * a crash, or no connection): rebased onto the current document and sent. See pendingSteps.ts.
+   */
+  async function restorePendingEdits() {
+    if (!sync.current || restoring.current) return;
+    restoring.current = true;
+    try {
+      const entries = (await pendingStore.list(doc.id).catch(() => [] as PendingEntry[]))
+        .filter((entry) => entry.clientId !== clientId)
+        .sort((a, b) => a.savedAt - b.savedAt);
+      for (const entry of entries) {
+        const documentSync = sync.current;
+        if (!documentSync) return;
+        const outcome = await claimEntry(entry, () => documentSync.exclusive(() => restoreEntry(entry)));
+        if (outcome === "offline" || editor.isDestroyed) return;
+        if (outcome === "restored") setNotice("Unsaved changes restored");
+        if (outcome === "failed" || outcome === "partial") setUnsavedEntries((current) => [...current, entry]);
+      }
+    } finally {
+      restoring.current = false;
+    }
+  }
+
+  async function restoreEntry(entry: PendingEntry): Promise<"restored" | "nothing" | "partial" | "failed" | "offline"> {
+    const pending = parseSteps(entry.steps, editor.schema);
+    if (!pending) return "failed";
+    const editorVersion = getVersion(editor.state);
+    const since = Math.min(entry.version, editorVersion);
+    let server;
+    try {
+      server = await api.stepsSince(doc.id, since);
+    } catch (error) {
+      return error instanceof ApiError && error.status < 500 ? "failed" : "offline";
+    }
+    const steps = parseSteps(server.steps, editor.schema);
+    if (!steps || editor.isDestroyed) return "failed";
+    // Catch up with the server first (the entry may be newer than what this editor loaded).
+    const fromEditor = editorVersion - since;
+    if (steps.length > fromEditor) {
+      editor.view.dispatch(
+        receiveTransaction(editor.state, steps.slice(fromEditor), server.clientIds.slice(fromEditor), { mapSelectionBackward: true }),
+      );
+    }
+    const fromEntry = entry.version - since;
+    const result = rebasePending(
+      editor.state.doc,
+      pending,
+      entry.clientId,
+      { steps: steps.slice(fromEntry), clientIds: server.clientIds.slice(fromEntry) },
+      sendableSteps(editor.state)?.steps ?? [],
+    );
+    if (result.steps.length > 0) {
+      const tr = editor.state.tr;
+      for (const step of result.steps) tr.step(step);
+      // Raw steps: not an undo step, and not rewritten into suggestions again.
+      editor.view.dispatch(tr.setMeta("addToHistory", false));
+    }
+    // The restored steps are this session's unsaved steps now; the old entry goes in the same write.
+    await persister.current?.replace(entry.key).catch(() => {});
+    if (result.dropped > 0) return "partial";
+    return result.steps.length > 0 ? "restored" : "nothing";
+  }
 
   useEffect(() => {
     document.title = `${title || "Untitled document"} - Docs`;
@@ -302,59 +431,35 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   // Version history mode sets its own, for the version it shows.
   usePrintPageRule(pageSetup, !historyOpen, printLayout);
 
-  // Shortcuts that work anywhere on the page, overriding the browser's own find.
+  // Shortcuts that work anywhere on the page (shortcuts.ts), overriding the browser's own find.
   useEffect(() => {
     let chordStarted = 0;
+    const chords = (["header", "footer", "reviewSuggestions"] as const).map((id) => ({ id, steps: chordSteps(id) }));
+    const singles = shortcutList.filter(
+      (entry): entry is Shortcut & { id: WindowShortcutId } =>
+        entry.handledBy === "window" && !entry.unavailable && !entry.keys.every((keys) => keys.includes(" ")),
+    );
     const onKeyDown = (event: KeyboardEvent) => {
-      // Ctrl+⌘O then Ctrl+⌘H (header) or Ctrl+⌘F (footer); Ctrl+Alt elsewhere.
-      const chordModifiers = isMac
-        ? event.metaKey && event.ctrlKey && !event.altKey && !event.shiftKey
-        : event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey;
-      if (chordModifiers && !handlers.current.historyOpen) {
-        if (event.code === "KeyO") {
-          event.preventDefault();
-          chordStarted = Date.now();
-          return;
-        }
-        if ((event.code === "KeyH" || event.code === "KeyF") && Date.now() - chordStarted < CHORD_TIMEOUT_MS) {
-          event.preventDefault();
-          chordStarted = 0;
-          handlers.current.editRegion(event.code === "KeyH" ? "header" : "footer");
-          return;
-        }
-        if (event.code === "KeyU" && Date.now() - chordStarted < CHORD_TIMEOUT_MS) {
-          event.preventDefault();
-          chordStarted = 0;
-          handlers.current.openReview();
-          return;
-        }
-      }
-      // Alt+F10 moves to the toolbar, as in other editors (the document uses Tab for tab characters).
-      if (event.altKey && event.key === "F10" && !handlers.current.historyOpen) {
-        event.preventDefault();
-        focusToolbar(document.querySelector<HTMLElement>('.editor-app [role="toolbar"]'));
-        return;
-      }
-      if (!(event.metaKey || event.ctrlKey)) return;
-      const pressed = `${event.altKey ? "Alt+" : ""}${event.shiftKey ? "Shift+" : ""}${event.code}`;
       // Version history mode is read-only: the editor's shortcuts do nothing there.
       if (handlers.current.historyOpen) {
-        if (pressed === "Alt+Shift+KeyH") event.preventDefault();
+        if (matchesShortcut(event, "versionHistory")) event.preventDefault();
         return;
       }
-      const action = {
-        "Alt+Shift+KeyH": () => handlers.current.openHistory(),
-        KeyF: () => openFind("bar"),
-        "Shift+KeyH": () => openFind("dialog"),
-        "Shift+KeyC": () => setWordCountOpen(true),
-        "Shift+KeyF": () => setMenusHidden((hidden) => !hidden),
-        "Alt+Shift+KeyA": () => setAllCommentsOpen(true),
-        "Alt+Shift+KeyJ": () => handlers.current.toggleCommentsHidden(),
-        "Alt+Shift+KeyX": () => handlers.current.toggleSuggesting(),
-        "Alt+Shift+KeyZ": () => handlers.current.changeMode("editing"),
-        "Alt+Shift+KeyC": () => handlers.current.changeMode("viewing"),
-        KeyO: () => navigate("/"),
-      }[pressed];
+      // Chords: Ctrl+⌘O, then the second combination within CHORD_TIMEOUT_MS.
+      if (chords.some(({ steps }) => matchesCombination(event, steps[0]!))) {
+        event.preventDefault();
+        chordStarted = Date.now();
+        return;
+      }
+      const chord = chords.find(({ steps }) => matchesCombination(event, steps[1]!));
+      if (chord && Date.now() - chordStarted < CHORD_TIMEOUT_MS) {
+        event.preventDefault();
+        chordStarted = 0;
+        windowShortcuts.current[chord.id]?.();
+        return;
+      }
+      const single = singles.find((entry) => matchesShortcut(event, entry.id));
+      const action = single && windowShortcuts.current[single.id];
       if (!action) return;
       event.preventDefault();
       action();
@@ -376,17 +481,34 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   handlers.current.openLinkDialog = () => setLinkDialog({ href: editor.getAttributes("link").href ?? "" });
   handlers.current.insertImages = (files, at) => void insertImages(editor, files, at);
   handlers.current.startComment = startComment;
-  handlers.current.openHistory = openHistory;
   handlers.current.selectComment = selectComment;
   handlers.current.activateComment = activateComment;
-  handlers.current.toggleCommentsHidden = () => setCommentsHidden((hidden) => !hidden);
   handlers.current.historyOpen = historyOpen;
   handlers.current.insertFootnote = startFootnote;
-  handlers.current.editRegion = editRegion;
   handlers.current.activateSuggestion = activateSuggestion;
-  handlers.current.changeMode = changeMode;
-  handlers.current.toggleSuggesting = () => changeMode(mode === "suggesting" ? "editing" : "suggesting");
-  handlers.current.openReview = openReview;
+  handlers.current.notify = setNotice;
+
+  // What the window-wide shortcuts do (null: not available yet).
+  windowShortcuts.current = {
+    header: () => editRegion("header"),
+    footer: () => editRegion("footer"),
+    reviewSuggestions: openReview,
+    find: () => openFind("bar"),
+    findAndReplace: () => openFind("dialog"),
+    wordCount: () => setWordCountOpen(true),
+    open: () => navigate("/"),
+    versionHistory: openHistory,
+    toggleSuggesting: () => changeMode(mode === "suggesting" ? "editing" : "suggesting"),
+    editingMode: () => changeMode("editing"),
+    viewingMode: () => changeMode("viewing"),
+    keyboardShortcuts: () => setShortcutsOpen(true),
+    showAllComments: () => setAllCommentsOpen(true),
+    hideComments: () => setCommentsHidden((hidden) => !hidden),
+    hideMenus: () => setMenusHidden((hidden) => !hidden),
+    focusToolbar: () => focusToolbar(document.querySelector<HTMLElement>('.editor-app [role="toolbar"]')),
+    searchMenus: null,
+    nonPrintingCharacters: null,
+  };
 
   // Viewing mode shows the document as if every suggestion were accepted; the review card can preview either.
   const display: SuggestionView = mode === "viewing" ? "accepted" : suggestionView;
@@ -753,6 +875,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     switchToPageless: () => setPrintLayout(false),
     wordCount: () => setWordCountOpen(true),
     reviewSuggestedEdits: openReview,
+    preferences: () => setPreferencesOpen(true),
+    keyboardShortcuts: () => setShortcutsOpen(true),
     tableOptions: () => openOptionsPanel("table"),
     imageOptions: () => openOptionsPanel("image"),
   };
@@ -845,7 +969,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                 type="button"
                 className="header-action"
                 aria-label="Version history"
-                data-tooltip={`Version history (${shortcut("⌘+Option+Shift+H")})`}
+                data-tooltip={`Version history (${shortcutText("versionHistory")})`}
                 onClick={openHistory}
               >
                 <Icon name="history" size={24} />
@@ -854,7 +978,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                 type="button"
                 className={`header-action${allCommentsOpen ? " is-active" : ""}`}
                 aria-label={`Show all comments (${openCommentCount} open)`}
-                data-tooltip={`Show all comments (${shortcut("⌘+Option+Shift+A")})`}
+                data-tooltip={`Show all comments (${shortcutText("showAllComments")})`}
                 aria-pressed={allCommentsOpen}
                 onClick={() => setAllCommentsOpen((open) => !open)}
               >
@@ -977,6 +1101,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                 {!historyOpen && !readOnly && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
                 {!historyOpen && !readOnly && <TocPill editor={editor} column={column} />}
                 {!historyOpen && !readOnly && (
+                  <LinkBubble
+                    editor={editor}
+                    column={column}
+                    onEdit={() => handlers.current.openLinkDialog()}
+                    onCopy={(href) => void copyLink(href)}
+                  />
+                )}
+                {!historyOpen && !readOnly && (
                   <ImagePill
                     editor={editor}
                     column={column}
@@ -1091,6 +1223,24 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           />
         )}
 
+        {preferencesOpen && (
+          <PreferencesDialog
+            onClose={() => {
+              setPreferencesOpen(false);
+              activeEditor.commands.focus();
+            }}
+          />
+        )}
+
+        {shortcutsOpen && !historyOpen && (
+          <KeyboardShortcutsDialog
+            onClose={() => {
+              setShortcutsOpen(false);
+              activeEditor.commands.focus();
+            }}
+          />
+        )}
+
         {imageUrlDialog && (
           <PromptDialog
             title="Insert image"
@@ -1109,6 +1259,26 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           <div className="snackbar" role="status" aria-live="polite">
             {notice}
           </div>
+        )}
+
+        {offlineSnackbar && !notice && (
+          <div className="snackbar" role="status" aria-live="polite">
+            You're offline. Changes will be saved when you reconnect.
+            <button type="button" className="snackbar-action" onClick={() => setOfflineSnackbar(false)}>
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {unsavedEntries.length > 0 && (
+          <UnsavedChangesDialog
+            entries={unsavedEntries}
+            documentTitle={savedTitle}
+            onClose={() => {
+              setUnsavedEntries([]);
+              editor.commands.focus();
+            }}
+          />
         )}
 
         {namingVersion && (
@@ -1180,7 +1350,7 @@ async function pasteFromClipboard(editor: Editor, withFormatting: boolean): Prom
     }
     editor.view.pasteText(await navigator.clipboard.readText());
   } catch {
-    alert(`The browser didn't allow reading the clipboard. Use ${shortcut(withFormatting ? "⌘V" : "⌘+Shift+V")} instead.`);
+    alert(`The browser didn't allow reading the clipboard. Use ${shortcutText(withFormatting ? "paste" : "pasteWithoutFormatting")} instead.`);
   }
 }
 

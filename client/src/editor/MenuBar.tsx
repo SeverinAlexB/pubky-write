@@ -4,7 +4,7 @@ import { useEditorState } from "@tiptap/react";
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { MenuList, type MenuEntry, type MenuItem } from "../components/MenuList.tsx";
 import { modeEntries } from "./modes.tsx";
-import { isMac, shortcut } from "../components/shortcuts.ts";
+import { shortcutText } from "../shortcuts.ts";
 import { useDismiss } from "../components/useDismiss.ts";
 import type { EditorActions, ListKind, ViewSettings } from "./actions.ts";
 import { clearFormatting } from "./extensions.ts";
@@ -138,7 +138,7 @@ export function MenuBar({ editor, actions, view }: MenuBarProps) {
 function fileMenu(actions: EditorActions): MenuEntry[] {
   return [
     { label: "New", icon: "description", submenu: [{ label: "Document", icon: "description", onSelect: actions.newDocument }] },
-    { label: "Open", icon: "folder_open", shortcut: shortcut("⌘O"), onSelect: actions.openDocumentList },
+    { label: "Open", icon: "folder_open", shortcut: shortcutText("open"), onSelect: actions.openDocumentList },
     { label: "Make a copy", icon: "file_copy", onSelect: actions.makeCopy },
     "separator",
     {
@@ -160,13 +160,13 @@ function fileMenu(actions: EditorActions): MenuEntry[] {
       icon: "history",
       submenu: [
         { label: "Name current version", onSelect: actions.nameCurrentVersion },
-        { label: "See version history", shortcut: shortcut("⌘+Option+Shift+H"), onSelect: actions.openVersionHistory },
+        { label: "See version history", shortcut: shortcutText("versionHistory"), onSelect: actions.openVersionHistory },
       ],
     },
     "separator",
     { label: "Details", icon: "info", onSelect: actions.showDetails },
     { label: "Page setup", icon: "article", onSelect: actions.pageSetup },
-    { label: "Print", icon: "print", shortcut: shortcut("⌘P"), onSelect: actions.print },
+    { label: "Print", icon: "print", shortcut: shortcutText("print"), onSelect: actions.print },
   ];
 }
 
@@ -174,20 +174,20 @@ function editMenu(editor: Editor, actions: EditorActions, state: MenuState): Men
   const run = () => editor.chain().focus();
   const noSelection = !state.hasSelection;
   return [
-    { label: "Undo", icon: "undo", shortcut: shortcut("⌘Z"), disabled: !state.canUndo, onSelect: () => run().undo().run() },
-    { label: "Redo", icon: "redo", shortcut: shortcut("⌘Y"), disabled: !state.canRedo, onSelect: () => run().redo().run() },
+    { label: "Undo", icon: "undo", shortcut: shortcutText("undo"), disabled: !state.canUndo, onSelect: () => run().undo().run() },
+    { label: "Redo", icon: "redo", shortcut: shortcutText("redo"), disabled: !state.canRedo, onSelect: () => run().redo().run() },
     "separator",
-    { label: "Cut", icon: "content_cut", shortcut: shortcut("⌘X"), disabled: noSelection, onSelect: actions.cut },
-    { label: "Copy", icon: "content_copy", shortcut: shortcut("⌘C"), disabled: noSelection, onSelect: actions.copy },
+    { label: "Cut", icon: "content_cut", shortcut: shortcutText("cut"), disabled: noSelection, onSelect: actions.cut },
+    { label: "Copy", icon: "content_copy", shortcut: shortcutText("copy"), disabled: noSelection, onSelect: actions.copy },
     { label: "Copy as Markdown", icon: "markdown", disabled: noSelection, onSelect: actions.copyAsMarkdown },
-    { label: "Paste", icon: "content_paste", shortcut: shortcut("⌘V"), onSelect: actions.paste },
-    { label: "Paste without formatting", shortcut: shortcut("⌘+Shift+V"), onSelect: actions.pasteWithoutFormatting },
+    { label: "Paste", icon: "content_paste", shortcut: shortcutText("paste"), onSelect: actions.paste },
+    { label: "Paste without formatting", shortcut: shortcutText("pasteWithoutFormatting"), onSelect: actions.pasteWithoutFormatting },
     { label: "Paste from Markdown", onSelect: actions.pasteFromMarkdown },
     "separator",
-    { label: "Select all", icon: "select_all", shortcut: shortcut("⌘A"), onSelect: () => run().selectAll().run() },
+    { label: "Select all", icon: "select_all", shortcut: shortcutText("selectAll"), onSelect: () => run().selectAll().run() },
     { label: "Delete", icon: "delete", disabled: noSelection, onSelect: () => run().deleteSelection().run() },
     "separator",
-    { label: "Find and replace", icon: "find_replace", shortcut: shortcut("⌘+Shift+H"), onSelect: actions.findAndReplace },
+    { label: "Find and replace", icon: "find_replace", shortcut: shortcutText("findAndReplace"), onSelect: actions.findAndReplace },
   ];
 }
 
@@ -204,11 +204,11 @@ function viewMenu(actions: EditorActions, view: ViewSettings): MenuEntry[] {
       submenu: [
         {
           label: "Hide comments",
-          shortcut: shortcut("⌘+Option+Shift+J"),
+          shortcut: shortcutText("hideComments"),
           checked: view.commentsHidden,
           onSelect: actions.hideComments,
         },
-        { label: "Show all comments", shortcut: shortcut("⌘+Option+Shift+A"), onSelect: actions.showAllComments },
+        { label: "Show all comments", shortcut: shortcutText("showAllComments"), onSelect: actions.showAllComments },
       ],
     },
     {
@@ -221,7 +221,7 @@ function viewMenu(actions: EditorActions, view: ViewSettings): MenuEntry[] {
     { label: "Show ruler", checked: view.rulerVisible, onSelect: actions.toggleRuler },
     {
       label: "Show non-printing characters",
-      shortcut: shortcut("⌘+Shift+P"),
+      shortcut: shortcutText("nonPrintingCharacters"),
       checked: view.nonPrintingCharacters,
       onSelect: actions.toggleNonPrintingCharacters,
     },
@@ -253,7 +253,7 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
         />
       ),
     },
-    { label: "Link", icon: "link", shortcut: shortcut("⌘K"), onSelect: actions.insertLink },
+    { label: "Link", icon: "link", shortcut: shortcutText("insertLink"), onSelect: actions.insertLink },
     {
       label: "Symbols",
       icon: "special_character",
@@ -267,7 +267,7 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
     {
       label: "Break",
       icon: "insert_page_break",
-      submenu: [{ label: "Page break", shortcut: shortcut("⌘+Enter"), onSelect: actions.insertPageBreak }],
+      submenu: [{ label: "Page break", shortcut: shortcutText("pageBreak"), onSelect: actions.insertPageBreak }],
     },
     {
       label: "Page elements",
@@ -286,8 +286,8 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
             />
           ),
         },
-        { label: "Header", icon: "page_header", shortcut: chord("H"), onSelect: actions.insertHeader },
-        { label: "Footer", icon: "page_footer", shortcut: chord("F"), onSelect: actions.insertFooter },
+        { label: "Header", icon: "page_header", shortcut: shortcutText("header"), onSelect: actions.insertHeader },
+        { label: "Footer", icon: "page_footer", shortcut: shortcutText("footer"), onSelect: actions.insertFooter },
         {
           label: "Page numbers",
           icon: "tag",
@@ -309,14 +309,14 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
             />
           ),
         },
-        { label: "Footnote", icon: "superscript", shortcut: shortcut("⌘+Option+F"), onSelect: actions.insertFootnote },
+        { label: "Footnote", icon: "superscript", shortcut: shortcutText("footnote"), onSelect: actions.insertFootnote },
       ],
     },
     "separator",
     {
       label: "Comment",
       icon: "add_comment",
-      shortcut: shortcut("⌘+Option+M"),
+      shortcut: shortcutText("addComment"),
       disabled: !state.hasSelection,
       onSelect: actions.addComment,
     },
@@ -329,10 +329,6 @@ function readOnlyEntries(entries: MenuEntry[], keep: string[]): MenuEntry[] {
   );
 }
 
-/** The header and footer shortcuts are chords: Ctrl+⌘O, then Ctrl+⌘H or Ctrl+⌘F. */
-function chord(key: string): string {
-  return isMac ? `Ctrl+⌘O Ctrl+⌘${key}` : `Ctrl+Alt+O Ctrl+Alt+${key}`;
-}
 
 function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): MenuEntry[] {
   return [
@@ -364,7 +360,7 @@ function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): M
       submenu: formatTableMenu(editor, actions, state.table),
     },
     "separator",
-    { label: "Clear formatting", icon: "format_clear", shortcut: shortcut("⌘\\"), onSelect: () => clearFormatting(editor) },
+    { label: "Clear formatting", icon: "format_clear", shortcut: shortcutText("clearFormatting"), onSelect: () => clearFormatting(editor) },
   ];
 }
 
@@ -388,8 +384,9 @@ function listPresetEntry(label: string, kind: ListKind, actions: EditorActions, 
 
 function toolsMenu(actions: EditorActions): MenuEntry[] {
   return [
-    { label: "Word count", icon: "tag", shortcut: shortcut("⌘+Shift+C"), onSelect: actions.wordCount },
-    { label: "Review suggested edits", icon: "rate_review", shortcut: chord("U"), onSelect: actions.reviewSuggestedEdits },
+    { label: "Word count", icon: "tag", shortcut: shortcutText("wordCount"), onSelect: actions.wordCount },
+    { label: "Review suggested edits", icon: "rate_review", shortcut: shortcutText("reviewSuggestions"), onSelect: actions.reviewSuggestedEdits },
     { label: "Preferences", icon: "tune", onSelect: actions.preferences },
+    { label: "Keyboard shortcuts", icon: "keyboard", shortcut: shortcutText("keyboardShortcuts"), onSelect: actions.keyboardShortcuts },
   ];
 }
