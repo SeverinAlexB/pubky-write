@@ -186,7 +186,7 @@ test("the template gallery expands, and templates can be hidden and shown again"
   await expect(page.getByRole("heading", { name: "Start a new document" })).toBeVisible();
 });
 
-/** A Word file with a title, headings, a list, a table and a footnote (which is dropped). */
+/** A Word file with a title, headings, a list, a table and a footnote. */
 async function wordFile(): Promise<Buffer> {
   const cell = (text: string) => new TableCell({ children: [new Paragraph(text)] });
   const file = new Document({
@@ -234,7 +234,10 @@ test("uploading a .docx creates a document with the same structure", async ({ pa
   await expect(editor(page).locator("strong")).toHaveText("Ship it");
   await expect(editor(page).locator("ul > li")).toHaveText(["Write the docs", "Tell customers"]);
   await expect(editor(page).locator("table tr")).toHaveText(["TaskOwner", "DocsSam"]);
-  await expect(page.locator(".snackbar")).toHaveText("Some content could not be converted and was left out: Footnotes.");
+  // The footnote is imported too, so nothing was left out.
+  await expect(editor(page).locator("sup.footnote-ref")).toHaveCount(1);
+  await expect(page.locator(".footnote-area .footnote-text")).toHaveText("Source");
+  await expect(page.locator(".snackbar")).toHaveCount(0);
 });
 
 test("dropping a .md file creates a document with the same structure", async ({ page }) => {

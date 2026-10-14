@@ -1,5 +1,5 @@
 // Hooks shared by the editor and the version history preview.
-import { paperSizes, type PageSetup } from "@docs/shared";
+import { pageGeometry, paperSizes, type PageSetup } from "@docs/shared";
 import { useEffect, useState } from "react";
 
 /** Space kept on each side of the page when zoomed to fit. */
@@ -21,17 +21,26 @@ export function useFitZoom(pageWidth: number, reserved: number) {
   return { value: areaWidth === null ? 1 : (areaWidth - reserved - 2 * FIT_MARGIN) / pageWidth, ref, element };
 }
 
-/** Printing uses the document's paper size and margins. */
-export function usePrintPageRule(setup: PageSetup, enabled = true) {
+/**
+ * Printing uses the document's paper size. With print layout (`paged`) the pages are printed as
+ * laid out on screen, so the printed page is exactly one screen page (in CSS pixels) with no
+ * margins of its own; without it the browser breaks pages with the document's margins.
+ */
+export function usePrintPageRule(setup: PageSetup, enabled = true, paged = true) {
   useEffect(() => {
     if (!enabled) return;
     const style = document.createElement("style");
-    const paper = paperSizes[setup.paperSize];
-    const [width, height] = setup.orientation === "landscape" ? [paper.height, paper.width] : [paper.width, paper.height];
-    const margins = [setup.marginTop, setup.marginRight, setup.marginBottom, setup.marginLeft].map((points) => `${points}pt`);
-    style.textContent = `@page { size: ${width}mm ${height}mm; margin: ${margins.join(" ")}; }`;
+    if (paged) {
+      const { width, height } = pageGeometry(setup);
+      style.textContent = `@page { size: ${width}px ${height}px; margin: 0; }`;
+    } else {
+      const paper = paperSizes[setup.paperSize];
+      const [width, height] = setup.orientation === "landscape" ? [paper.height, paper.width] : [paper.width, paper.height];
+      const margins = [setup.marginTop, setup.marginRight, setup.marginBottom, setup.marginLeft].map((points) => `${points}pt`);
+      style.textContent = `@page { size: ${width}mm ${height}mm; margin: ${margins.join(" ")}; }`;
+    }
     style.dataset.pageSetup = "";
     document.head.append(style);
     return () => style.remove();
-  }, [setup, enabled]);
+  }, [setup, enabled, paged]);
 }

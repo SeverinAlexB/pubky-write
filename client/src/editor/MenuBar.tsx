@@ -3,12 +3,13 @@ import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { MenuList, type MenuEntry, type MenuItem } from "../components/MenuList.tsx";
-import { shortcut } from "../components/shortcuts.ts";
+import { isMac, shortcut } from "../components/shortcuts.ts";
 import { useDismiss } from "../components/useDismiss.ts";
 import type { EditorActions, ListKind, ViewSettings } from "./actions.ts";
 import { clearFormatting } from "./extensions.ts";
 import { alignAndIndentMenu, lineSpacingEntries, paragraphSpacingAt, paragraphStylesMenu, textMenu } from "./formatMenus.ts";
 import { ListPresetMenu } from "./ListPresets.tsx";
+import { PageNumbersPanel, TableOfContentsPanel } from "./PageElementPresets.tsx";
 import { currentParagraphStyle } from "./paragraphStyles.ts";
 import { formatTableMenu, tableMenuState } from "./tableMenus.ts";
 import { TableSizePicker } from "./TableSizePicker.tsx";
@@ -272,11 +273,43 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
       label: "Page elements",
       icon: "page_header",
       submenu: [
-        { label: "Table of contents", onSelect: actions.insertTableOfContents },
-        { label: "Header", onSelect: actions.insertHeader },
-        { label: "Footer", onSelect: actions.insertFooter },
-        { label: "Page numbers", onSelect: actions.insertPageNumbers },
-        { label: "Footnote", shortcut: shortcut("⌘+Option+F"), onSelect: actions.insertFootnote },
+        {
+          label: "Table of contents",
+          icon: "toc",
+          disabled: !actions.insertTableOfContents,
+          panel: (close) => (
+            <TableOfContentsPanel
+              onPick={(style) => {
+                close();
+                actions.insertTableOfContents?.(style);
+              }}
+            />
+          ),
+        },
+        { label: "Header", icon: "page_header", shortcut: chord("H"), onSelect: actions.insertHeader },
+        { label: "Footer", icon: "page_footer", shortcut: chord("F"), onSelect: actions.insertFooter },
+        {
+          label: "Page numbers",
+          icon: "tag",
+          disabled: !actions.insertPageNumbers,
+          panel: (close) => (
+            <PageNumbersPanel
+              onPreset={(options) => {
+                close();
+                actions.insertPageNumbers?.(options);
+              }}
+              onMoreOptions={() => {
+                close();
+                actions.pageNumberOptions?.();
+              }}
+              onPageCount={() => {
+                close();
+                actions.insertPageCount?.();
+              }}
+            />
+          ),
+        },
+        { label: "Footnote", icon: "superscript", shortcut: shortcut("⌘+Option+F"), onSelect: actions.insertFootnote },
       ],
     },
     "separator",
@@ -288,6 +321,11 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
       onSelect: actions.addComment,
     },
   ];
+}
+
+/** The header and footer shortcuts are chords: Ctrl+⌘O, then Ctrl+⌘H or Ctrl+⌘F. */
+function chord(key: string): string {
+  return isMac ? `Ctrl+⌘O Ctrl+⌘${key}` : `Ctrl+Alt+O Ctrl+Alt+${key}`;
 }
 
 function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): MenuEntry[] {

@@ -1,26 +1,36 @@
 // Converts a document to a Word file with the `docx` library.
 import {
   AlignmentType,
+  Bookmark,
   BorderStyle,
   Document,
   ExternalHyperlink,
+  Footer,
+  FootnoteReferenceRun,
+  Header,
   HeadingLevel,
   HeightRule,
   ImageRun,
+  InternalHyperlink,
+  LeaderType,
   LevelFormat,
   Packer,
   PageBreak,
+  PageNumber,
   PageOrientation,
   Paragraph,
   ShadingType,
+  Tab,
   Table,
   TableCell,
   TableLayoutType,
   TableRow,
+  TabStopType,
   TextRun,
   WidthType,
   type INumberingOptions,
   type IParagraphOptions,
+  type IRunOptions,
   type IStylesOptions,
   type ParagraphChild,
 } from "docx";
@@ -34,14 +44,21 @@ import {
   DEFAULT_TABLE_BORDER_WIDTH_PT,
   isSize,
   DEFAULT_LINE_SPACING,
+  documentSchema,
+  isEmptyRegion,
   listPresetIndex,
   numberedPresets,
+  pageElementsOf,
   pageSetupOf,
   pageSizeMm,
   paperSizes,
   paragraphStyleDefinitions,
+  tocHeadings,
+  tocTarget,
   type NumberFormat,
   type ParagraphStyleDefinition,
+  type RegionContent,
+  type RegionKey,
 } from "@docs/shared";
 
 export type ImageReader = (src: string) => Promise<Buffer | null>;
@@ -86,10 +103,44 @@ const numberFormats: Record<NumberFormat, (typeof LevelFormat)[keyof typeof Leve
 };
 
 export async function toDocx(doc: Node, title: string, readImage: ImageReader): Promise<Buffer> {
-  const converter = new DocxConverter(readImage, contentWidthTwips(doc));
+  const converter = new DocxConverter(readImage, contentWidthTwips(doc), doc);
   const children = await converter.blocks(doc);
-  const file = new Document({ title, styles, numbering, sections: [{ properties: sectionProperties(doc), children }] });
+  const settings = pageElementsOf(doc);
+  const region = async (key: RegionKey, Kind: typeof Header | typeof Footer, always: boolean) => {
+    const content = settings[key];
+    if (isEmptyRegion(content) && !always) return undefined;
+    const blocks = content && !isEmptyRegion(content) ? await converter.blocks(regionDoc(content)) : [];
+    return new Kind({ children: blocks.length > 0 ? blocks : [new Paragraph("")] });
+  };
+  // With a different first page, page 1 gets its own (possibly empty) header and footer.
+  const first = settings.differentFirstPage;
+  const headers = { default: await region("header", Header, false), ...(first && { first: await region("firstPageHeader", Header, true) }) };
+  const footers = { default: await region("footer", Footer, false), ...(first && { first: await region("firstPageFooter", Footer, true) }) };
+  const properties = sectionProperties(doc);
+  const file = new Document({
+    title,
+    styles,
+    numbering,
+    footnotes: converter.footnotes,
+    sections: [
+      {
+        properties: {
+          ...properties,
+          page: { ...properties.page, ...(settings.pageNumberStart !== 1 && { pageNumbers: { start: settings.pageNumberStart } }) },
+          ...(first && { titlePage: true }),
+        },
+        headers,
+        footers,
+        children,
+      },
+    ],
+  });
   return Packer.toBuffer(file);
+}
+
+/** Header, footer or footnote content as a document node. */
+function regionDoc(content: RegionContent): Node {
+  return documentSchema.nodeFromJSON({ type: "doc", content });
 }
 
 const TWIPS_PER_MM = 1440 / 25.4;
@@ -196,13 +247,29 @@ const numbering: INumberingOptions = {
   ],
 };
 
+/** Bookmark name of the n-th heading, for links from a table of contents. */
+const headingBookmark = (index: number) => `_Toc${index}`;
+
 class DocxConverter {
   private listCount = 0;
+  /** Word footnotes by id, in the order of their references. */
+  readonly footnotes: Record<number, { children: Paragraph[] }> = {};
+  private footnoteCount = 0;
+  /** Headings a table of contents links to, by node, with their bookmark index. */
+  private readonly linkedHeadings = new Map<Node, number>();
 
   constructor(
     private readonly readImage: ImageReader,
     private readonly contentWidth: number,
-  ) {}
+    private readonly doc: Node,
+  ) {
+    let linked = false;
+    doc.descendants((node) => {
+      if (node.type.name === "tableOfContents" && node.attrs.style === "links") linked = true;
+      return !linked && node.isBlock && !node.isTextblock;
+    });
+    if (linked) tocHeadings(doc).forEach((heading, index) => this.linkedHeadings.set(doc.nodeAt(heading.pos)!, index));
+  }
 
   async blocks(parent: Node, list?: ListContext, quoted = false): Promise<Block[]> {
     const blocks: Block[] = [];
@@ -226,11 +293,13 @@ class DocxConverter {
             ...base,
             ...(node.attrs.paragraphStyle === "title" && { heading: HeadingLevel.TITLE }),
             ...(node.attrs.paragraphStyle === "subtitle" && { style: SUBTITLE_STYLE }),
-            children: await this.inline(node),
+            children: await this.headingContent(node),
           }),
         ];
       case "heading":
-        return [new Paragraph({ ...base, heading: headings[node.attrs.level - 1], children: await this.inline(node) })];
+        return [new Paragraph({ ...base, heading: headings[node.attrs.level - 1], children: await this.headingContent(node) })];
+      case "tableOfContents":
+        return this.tableOfContents(node);
       case "blockquote":
         return this.blocks(node, list, true);
       case "bulletList":
@@ -264,6 +333,61 @@ class DocxConverter {
       default:
         return [new Paragraph({ ...base, children: [new TextRun(node.textContent)] })];
     }
+  }
+
+  /** A heading's text, in a bookmark when a table of contents links to it. */
+  private async headingContent(node: Node): Promise<ParagraphChild[]> {
+    const children = await this.inline(node);
+    const index = this.linkedHeadings.get(node);
+    return index === undefined ? children : [new Bookmark({ id: headingBookmark(index), children })];
+  }
+
+  /**
+   * The table of contents as it is shown: static paragraphs, with the page number at a right tab
+   * stop (dotted leader for the dotted style), or links to the headings' bookmarks.
+   */
+  private tableOfContents(toc: Node): Paragraph[] {
+    const headingIndex = new Map(tocHeadings(this.doc).map((heading, index) => [heading.pos, index]));
+    return children(toc).map((entry, index) => {
+      const text = entry.textContent;
+      const indent = { left: TWIPS_PER_INDENT * (entry.attrs.indent as number) };
+      const target = tocTarget(this.doc, toc, index);
+      const bookmark = target ? headingIndex.get(target.pos) : undefined;
+      if (toc.attrs.style === "links") {
+        const run = new TextRun({ text, color: "1155CC", underline: {} });
+        return new Paragraph({
+          indent,
+          spacing: { after: 4 * TWIPS_PER_POINT },
+          children: [bookmark === undefined ? run : new InternalHyperlink({ anchor: headingBookmark(bookmark), children: [run] })],
+        });
+      }
+      const page = entry.attrs.page === null ? [] : [new TextRun({ children: [new Tab(), String(entry.attrs.page)] })];
+      return new Paragraph({
+        indent,
+        spacing: { after: 4 * TWIPS_PER_POINT },
+        tabStops: [
+          { type: TabStopType.RIGHT, position: this.contentWidth, ...(toc.attrs.style === "dotted" && { leader: LeaderType.DOT }) },
+        ],
+        children: [new TextRun(text), ...page],
+      });
+    });
+  }
+
+  /** A footnote's text as Word footnote paragraphs; returns the id for its reference. */
+  private async footnote(content: RegionContent): Promise<number> {
+    const id = ++this.footnoteCount;
+    const paragraphs: Paragraph[] = [];
+    for (const paragraph of children(regionDoc(content))) {
+      paragraphs.push(
+        new Paragraph({
+          style: "FootnoteText",
+          alignment: alignments[paragraph.attrs.textAlign as keyof typeof alignments],
+          children: await this.inline(paragraph),
+        }),
+      );
+    }
+    this.footnotes[id] = { children: paragraphs.length > 0 ? paragraphs : [new Paragraph({ style: "FootnoteText" })] };
+    return id;
   }
 
   private nestedList(node: Node, kind: ListKind, parent: ListContext | undefined): ListContext {
@@ -389,6 +513,11 @@ class DocxConverter {
         runs.push(new TextRun({ text: "", break: 1 }));
       } else if (node.type.name === "image") {
         runs.push(await this.image(node));
+      } else if (node.type.name === "pageField") {
+        const field = node.attrs.kind === "count" ? PageNumber.TOTAL_PAGES : PageNumber.CURRENT;
+        runs.push(new TextRun({ ...runOptions(node.marks, strike), children: [field] }));
+      } else if (node.type.name === "footnote") {
+        runs.push(new FootnoteReferenceRun(await this.footnote(node.attrs.content as RegionContent)));
       } else if (node.isText) {
         const run = textRun(node.text ?? "", node.marks, strike);
         const link = node.marks.find((mark) => mark.type.name === "link");
@@ -400,14 +529,17 @@ class DocxConverter {
 }
 
 function textRun(text: string, marks: readonly Mark[], strike = false): TextRun {
+  return new TextRun({ text, ...runOptions(marks, strike) });
+}
+
+function runOptions(marks: readonly Mark[], strike = false): IRunOptions {
   const has = (name: string) => marks.some((mark) => mark.type.name === name);
   const attr = (name: string, key: string) => marks.find((mark) => mark.type.name === name)?.attrs[key];
   const color = hexColor(attr("textStyle", "color"));
   const fontFamily = attr("textStyle", "fontFamily") as string | undefined;
   const fontSize = halfPoints(attr("textStyle", "fontSize"));
   const highlight = hexColor(attr("highlight", "color") ?? (has("highlight") ? "#FFFF00" : undefined));
-  return new TextRun({
-    text,
+  return {
     // Unset rather than false, so the paragraph style (such as Heading 6's italics) applies.
     bold: has("bold") || undefined,
     italics: has("italic") || undefined,
@@ -419,7 +551,7 @@ function textRun(text: string, marks: readonly Mark[], strike = false): TextRun 
     size: fontSize,
     color: has("link") ? "1155CC" : color,
     shading: highlight ? { type: ShadingType.CLEAR, fill: highlight } : undefined,
-  });
+  };
 }
 
 function listOptions(list: ListContext | undefined): Partial<IParagraphOptions> {

@@ -114,6 +114,15 @@ To restore a backup:
   centimetres, or inches in the United States) show the margins and the current
   paragraph's indents. View > Show ruler and View > Show print layout (off for
   one continuous sheet) are remembered in the browser.
+- **Page elements** (Insert > Page elements, print layout only): headers and
+  footers (also Ctrl+⌘O then Ctrl+⌘H or Ctrl+⌘F, or double-click the top or
+  bottom margin) with their own formatting and alignment, "Different first
+  page", and Options to add page numbers or remove them; page numbers (four
+  presets, or More options for the position, the first page and the starting
+  number) and a page count field; footnotes (⌘⌥F) at the bottom of their page,
+  numbered in order; and a table of contents in three styles (page numbers,
+  dotted leaders or blue links that jump to the heading), refreshed with the
+  Update button on its pill. See [docs/design/page-elements.md](docs/design/page-elements.md).
 - **Find** (⌘F): a card at the top right of the editor area highlights every
   match as you type, Enter and Shift+Enter move between them. **Find and
   replace** (⌘⇧H) adds match case, JavaScript regular expressions (`$1` in the
@@ -157,12 +166,19 @@ To restore a backup:
 - **Export:** File > Download as Microsoft Word (.docx), plain text (.txt) or
   Markdown (.md). Word files use Word's Title, Subtitle and Heading 1–6 styles,
   the document's page size, orientation and margins, the tables' column
-  widths, row heights, borders and cell colours, and the images' sizes.
+  widths, row heights, borders and cell colours, and the images' sizes; headers
+  and footers (with a different first page), page number fields and the page
+  number start, real Word footnotes, and the table of contents as paragraphs
+  with right-aligned page numbers (and dotted leaders) or links to bookmarks on
+  the headings.
   In Markdown, Title becomes a level 1 heading, Subtitle a plain paragraph,
   checklists `- [ ]` / `- [x]`, superscript and subscript `<sup>` / `<sub>`,
-  and a page break the comment `<!-- page break -->`. PDF uses the browser's
-  print dialog with print styles that output only the pages, on the document's
-  paper size and margins. Edit > Copy as
+  a page break the comment `<!-- page break -->`, footnotes `[^1]` with the
+  notes at the end and a table of contents a list of links; headers and footers
+  are left out. PDF uses the browser's print dialog: with print layout it prints
+  the pages exactly as laid out on screen (headers, footers, footnotes and page
+  numbers included), otherwise the browser breaks the pages with the
+  document's margins. Edit > Copy as
   Markdown copies the selection.
 - **Make a copy:** File > Make a copy creates "Copy of <title>" without the
   comments.
@@ -211,8 +227,18 @@ blocks and lines fall and inserts spacer widgets (decorations, not document
 content) that push the next line past the bottom margin, the gap and the next
 page's top margin. The rules are in `client/src/editor/pageLayout.ts`. Images,
 tables and other atomic blocks move to the next page whole; one taller than a
-page overflows. Printing hides the spacers and lets the browser break pages with
-the same page size and margins.
+page overflows.
+
+Headers and footers are document attributes (block JSON) and footnote text is an
+attribute of the footnote's reference, so they are saved, validated, undone and
+versioned like the rest without moving any positions in the content. They are
+edited in a second editor bound to that attribute, drawn over the pages by
+`client/src/editor/PageElements.tsx`, and measured by the pagination: a tall
+header or footer moves the content in, and footnotes take their space from the
+bottom of the page their reference is on (a line whose footnotes do not fit
+moves to the next page with them). Before printing, the pagination lays the
+pages out again without gaps between them, and the `@page` rule uses the page's
+size with no margins, so the printout matches the screen.
 
 ## How import works
 
@@ -228,7 +254,9 @@ checks the result against it before creating the document.
   starting with ☐ or ☑ (as the Word export writes checklists) become
   checklists; tables with merged cells, header rows and column widths; PNG, JPEG, GIF and WebP
   images (stored in `uploads/`); line and page breaks; page size, orientation
-  and margins. Deleted tracked changes are left out.
+  and margins; the default and first-page header and footer, the page number
+  start, PAGE and NUMPAGES fields and footnotes. Deleted tracked changes are
+  left out.
 - **Markdown** (`markdown.ts`, with markdown-it): headings, emphasis,
   strikethrough, inline code, links, lists and `- [ ]` checklists, quotes, code
   blocks, horizontal lines, tables with column alignment, images (data URLs are
@@ -237,9 +265,9 @@ checks the result against it before creating the document.
   tell it apart from a Title.
 
 Everything else is dropped, and the editor shows which kinds of content were
-left out: headers and footers, footnotes, comments, equations, text boxes,
-charts and shapes, embedded objects, images in other formats or from local
-paths, and other HTML.
+left out: endnotes, even-page headers and footers, comments, equations, text
+boxes, charts and shapes, embedded objects, images in other formats or from
+local paths, and other HTML.
 
 ## How the comment margin works
 
@@ -270,7 +298,7 @@ removed text, struck through, where it was.
 | `server/` | Hono API, SQLite storage (`node:sqlite`), revisions, exports   |
 | `client/` | React app: document list, editor, toolbar, version history     |
 | `e2e/`    | Playwright end-to-end tests                                    |
-| `docs/`   | Research notes on the save protocol                |
+| `docs/`   | Research notes, the functional specification and design notes  |
 
 ## API
 
@@ -323,7 +351,11 @@ the pages settle and frame times while typing on pages 1 and 50. Set
 - Images are always in line with text; wrapping, rotation, cropping and image
   borders are not available yet. Table alignment and fixed column widths in
   Table options are not available yet either.
-- No headers, footers or page numbers.
+- One section per document: no section breaks, so no different headers or
+  page numbering per section; Header format (margins of the header and footer)
+  is not available yet. Footnotes are paragraphs of text (no images or tables)
+  and comments cannot be attached to header, footer or footnote text. Version
+  history does not highlight changes in headers, footers or footnotes.
 - Comments are not included in exports. The author is always "You"; emoji
   reactions and renaming the tab are not available yet.
 - No suggestion mode or real-time collaboration yet.

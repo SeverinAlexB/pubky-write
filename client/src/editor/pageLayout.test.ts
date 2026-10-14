@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { contentBottom, contentTop, paginate, sameSpacers, type LayoutBox, type PageFrame } from "./pageLayout.ts";
+import {
+  contentBottom,
+  contentTop,
+  FOOTNOTE_SEPARATOR_SPACE,
+  paginate,
+  sameSpacers,
+  type LayoutBox,
+  type PageFrame,
+} from "./pageLayout.ts";
 
 // A4 at 96 dpi with 2.54 cm margins: the writable area of page 1 is 96–1027.
 const a4: PageFrame = { pageHeight: 1123, gap: 10, marginTop: 96, marginBottom: 96 };
@@ -17,7 +25,7 @@ function paragraph(top: number, count: number, pos: number): LayoutBox {
 
 describe("paginate", () => {
   it("keeps content that fits on one page", () => {
-    expect(paginate([paragraph(96, 10, 1)], a4)).toEqual({ spacers: [], pageCount: 1 });
+    expect(paginate([paragraph(96, 10, 1)], a4)).toEqual({ spacers: [], pageCount: 1, footnotePages: [] });
     expect(paginate([], a4).pageCount).toBe(1);
   });
 
@@ -73,7 +81,7 @@ describe("paginate", () => {
 
   it("lets space after the last line hang into the margin", () => {
     const box = { ...paragraph(96, 54, 1), bottom: 96 + 54 * LINE + 20 };
-    expect(paginate([box], a4)).toEqual({ spacers: [], pageCount: 1 });
+    expect(paginate([box], a4)).toEqual({ spacers: [], pageCount: 1, footnotePages: [] });
   });
 
   it("gives the bottom of the writable area", () => {
@@ -86,5 +94,39 @@ describe("sameSpacers", () => {
   it("ignores differences below half a pixel", () => {
     expect(sameSpacers([{ pos: 1, shift: 10, inline: true }], [{ pos: 1, shift: 10.2, inline: true }])).toBe(true);
     expect(sameSpacers([{ pos: 1, shift: 10, inline: true }], [{ pos: 2, shift: 10, inline: true }])).toBe(false);
+  });
+
+  it("reserves room for footnotes at the bottom of their reference's page", () => {
+    // 54 lines fit on a page without footnotes. A 40px footnote on line 10 takes 60px with the separator,
+    // so only lines whose bottom is at most 1027 - 60 = 967 stay: 51 lines.
+    const box = paragraph(96, 60, 1);
+    box.footnotes = [{ index: 0, top: 96 + 10 * LINE, bottom: 96 + 11 * LINE, height: 40 }];
+    const { spacers, footnotePages } = paginate([box], a4);
+    expect(footnotePages).toEqual([0]);
+    expect(spacers[0]).toMatchObject({ pos: 1 + 51 * 10, inline: true });
+    expect(96 + 52 * LINE + 40 + FOOTNOTE_SEPARATOR_SPACE).toBeGreaterThan(contentBottom(a4, 0));
+  });
+
+  it("moves a line to the next page with its footnote when the footnote does not fit", () => {
+    // Line 53 (bottom 1014) fits, but not with a 30px footnote and the separator.
+    const box = paragraph(96, 55, 1);
+    box.footnotes = [
+      { index: 0, top: 96, bottom: 96 + LINE, height: 20 },
+      { index: 1, top: 96 + 53 * LINE, bottom: 96 + 54 * LINE, height: 30 },
+    ];
+    const { spacers, footnotePages } = paginate([box], a4);
+    expect(footnotePages).toEqual([0, 1]);
+    // Room left with the first footnote: 1027 - 40 = 987, so 52 lines stay on page 1.
+    expect(spacers[0]).toMatchObject({ pos: 1 + 52 * 10, inline: true });
+  });
+
+  it("uses the first page's own margins", () => {
+    const frame: PageFrame = { ...a4, firstMarginTop: 150, firstMarginBottom: 200 };
+    expect(contentTop(frame, 0)).toBe(150);
+    expect(contentBottom(frame, 0)).toBe(1123 - 200);
+    expect(contentTop(frame, 1)).toBe(1133 + 96);
+    // From 150, lines fit above 923: 45 lines.
+    const { spacers } = paginate([paragraph(150, 50, 1)], frame);
+    expect(spacers[0]).toMatchObject({ pos: 1 + 45 * 10 });
   });
 });

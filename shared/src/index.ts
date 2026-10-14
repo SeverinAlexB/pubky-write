@@ -12,3 +12,5 @@ export * from "./versionDiff.ts";
 export * from "./templates.ts";
 export * from "./tables.ts";
 export * from "./images.ts";
+export * from "./pageElements.ts";
+export * from "./tableOfContents.ts";

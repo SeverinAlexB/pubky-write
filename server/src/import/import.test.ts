@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { documentSchema, toMarkdown } from "@docs/shared";
+import { documentSchema, regionText, toMarkdown } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import {
   AlignmentType,
@@ -362,7 +362,10 @@ describe("docxToDocument", () => {
       marginLeft: 54,
       marginRight: 54,
     });
-    expect(dropped.sort()).toEqual(["Footnotes", "Headers and footers"]);
+    // The header and the footnote are read (see the page elements tests below).
+    expect(regionText(documentSchema, doc.attrs.header)).toBe("Running header");
+    expect(findNode(doc, "footnote")?.attrs.content).toMatchObject([{ type: "paragraph", content: [{ text: "A footnote" }] }]);
+    expect(dropped).toEqual([]);
   });
 
   it("reads back what the Word export writes, including checklists", async () => {

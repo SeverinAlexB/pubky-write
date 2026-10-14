@@ -4,6 +4,7 @@
 import type { Node } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
 import { ChangeSet, simplifyChanges } from "@tiptap/pm/changeset";
+import { pageElementKeys } from "./pageElements.ts";
 import { pageSetupKeys } from "./pageSetup.ts";
 
 /**
@@ -12,8 +13,8 @@ import { pageSetupKeys } from "./pageSetup.ts";
  */
 export function replaceDifference(doc: Node, target: Node): Transform {
   const transform = new Transform(doc);
-  for (const key of pageSetupKeys) {
-    if (doc.attrs[key] !== target.attrs[key]) transform.setDocAttribute(key, target.attrs[key]);
+  for (const key of [...pageSetupKeys, ...pageElementKeys]) {
+    if (JSON.stringify(doc.attrs[key]) !== JSON.stringify(target.attrs[key])) transform.setDocAttribute(key, target.attrs[key]);
   }
   const start = doc.content.findDiffStart(target.content);
   if (start === null) return transform;

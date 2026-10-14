@@ -1792,7 +1792,9 @@ button:disabled {
 }
 
 .page-stack {
-  height: calc(var(--page-count) * (var(--page-height) + 10px) - 10px);
+  height: calc(var(--page-count) * (var(--page-height) + var(--page-gap, 10px)) - var(--page-gap, 10px));
+  /* Page number and page count fields (see shared/src/pageElements.ts) are CSS counters. */
+  counter-reset: docs-page-count var(--page-count) docs-page 1;
 }
 
 .page-stack[hidden] {
@@ -1802,7 +1804,7 @@ button:disabled {
 .page {
   position: absolute;
   left: 0;
-  top: calc(var(--page-index) * (var(--page-height) + 10px));
+  top: calc(var(--page-index) * (var(--page-height) + var(--page-gap, 10px)));
   width: 100%;
   height: var(--page-height);
   border: 1px solid var(--page-border);
@@ -1816,7 +1818,13 @@ button:disabled {
 .page-stack .page-content {
   position: relative;
   min-height: 100%;
-  padding: var(--margin-top) var(--margin-right) 0 var(--margin-left);
+  /* A tall header on the first page moves the content down (--content-top, set by the pagination). */
+  padding: var(--content-top, var(--margin-top)) var(--margin-right) 0 var(--margin-left);
+}
+
+/* Printing lays the pages out at 100% (see pagination.ts). */
+.page-stack.is-printing {
+  zoom: 1 !important;
 }
 
 /* Without print layout the document is one continuous sheet. */
@@ -1840,6 +1848,359 @@ button:disabled {
   display: block;
   user-select: none;
   pointer-events: none;
+}
+
+/* Headers, footers and footnotes (see editor/PageElements.tsx and docs/design/page-elements.md). */
+
+.page-stack .page-region {
+  position: relative;
+  min-height: 0;
+  padding: 0;
+}
+
+/* A hidden box where the pagination measures header, footer and footnote content. */
+.page-stack > div.page-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* No size of its own: a layer over the text would stop double-clicks from selecting words. */
+.page-stack > div.page-elements {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.page-stack.is-pageless > div.page-elements {
+  display: none;
+}
+
+.page-region-slot,
+.footnote-area {
+  position: absolute;
+  left: var(--margin-left);
+  width: calc(var(--page-width) - var(--margin-left) - var(--margin-right));
+}
+
+.page-region-slot.is-footer {
+  transform: translateY(-100%);
+}
+
+.page-region-slot.is-editing {
+  z-index: 2;
+  pointer-events: auto;
+}
+
+/* While one header or footer is edited, a click on another page's copy edits that one. */
+.page-stack.is-editing-region .page-region-slot {
+  pointer-events: auto;
+}
+
+.page-region-slot .page-region {
+  outline: none;
+}
+
+/* While a header or footer is edited the body is dimmed. */
+.page-stack.is-editing-region > div:not(.page-elements, .page-sheets) > .page-content,
+.page-stack.is-editing-region .footnote-area {
+  opacity: 0.5;
+}
+
+/* The line under the header (above the footer) being edited, with its label and options. */
+.region-bar {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: calc(-1 * var(--margin-left));
+  right: calc(-1 * var(--margin-right));
+  z-index: 2;
+  height: 0;
+  border-top: 1px solid #c4c7c5;
+  pointer-events: auto;
+}
+
+.region-bar.is-footer {
+  top: -8px;
+}
+
+.region-bar-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 calc(var(--margin-right) - 8px) 0 calc(var(--margin-left) - 8px);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.region-bar-label,
+.region-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.region-bar-actions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.region-bar-actions .text-menu-button {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.region-bar-actions .text-menu-button:hover {
+  background: var(--hover);
+}
+
+.region-bar-actions .menu-list {
+  right: 0;
+  left: auto;
+  top: calc(100% + 4px);
+}
+
+/* Footnotes at the bottom of a page: a separator a third of the text width, then 10pt entries. */
+.footnote-area {
+  transform: translateY(-100%);
+  pointer-events: auto;
+}
+
+.footnote-separator {
+  width: 192px; /* 2 in, about a third of the text width */
+  height: 1px;
+  margin: 11px 0 8px;
+  background: #000;
+}
+
+.footnote-entry {
+  display: flex;
+  align-items: flex-start;
+}
+
+.footnote-entry .footnote-number {
+  flex: none;
+  padding-right: 2px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8.5px;
+  line-height: 1;
+}
+
+.footnote-entry .page-content.footnote-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.333px; /* 10pt */
+  cursor: text;
+}
+
+.footnote-entry .footnote-text .ProseMirror,
+.footnote-entry .footnote-text.ProseMirror {
+  outline: none;
+}
+
+/* Footnote references are numbered in document order. */
+.page-content {
+  counter-reset: docs-footnote;
+}
+
+.page-content .footnote-ref {
+  counter-increment: docs-footnote;
+  padding: 0 1px;
+}
+
+.page-content .footnote-ref:empty::after {
+  content: counter(docs-footnote);
+}
+
+.page-content .footnote-ref.ProseMirror-selectednode {
+  outline: 2px solid #adc6f7;
+}
+
+.page-content .page-field:empty::after {
+  content: counter(docs-page);
+}
+
+.page-content .page-field[data-field="count"]:empty::after {
+  content: counter(docs-page-count);
+}
+
+/* Table of contents: one block of entries; the page numbers are drawn from an attribute. */
+.page-content .toc {
+  position: relative;
+  margin: 0;
+  cursor: default;
+}
+
+.page-content .toc.ProseMirror-selectednode {
+  outline: 1px solid #adc6f7;
+  outline-offset: 2px;
+}
+
+.page-content .toc-entry {
+  display: flex;
+  align-items: baseline;
+  padding-bottom: 4pt;
+  line-height: 1.15;
+}
+
+.page-content .toc-text {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.page-content .toc-leader {
+  flex: 1 1 0;
+  min-width: 8px;
+  margin: 0 4px;
+}
+
+.page-content .toc[data-style="dotted"] .toc-leader {
+  align-self: flex-end;
+  margin-bottom: 0.3em;
+  border-bottom: 2px dotted #000;
+}
+
+.page-content .toc-page::after {
+  content: attr(data-number);
+}
+
+.page-content .toc[data-style="links"] .toc-text {
+  color: #1155cc;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.page-content .toc[data-style="links"] .toc-leader,
+.page-content .toc[data-style="links"] .toc-page {
+  display: none;
+}
+
+/* The pill at the top left of a table of contents with the cursor in it. */
+.toc-pill {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+  transform: translateY(calc(-100% - 4px));
+}
+
+.toc-pill .icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+}
+
+.toc-pill .menu-list {
+  top: calc(100% + 4px);
+}
+
+/* Insert > Page elements > Page numbers and Table of contents: icon presets. */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 72px);
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.preset-grid.is-toc {
+  grid-template-columns: repeat(3, 72px);
+}
+
+.preset-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 92px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.preset-tile:hover,
+.preset-tile:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+  background: var(--hover);
+}
+
+.preset-tile svg {
+  width: 56px;
+  height: 76px;
+}
+
+.preset-panel-items {
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+}
+
+.page-numbers-dialog {
+  width: 304px;
+}
+
+.page-numbers-dialog fieldset {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.page-numbers-dialog legend {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.page-numbers-dialog .radio-option {
+  min-height: 32px;
+}
+
+.page-numbers-dialog .radio-option input[type="number"] {
+  width: 72px;
+  height: 32px;
+  margin-left: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.page-numbers-dialog .radio-option input[type="number"]:focus {
+  border-color: var(--primary);
+  outline: 1px solid var(--primary);
+}
+
+.preset-panel-items .menu-item:hover {
+  background: var(--hover);
 }
 
 .page-content {
@@ -3331,9 +3692,35 @@ body.is-column-resizing * {
     background: #fff;
   }
 
-  .page-column,
-  .page-stack,
-  .page-stack > div {
+  .page-column {
+    width: auto;
+    height: auto;
+    margin: 0;
+    background: none;
+  }
+
+  /* Print layout prints the pages as laid out on screen (spacers, headers, footers and footnotes
+     included): the pagination removes the gaps between pages before printing, and the @page
+     rule has the page's size and no margins (see pageView.ts). */
+  .page-stack:not(.is-pageless) {
+    margin: 0;
+    zoom: 1 !important;
+  }
+
+  .page-stack:not(.is-pageless) .page-region-slot,
+  .page-stack:not(.is-pageless) .footnote-area,
+  .page-stack:not(.is-pageless) > div:not(.page-elements, .page-sheets) > .page-content {
+    opacity: 1;
+  }
+
+  .region-bar,
+  .toc-pill {
+    display: none !important;
+  }
+
+  /* Without print layout the browser breaks the pages, with the document's margins. */
+  .page-stack.is-pageless,
+  .page-stack.is-pageless > div {
     width: auto;
     height: auto;
     min-height: 0;
@@ -3342,12 +3729,12 @@ body.is-column-resizing * {
     zoom: 1 !important;
   }
 
-  .page-stack .page-content {
+  .page-stack.is-pageless .page-content {
     min-height: 0;
     padding: 0;
   }
 
-  .page-content .page-spacer {
+  .page-stack.is-pageless .page-content .page-spacer {
     display: none;
   }
 
@@ -3361,6 +3748,9 @@ body.is-column-resizing * {
     margin: 0;
     border: 0;
     outline: 0;
+  }
+
+  .page-stack.is-pageless .page-content .page-break {
     break-after: page;
   }
 }

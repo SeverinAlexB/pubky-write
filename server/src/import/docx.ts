@@ -9,10 +9,23 @@
 //   starting with ☐ or ☑ (as the Word export writes checklists) become checklists.
 // - Tables with merged cells, images (PNG, JPEG, GIF, WebP), line and page breaks, and the page
 //   size, orientation and margins.
+// - The default and first-page header and footer of the last section ("different first page"),
+//   the page number start, PAGE and NUMPAGES fields, and footnotes.
 //
-// Headers, footers, footnotes, comments, equations, text boxes, charts and embedded objects are
+// Endnotes, even-page headers, comments, equations, text boxes, charts and embedded objects are
 // dropped and reported. Deleted tracked changes are left out and inserted ones kept.
-import { bulletPresets, isMargin, numberedPresets, paperSizes, paragraphStyleDefinitions, type ParagraphStyleId } from "@docs/shared";
+import {
+  bulletPresets,
+  documentSchema,
+  isMargin,
+  isPageNumberStart,
+  numberedPresets,
+  paperSizes,
+  paragraphStyleDefinitions,
+  regionProblem,
+  type ParagraphStyleId,
+  type RegionContent,
+} from "@docs/shared";
 import type { JSONContent } from "@tiptap/core";
 import JSZip from "jszip";
 import { xml2js } from "xml-js";
@@ -21,6 +34,7 @@ import {
   emptyParagraph,
   finishDocument,
   ImportError,
+  repair,
   textNode,
   type ImageStore,
   type ImportOptions,
@@ -86,22 +100,112 @@ export async function docxToDocument(data: Uint8Array, options: ImportOptions): 
   const directory = documentPath.slice(0, documentPath.lastIndexOf("/") + 1);
   const relsPath = `${directory}_rels/${documentPath.slice(directory.length)}.rels`;
 
-  const converter = new DocxConverter(
+  const rels = parseRelationships(await readPart(zip, relsPath));
+  const parts: Parts = {
     zip,
     directory,
-    parseStyles(await readPart(zip, `${directory}styles.xml`)),
-    parseNumbering(await readPart(zip, `${directory}numbering.xml`)),
-    parseRelationships(await readPart(zip, relsPath)),
-    options.storeImage,
-  );
+    styles: parseStyles(await readPart(zip, `${directory}styles.xml`)),
+    numbering: parseNumbering(await readPart(zip, `${directory}numbering.xml`)),
+    storeImage: options.storeImage,
+    dropped: new DroppedContent(),
+    footnotes: new Map(),
+  };
+  const footnotesRel = [...rels.values()].find((rel) => rel.type.endsWith("/footnotes") && !rel.external);
+  if (footnotesRel) {
+    const path = resolvePath(directory, footnotesRel.target);
+    const footnotesPart = await readPart(zip, path);
+    const footnoteRels = parseRelationships(await readPart(zip, relationshipsPath(path)));
+    for (const footnote of find(footnotesPart, "footnotes")?.children ?? []) {
+      // Separators and continuation notices have a type; real footnotes have none.
+      if (footnote.name === "footnote" && !footnote.attributes.type && footnote.attributes.id) {
+        parts.footnotes.set(footnote.attributes.id, { element: footnote, rels: footnoteRels });
+      }
+    }
+  }
+  const converter = new DocxConverter(parts, rels);
   const body = find(document, "body");
   if (!body) throw new ImportError("The Word document has no body");
   const blocks = await converter.blocks(body.children);
   const section = body.children.findLast((child) => child.name === "sectPr");
-  if (section?.children.some((child) => child.name === "headerReference" || child.name === "footerReference")) {
-    converter.dropped.add("Headers and footers");
+  const attrs = section ? { ...pageSetup(section), ...(await headersAndFooters(section, rels, parts)) } : {};
+  return { doc: finishDocument(blocks, options, attrs), dropped: parts.dropped.list() };
+}
+
+/** What every converter of a file shares: the zip, styles, numbering and footnotes. */
+type Parts = {
+  zip: JSZip;
+  directory: string;
+  styles: Styles;
+  numbering: Numbering;
+  storeImage: ImageStore;
+  dropped: DroppedContent;
+  footnotes: Map<string, { element: Element; rels: Map<string, Relationship> }>;
+};
+
+function relationshipsPath(partPath: string): string {
+  const slash = partPath.lastIndexOf("/");
+  return `${partPath.slice(0, slash + 1)}_rels/${partPath.slice(slash + 1)}.rels`;
+}
+
+/** The default and first-page header and footer of a section, the different first page and the page number start. */
+async function headersAndFooters(section: Element, rels: Map<string, Relationship>, parts: Parts): Promise<Record<string, unknown>> {
+  const attrs: Record<string, unknown> = {};
+  const differentFirstPage = toggle(child(section, "titlePg")) === true;
+  if (differentFirstPage) attrs.differentFirstPage = true;
+  const start = number(val(child(section, "pgNumType"), "start"));
+  if (isPageNumberStart(start)) attrs.pageNumberStart = start;
+
+  for (const reference of section.children) {
+    const kind = reference.name === "headerReference" ? "header" : reference.name === "footerReference" ? "footer" : null;
+    if (!kind) continue;
+    const type = reference.attributes.type ?? "default";
+    if (type === "even") {
+      parts.dropped.add("Even page headers and footers");
+      continue;
+    }
+    if (type === "first" && !differentFirstPage) continue;
+    const rel = reference.attributes.id ? rels.get(reference.attributes.id) : undefined;
+    if (!rel || rel.external) continue;
+    const path = resolvePath(parts.directory, rel.target);
+    const part = await readPart(parts.zip, path);
+    const root = find(part, kind === "header" ? "hdr" : "ftr");
+    if (!root) continue;
+    const converter = new DocxConverter(parts, parseRelationships(await readPart(parts.zip, relationshipsPath(path))), "header");
+    const content = regionContent(await converter.blocks(root.children), "header");
+    if (!content) continue;
+    const key = type === "first" ? (kind === "header" ? "firstPageHeader" : "firstPageFooter") : kind;
+    attrs[key] = content;
   }
-  return { doc: finishDocument(blocks, options, section ? pageSetup(section) : {}), dropped: converter.dropped.list() };
+  return attrs;
+}
+
+/**
+ * Header, footer or footnote content the editor allows: no page breaks or footnotes in headers,
+ * only paragraphs (with text) in footnotes. Null when nothing is left or it is still invalid.
+ */
+function regionContent(blocks: JSONContent[], kind: "header" | "footnote"): RegionContent | null {
+  const withoutNotes = (node: JSONContent): JSONContent => ({
+    ...node,
+    ...(node.content && { content: node.content.filter((inline) => inline.type !== "footnote" && inline.type !== "image").map(withoutNotes) }),
+  });
+  let result = blocks.filter((block) => block.type !== "pageBreak").map(withoutNotes);
+  if (kind === "footnote") result = result.flatMap(paragraphsOf);
+  if (result.length === 0 || result.every((block) => block.type === "paragraph" && !block.content?.length)) return null;
+  try {
+    const doc = documentSchema.nodeFromJSON({ type: "doc", content: result.map(repair) });
+    doc.check();
+    if (regionProblem(doc, kind)) return null;
+    return doc.content.toJSON() as RegionContent;
+  } catch {
+    return null;
+  }
+}
+
+/** The paragraphs of a block: headings become paragraphs, lists and tables are flattened. */
+function paragraphsOf(block: JSONContent): JSONContent[] {
+  if (block.type === "paragraph") return [{ type: "paragraph", ...(block.content && { content: block.content }) }];
+  if (block.type === "heading") return [{ type: "paragraph", ...(block.content && { content: block.content }) }];
+  return (block.content ?? []).flatMap(paragraphsOf);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -272,24 +376,30 @@ type ListInfo = { type: "bulletList" | "orderedList" | "taskList"; key: string; 
 /** A converted top-level piece: an ordinary block, or a list item still to be grouped into lists. */
 type Entry = { kind: "block"; node: JSONContent } | { kind: "item"; list: ListInfo; level: number; checked?: boolean; blocks: JSONContent[] };
 
-type Field = { instruction: string; result: boolean; link?: string };
+type Field = { instruction: string; result: boolean; link?: string; pageField?: "page" | "count"; emitted?: boolean };
 
 type InlineContext = { marks: MarkJSON[]; link?: string; inHyperlink: boolean };
 
 class DocxConverter {
-  readonly dropped = new DroppedContent();
   private readonly fields: Field[] = [];
   /** How many items each numbered list (by numbering instance and level) has had, so interrupted lists continue. */
   private readonly listCounts = new Map<string, number>();
+  private readonly zip: JSZip;
+  private readonly directory: string;
+  private readonly styles: Styles;
+  private readonly numbering: Numbering;
+  private readonly storeImage: ImageStore;
+  readonly dropped: DroppedContent;
 
+  /** `part` is the kind of part converted: the body, a header or footer, or a footnote. */
   constructor(
-    private readonly zip: JSZip,
-    private readonly directory: string,
-    private readonly styles: Styles,
-    private readonly numbering: Numbering,
+    private readonly parts: Parts,
     private readonly rels: Map<string, Relationship>,
-    private readonly storeImage: ImageStore,
-  ) {}
+    private readonly part: "body" | "header" | "footnote" = "body",
+  ) {
+    ({ zip: this.zip, directory: this.directory, styles: this.styles, numbering: this.numbering, storeImage: this.storeImage, dropped: this.dropped } =
+      parts);
+  }
 
   /** Converts body or table cell content to blocks, grouping list paragraphs into lists. */
   async blocks(elements: Element[]): Promise<JSONContent[]> {
@@ -394,11 +504,19 @@ class DocxConverter {
         case "hyperlink": {
           const rel = element.attributes.id ? this.rels.get(element.attributes.id) : undefined;
           const link = rel?.external ? rel.target : undefined;
-          if (!link && element.attributes.anchor) this.dropped.add("Links to places in the document");
+          // Table of contents entries (anchors "_Toc…") keep their text; other links within the document are reported.
+          if (!link && element.attributes.anchor && !element.attributes.anchor.startsWith("_Toc")) {
+            this.dropped.add("Links to places in the document");
+          }
           result.push(...(await this.inlineContent(element.children, { ...context, link: link ?? context.link, inHyperlink: true }, style)));
           break;
         }
         case "fldSimple": {
+          const pageField = pageFieldKind(element.attributes.instr ?? "");
+          if (pageField) {
+            result.push({ type: "pageField", attrs: { kind: pageField } });
+            break;
+          }
           const link = hyperlinkField(element.attributes.instr ?? "");
           result.push(...(await this.inlineContent(element.children, { ...context, link: link ?? context.link }, style)));
           break;
@@ -436,7 +554,10 @@ class DocxConverter {
       switch (element.name) {
         case "t":
           // Text between a field's begin and separate characters is its instruction, not shown text.
-          if (!hidden && (!field || field.result)) result.push(...textNode(element.text, marks));
+          // A page number field's result is drawn by the editor instead.
+          if (!hidden && (!field || field.result) && !this.fields.some((open) => open.pageField)) {
+            result.push(...textNode(element.text, marks));
+          }
           break;
         case "instrText":
           if (field && !field.result) field.instruction += element.text;
@@ -447,7 +568,12 @@ class DocxConverter {
           else if (type === "separate" && field) {
             field.result = true;
             field.link = hyperlinkField(field.instruction);
-          } else if (type === "end") this.fields.pop();
+            field.pageField = pageFieldKind(field.instruction);
+          } else if (type === "end") {
+            const ended = this.fields.pop();
+            const kind = ended && (ended.pageField ?? pageFieldKind(ended.instruction));
+            if (kind) result.push({ type: "pageField", attrs: { kind } });
+          }
           break;
         }
         case "tab":
@@ -474,8 +600,10 @@ class DocxConverter {
           this.dropped.add("Embedded objects");
           break;
         case "footnoteReference":
+          result.push(...(await this.footnoteReference(element.attributes.id)));
+          break;
         case "endnoteReference":
-          this.dropped.add("Footnotes");
+          this.dropped.add("Endnotes");
           break;
         case "commentReference":
           this.dropped.add("Comments");
@@ -483,6 +611,22 @@ class DocxConverter {
       }
     }
     return result;
+  }
+
+  /** A footnote reference with the footnote's text; footnotes inside headers or footnotes are dropped. */
+  private async footnoteReference(id: string | undefined): Promise<JSONContent[]> {
+    const footnote = id ? this.parts.footnotes.get(id) : undefined;
+    if (!footnote || this.part !== "body") {
+      this.dropped.add(this.part === "body" ? "Footnotes" : "Footnotes in headers, footers or footnotes");
+      return [];
+    }
+    const converter = new DocxConverter(this.parts, footnote.rels, "footnote");
+    const content = regionContent(await converter.blocks(footnote.element.children), "footnote") ?? [{ type: "paragraph" }];
+    // The text usually starts with a space after the footnote's number.
+    const first = content[0]?.content?.[0];
+    if (first?.type === "text" && first.text) first.text = first.text.replace(/^\s+/, "");
+    if (first?.type === "text" && !first.text) content[0]!.content!.shift();
+    return [{ type: "footnote", attrs: { content } }];
   }
 
   private runMarks(properties: Element | undefined, context: InlineContext, style: ParagraphStyleId): MarkJSON[] {
@@ -727,6 +871,12 @@ function taskMarker(block: JSONContent | undefined): { paragraph: JSONContent; c
   const remaining = first!.text!.slice(match[0].length);
   const content = [...(remaining ? [{ ...first, text: remaining }] : []), ...rest];
   return { paragraph: { ...block, ...(content.length > 0 ? { content } : { content: undefined }) }, checked: match[1] !== "☐" };
+}
+
+/** PAGE and NUMPAGES fields become page number and page count fields. */
+function pageFieldKind(instruction: string): "page" | "count" | undefined {
+  const name = instruction.trim().split(/\s+/)[0]?.toUpperCase();
+  return name === "PAGE" ? "page" : name === "NUMPAGES" ? "count" : undefined;
 }
 
 function hyperlinkField(instruction: string): string | undefined {

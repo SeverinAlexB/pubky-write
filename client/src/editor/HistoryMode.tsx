@@ -18,6 +18,7 @@ import { Icon } from "../components/Icon.tsx";
 import { Menu } from "../components/Menu.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { formatDay, formatVersionTime, formatVersionTitle } from "../format.ts";
+import { PageElements } from "./PageElements.tsx";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { Pagination, resetPagination } from "./pagination.ts";
 import { ToolButton } from "./toolbar/ToolButton.tsx";
@@ -199,6 +200,7 @@ export function HistoryMode({ documentId, loadRevisions, initialZoom, onBack, on
                 {/* One sheet per page, drawn by the pagination plugin. */}
                 <div className="page-sheets" aria-hidden />
                 <EditorContent editor={preview} />
+                <PageElements editor={preview} target={null} />
               </div>
             </div>
           </div>

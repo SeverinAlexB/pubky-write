@@ -125,6 +125,28 @@ describe("document list", () => {
     expect(() => applySteps(db, id, { clientId: "a", version: 0, steps: [step] })).toThrow(InvalidStepsError);
   });
 
+  it("stores headers and footnote text set with attribute steps, and rejects invalid ones", () => {
+    const { id } = createDocument(db);
+    const header = [{ type: "paragraph", content: [{ type: "pageField", attrs: { kind: "page" } }] }];
+    const note = { type: "footnote", attrs: { content: [{ type: "paragraph", content: [{ type: "text", text: "Note" }] }] } };
+    const steps = [
+      { stepType: "docAttr", attr: "header", value: header },
+      { stepType: "replace", from: 1, to: 1, slice: { content: [note] } },
+      { stepType: "attr", pos: 1, attr: "content", value: [{ type: "paragraph", content: [{ type: "text", text: "Edited" }] }] },
+    ];
+    expect(applySteps(db, id, { clientId: "a", version: 0, steps })).toEqual({ kind: "applied", version: 3 });
+    const { doc } = getDocumentContent(db, id)!;
+    expect(doc.attrs.header).toEqual(header);
+    expect(doc.firstChild!.firstChild!.attrs.content[0].content[0].text).toBe("Edited");
+
+    for (const step of [
+      { stepType: "docAttr", attr: "footer", value: [{ type: "pageBreak" }] },
+      { stepType: "attr", pos: 1, attr: "content", value: [{ type: "image", attrs: { src: "/x.png" } }] },
+    ]) {
+      expect(() => applySteps(db, id, { clientId: "a", version: 3, steps: [step] })).toThrow(InvalidStepsError);
+    }
+  });
+
   it("copies a document's content under a new title", () => {
     const original = createDocument(db, "Plan", 1);
     applySteps(db, original.id, { clientId: "a", version: 0, steps: insertTextSteps(original.id, "Budget") });

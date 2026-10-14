@@ -20,7 +20,7 @@ import { Icon } from "../components/Icon.tsx";
 import { lazyComponent } from "../components/lazyComponent.tsx";
 import { focusToolbar } from "../components/useRovingToolbar.ts";
 import { PromptDialog } from "../components/PromptDialog.tsx";
-import { shortcut } from "../components/shortcuts.ts";
+import { isMac, shortcut } from "../components/shortcuts.ts";
 import type { EditorActions } from "./actions.ts";
 import { capitaliseSelection } from "./capitalisation.ts";
 import { getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
@@ -33,9 +33,19 @@ import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
 import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
 import { MenuBar } from "./MenuBar.tsx";
+import {
+  addPageNumbers,
+  currentPageNumberOptions,
+  insertFootnote,
+  insertTableOfContents,
+  type PageNumberOptions,
+  type RegionTarget,
+} from "./pageElementCommands.ts";
+import { PageElements } from "./PageElements.tsx";
+import { TocPill } from "./TocPill.tsx";
 import { OutlinePanel, OutlineToggle } from "./OutlinePanel.tsx";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
-import { resetPagination } from "./pagination.ts";
+import { cursorPage, resetPagination } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
 import { stepsTransport } from "./stepsTransport.ts";
 import type { ImportNotice } from "../home/HomePage.tsx";
@@ -54,6 +64,7 @@ const PageSetupDialog = lazyComponent(() => import("./PageSetupDialog.tsx").then
 const CustomSpacingDialog = lazyComponent(() => import("./CustomSpacingDialog.tsx").then((module) => module.CustomSpacingDialog));
 const TableOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.TableOptionsPanel));
 const ImageOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.ImageOptionsPanel));
+const PageNumbersDialog = lazyComponent(() => import("./PageNumbersDialog.tsx").then((module) => module.PageNumbersDialog));
 const onDemand = [
   HistoryMode,
   FindReplaceDialog,
@@ -63,7 +74,11 @@ const onDemand = [
   ColorPalette,
   TableOptionsPanel,
   ImageOptionsPanel,
+  PageNumbersDialog,
 ];
+
+/** The second key of a header (H) or footer (F) chord must follow Ctrl+⌘O within this time. */
+const CHORD_TIMEOUT_MS = 2000;
 
 const OUTLINE_SETTING = "docs.outlineOpen";
 const RULER_SETTING = "docs.rulerVisible";
@@ -101,6 +116,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   // Table options or Image options, in place of All comments.
   const [optionsPanel, setOptionsPanel] = useState<"table" | "image" | null>(null);
   const [commentsHidden, setCommentsHidden] = useState(() => localStorage.getItem(COMMENTS_HIDDEN_SETTING) === "true");
+  // The header, footer or footnote being edited, and its editor (which the toolbar then acts on).
+  const [regionTarget, setRegionTarget] = useState<RegionTarget | null>(null);
+  const [regionEditor, setRegionEditor] = useState<Editor | null>(null);
+  const [pageNumbersDialog, setPageNumbersDialog] = useState<Required<PageNumberOptions> | null>(null);
   const location = useLocation();
   // A notice from the document list, such as content an import left out.
   const [notice, setNotice] = useState<string | null>(
@@ -120,6 +139,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     activateComment: (_id: number | null) => {},
     openHistory: () => {},
     toggleCommentsHidden: () => {},
+    insertFootnote: () => {},
+    editRegion: (_kind: "header" | "footer") => {},
     historyOpen: false,
   });
 
@@ -130,6 +151,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         clientId: crypto.randomUUID(),
         onLinkShortcut: () => handlers.current.openLinkDialog(),
         onCommentShortcut: () => handlers.current.startComment(),
+        onFootnoteShortcut: () => handlers.current.insertFootnote(),
         comments: doc.comments.map(({ id, from, to, resolved }) => ({ id, from, to, resolved })),
         commentsHidden,
         onCommentClick: (id) => handlers.current.activateComment(id),
@@ -248,11 +270,29 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const geometry = useMemo(() => pageGeometry(pageSetup), [pageSetup]);
   const unit = useMemo(() => lengthUnit(navigator.language), []);
   // Version history mode sets its own, for the version it shows.
-  usePrintPageRule(pageSetup, !historyOpen);
+  usePrintPageRule(pageSetup, !historyOpen, printLayout);
 
   // Shortcuts that work anywhere on the page, overriding the browser's own find.
   useEffect(() => {
+    let chordStarted = 0;
     const onKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+⌘O then Ctrl+⌘H (header) or Ctrl+⌘F (footer); Ctrl+Alt elsewhere.
+      const chordModifiers = isMac
+        ? event.metaKey && event.ctrlKey && !event.altKey && !event.shiftKey
+        : event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey;
+      if (chordModifiers && !handlers.current.historyOpen) {
+        if (event.code === "KeyO") {
+          event.preventDefault();
+          chordStarted = Date.now();
+          return;
+        }
+        if ((event.code === "KeyH" || event.code === "KeyF") && Date.now() - chordStarted < CHORD_TIMEOUT_MS) {
+          event.preventDefault();
+          chordStarted = 0;
+          handlers.current.editRegion(event.code === "KeyH" ? "header" : "footer");
+          return;
+        }
+      }
       // Alt+F10 moves to the toolbar, as in other editors (the document uses Tab for indentation).
       if (event.altKey && event.key === "F10" && !handlers.current.historyOpen) {
         event.preventDefault();
@@ -302,6 +342,29 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   handlers.current.activateComment = activateComment;
   handlers.current.toggleCommentsHidden = () => setCommentsHidden((hidden) => !hidden);
   handlers.current.historyOpen = historyOpen;
+  handlers.current.insertFootnote = startFootnote;
+  handlers.current.editRegion = editRegion;
+
+  /** Insert > Header or Footer: edits the one on the cursor's page. */
+  function editRegion(kind: "header" | "footer") {
+    if (!printLayout) setPrintLayout(true);
+    setRegionTarget({ kind, page: cursorPage(editor.view).page - 1 });
+  }
+
+  /** Insert > Footnote (⌘+Option+F): a reference at the cursor, then the cursor in the footnote's text. */
+  function startFootnote() {
+    if (regionTarget || historyOpen) return;
+    const index = insertFootnote(editor);
+    if (index !== null) setRegionTarget({ kind: "footnote", index });
+  }
+
+  function applyPageNumbers(options: PageNumberOptions) {
+    setPageNumbersDialog(null);
+    if (!printLayout) setPrintLayout(true);
+    editor.view.dispatch(addPageNumbers(editor.state, options));
+    if (!regionEditor) editor.commands.focus();
+    else regionEditor.commands.focus();
+  }
 
   function startComment() {
     const { from, to, empty } = editor.state.selection;
@@ -424,6 +487,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   }
 
   function openHistory() {
+    setRegionTarget(null);
     closeComments();
     setFind(null);
     editor.commands.blur();
@@ -476,6 +540,9 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       .run();
   }
 
+  // The toolbar and the Format menu act on the header, footer or footnote being edited.
+  const activeEditor = regionEditor && !regionEditor.isDestroyed ? regionEditor : editor;
+
   // Menu and toolbar actions. Optional actions of features not built yet are left out (see actions.ts).
   const actions: EditorActions = {
     newDocument: async () => navigate(`/d/${(await api.createDocument()).id}`),
@@ -524,19 +591,29 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     insertImageByUrl: () => setImageUrlDialog(true),
     insertLink: () => handlers.current.openLinkDialog(),
     insertPageBreak: () => editor.chain().focus().insertPageBreak().run(),
-    addComment: startComment,
-    toggleSuperscript: () => editor.chain().focus().toggleSuperscript().run(),
-    toggleSubscript: () => editor.chain().focus().toggleSubscript().run(),
-    setCapitalisation: (capitalisation) => {
-      const transaction = capitaliseSelection(editor.state, capitalisation);
-      if (transaction) editor.view.dispatch(transaction);
-      editor.commands.focus();
+    insertTableOfContents: (style) => {
+      setRegionTarget(null);
+      insertTableOfContents(editor, style);
     },
-    toggleSpaceBefore: () => editor.chain().focus().toggleParagraphSpace("spaceBefore").run(),
-    toggleSpaceAfter: () => editor.chain().focus().toggleParagraphSpace("spaceAfter").run(),
-    customSpacing: () => setCustomSpacing(paragraphSpacingAt(editor)),
-    toggleChecklist: () => editor.chain().focus().toggleTaskList().run(),
-    applyListPreset: (kind, preset) => editor.chain().focus().applyListPreset(kind, preset).run(),
+    insertHeader: () => editRegion("header"),
+    insertFooter: () => editRegion("footer"),
+    insertPageNumbers: applyPageNumbers,
+    pageNumberOptions: () => setPageNumbersDialog(currentPageNumberOptions(editor.state.doc)),
+    insertPageCount: () => activeEditor.chain().focus().insertPageField("count").run(),
+    insertFootnote: startFootnote,
+    addComment: startComment,
+    toggleSuperscript: () => activeEditor.chain().focus().toggleSuperscript().run(),
+    toggleSubscript: () => activeEditor.chain().focus().toggleSubscript().run(),
+    setCapitalisation: (capitalisation) => {
+      const transaction = capitaliseSelection(activeEditor.state, capitalisation);
+      if (transaction) activeEditor.view.dispatch(transaction);
+      activeEditor.commands.focus();
+    },
+    toggleSpaceBefore: () => activeEditor.chain().focus().toggleParagraphSpace("spaceBefore").run(),
+    toggleSpaceAfter: () => activeEditor.chain().focus().toggleParagraphSpace("spaceAfter").run(),
+    customSpacing: () => setCustomSpacing(paragraphSpacingAt(activeEditor)),
+    toggleChecklist: () => activeEditor.chain().focus().toggleTaskList().run(),
+    applyListPreset: (kind, preset) => activeEditor.chain().focus().applyListPreset(kind, preset).run(),
     setPageOrientation: () => setPageSetupOpen(true),
     switchToPageless: () => setPrintLayout(false),
     wordCount: () => setWordCountOpen(true),
@@ -603,7 +680,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                 <SaveIndicator status={status} />
               </div>
               <MenuBar
-                editor={editor}
+                editor={activeEditor}
                 actions={actions}
                 view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden }}
               />
@@ -634,7 +711,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
         {!historyOpen && (
           <Toolbar
-            editor={editor}
+            editor={activeEditor}
             actions={actions}
             zoom={zoom}
             onZoomChange={setZoom}
@@ -684,6 +761,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                   {/* One sheet per page, drawn by the pagination plugin. */}
                   <div className="page-sheets" aria-hidden />
                   <EditorContent editor={editor} />
+                  <PageElements
+                    editor={editor}
+                    target={historyOpen ? null : regionTarget}
+                    onTargetChange={setRegionTarget}
+                    onRegionEditor={setRegionEditor}
+                    onPageNumbers={(position) => setPageNumbersDialog(currentPageNumberOptions(editor.state.doc, position))}
+                  />
                 </div>
                 {marginShown && (
                   <CommentMargin
@@ -703,6 +787,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                   />
                 )}
                 {!historyOpen && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
+                {!historyOpen && <TocPill editor={editor} column={column} />}
                 {!historyOpen && (
                   <ImagePill
                     editor={editor}
@@ -768,7 +853,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             initial={customSpacing}
             onApply={(spacing) => {
               setCustomSpacing(null);
-              editor.chain().focus().setParagraphSpacing(spacing).run();
+              activeEditor.chain().focus().setParagraphSpacing(spacing).run();
             }}
             onCancel={() => {
               setCustomSpacing(null);
@@ -785,6 +870,17 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             onCancel={() => {
               setPageSetupOpen(false);
               editor.commands.focus();
+            }}
+          />
+        )}
+
+        {pageNumbersDialog && (
+          <PageNumbersDialog
+            initial={pageNumbersDialog}
+            onApply={applyPageNumbers}
+            onCancel={() => {
+              setPageNumbersDialog(null);
+              (regionEditor ?? editor).commands.focus();
             }}
           />
         )}

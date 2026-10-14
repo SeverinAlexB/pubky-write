@@ -3,8 +3,11 @@
 //
 // Title becomes a level 1 heading and Subtitle a plain paragraph, so the Markdown outline
 // keeps one top-level heading per title. A page break becomes an HTML comment, which keeps
-// it in the file without drawing anything.
+// it in the file without drawing anything. Footnotes become `[^1]` references with the notes
+// at the end, a table of contents a list of links to the headings; headers, footers and page
+// number fields are left out.
 import { documentSchema } from "./schema.ts";
+import { headingSlug, tocTarget } from "./tableOfContents.ts";
 import { defaultMarkdownSerializer, MarkdownSerializer, type MarkdownSerializerState } from "prosemirror-markdown";
 import type { Node } from "@tiptap/pm/model";
 
@@ -54,6 +57,15 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
     table(state, node) {
       writeTable(state, node);
     },
+    footnote(state, node) {
+      const notes = currentNotes();
+      notes.push(footnoteMarkdown(node));
+      state.write(`[^${notes.length}]`);
+    },
+    pageField() {},
+    tableOfContents(state, node) {
+      writeTableOfContents(state, node);
+    },
   },
   {
     bold: defaultMarkdownSerializer.marks.strong!,
@@ -69,8 +81,45 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
   },
 );
 
+/** Footnote texts of the document being serialized, in reference order. */
+let notes: string[] | null = null;
+/** The document being serialized, for the headings a table of contents links to. */
+let currentDoc: Node | null = null;
+
+function currentNotes(): string[] {
+  return (notes ??= []);
+}
+
 export function toMarkdown(doc: Node): string {
-  return serializer.serialize(doc, { tightLists: true }) + "\n";
+  notes = [];
+  currentDoc = doc;
+  try {
+    let markdown = serializer.serialize(doc, { tightLists: true }) + "\n";
+    if (notes.length > 0) markdown += "\n" + notes.map((text, index) => `[^${index + 1}]: ${text}`).join("\n") + "\n";
+    return markdown;
+  } finally {
+    notes = null;
+    currentDoc = null;
+  }
+}
+
+/** A footnote's paragraphs on one line (continuation lines would need indenting). */
+function footnoteMarkdown(node: Node): string {
+  const content = documentSchema.nodeFromJSON({ type: "doc", content: node.attrs.content });
+  return serializer.serialize(content, { tightLists: true }).trim().replace(/\n+/g, " ");
+}
+
+/** Each entry as a list item linking to its heading's anchor, nested by level. */
+function writeTableOfContents(state: MarkdownSerializerState, toc: Node): void {
+  const lines: string[] = [];
+  toc.forEach((entry, _offset, index) => {
+    const text = state.esc(entry.textContent);
+    const target = currentDoc ? tocTarget(currentDoc, toc, index) : null;
+    const indent = "  ".repeat(entry.attrs.indent as number);
+    lines.push(target ? `${indent}- [${text}](#${headingSlug(target.text)})` : `${indent}- ${text}`);
+  });
+  state.write(lines.join("\n"));
+  state.closeBlock(toc);
 }
 
 /** GFM tables need a header row, so the first row is always used as the header. */

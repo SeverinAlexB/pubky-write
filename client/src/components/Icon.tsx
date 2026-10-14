@@ -69,8 +69,10 @@ import markdownSvg from "@material-symbols/svg-400/outlined/markdown.svg?raw";
 import menuSvg from "@material-symbols/svg-400/outlined/menu.svg?raw";
 import moreVertSvg from "@material-symbols/svg-400/outlined/more_vert.svg?raw";
 import openInNewSvg from "@material-symbols/svg-400/outlined/open_in_new.svg?raw";
+import pageFooterSvg from "@material-symbols/svg-400/outlined/page_footer.svg?raw";
 import pageHeaderSvg from "@material-symbols/svg-400/outlined/page_header.svg?raw";
 import printSvg from "@material-symbols/svg-400/outlined/print.svg?raw";
+import refreshSvg from "@material-symbols/svg-400/outlined/refresh.svg?raw";
 import redoSvg from "@material-symbols/svg-400/outlined/redo.svg?raw";
 import removeSvg from "@material-symbols/svg-400/outlined/remove.svg?raw";
 import restartAltSvg from "@material-symbols/svg-400/outlined/restart_alt.svg?raw";
@@ -170,9 +172,11 @@ const symbols = {
   menu: menuSvg,
   more_vert: moreVertSvg,
   open_in_new: openInNewSvg,
+  page_footer: pageFooterSvg,
   page_header: pageHeaderSvg,
   print: printSvg,
   redo: redoSvg,
+  refresh: refreshSvg,
   remove: removeSvg,
   restart_alt: restartAltSvg,
   rotate_right: rotateRightSvg,

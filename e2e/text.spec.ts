@@ -446,6 +446,18 @@ test("a page break is inserted with ⌘+Enter or Insert > Break and starts a new
   await waitUntilSaved(page);
   await page.reload();
   await expect(pageBreak).toHaveCount(2);
+  // Printing prints the pages as laid out on screen: the text after a break is on the next page.
+  await page.emulateMedia({ media: "print" });
+  const pageTwoTop = await page.evaluate(() => {
+    const stack = document.querySelector(".page-stack")!;
+    const paragraph = [...stack.querySelectorAll("p")].find((element) => element.textContent === "Page two")!;
+    return paragraph.getBoundingClientRect().top - stack.getBoundingClientRect().top;
+  });
+  expect(pageTwoTop).toBeGreaterThan(1123);
+  // Without print layout the browser breaks the printed pages itself.
+  await page.emulateMedia({ media: "screen" });
+  await menuBarItem(page, "View").click();
+  await menu(page, "View").getByRole("menuitemcheckbox", { name: "Show print layout" }).click();
   await page.emulateMedia({ media: "print" });
   await expect(pageBreak.first()).toHaveCSS("break-after", "page");
 });

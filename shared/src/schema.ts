@@ -11,10 +11,12 @@ import StarterKit from "@tiptap/starter-kit";
 import { DocsImage } from "./images.ts";
 import { checklistExtensions, ListPreset } from "./lists.ts";
 import { PageBreak } from "./pageBreak.ts";
+import { Footnote, PageElementAttributes, PageField, registerRegionSchema } from "./pageElements.ts";
 import { PageSetupAttributes } from "./pageSetupAttributes.ts";
 import { ParagraphFormat } from "./paragraphFormat.ts";
 import { headingLevels, ParagraphStyle } from "./paragraphStyles.ts";
 import { DocsTable, DocsTableCell, DocsTableHeader, DocsTableRow } from "./tables.ts";
+import { TableOfContents, TocEntry } from "./tableOfContents.ts";
 
 export const documentExtensions: AnyExtension[] = [
   StarterKit.configure({
@@ -51,8 +53,14 @@ export const documentExtensions: AnyExtension[] = [
   DocsTableRow,
   DocsTableHeader,
   DocsTableCell,
+  PageElementAttributes,
+  PageField,
+  Footnote,
+  TableOfContents,
+  TocEntry,
 ];
 
 export const documentSchema = getSchema(documentExtensions);
+registerRegionSchema(documentSchema);
 
 export const emptyDocument: JSONContent = { type: "doc", content: [{ type: "paragraph" }] };

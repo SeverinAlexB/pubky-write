@@ -1,4 +1,5 @@
-import type { ListKind } from "@docs/shared";
+import type { ListKind, TocStyle } from "@docs/shared";
+import type { PageNumberOptions } from "./pageElementCommands.ts";
 
 // Everything the menu bar and toolbar can do beyond plain editor commands.
 //
@@ -50,10 +51,13 @@ export type EditorActions = {
   insertSpecialCharacter?: () => void;
   insertEmoji?: () => void;
   insertPageBreak?: () => void;
-  insertTableOfContents?: () => void;
+  insertTableOfContents?: (style: TocStyle) => void;
   insertHeader?: () => void;
   insertFooter?: () => void;
-  insertPageNumbers?: () => void;
+  insertPageNumbers?: (options: PageNumberOptions) => void;
+  /** Page numbers > More options: the Page numbers dialog. */
+  pageNumberOptions?: () => void;
+  insertPageCount?: () => void;
   insertFootnote?: () => void;
   addComment: () => void;
 

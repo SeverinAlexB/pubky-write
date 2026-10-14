@@ -1,5 +1,6 @@
 import { DocsImage, DocsTable, documentExtensions, paragraphStyleDefinitions, paragraphStyleOf } from "@docs/shared";
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
+import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import type { Mark, Node } from "@tiptap/pm/model";
 import { UndoRedo } from "@tiptap/extensions";
 import { collab } from "prosemirror-collab";
@@ -8,6 +9,7 @@ import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
 import { EditorImage } from "./imageView.ts";
 import { Pagination } from "./pagination.ts";
 import { Search } from "./search.ts";
+import { followTocEntry } from "./pageElementCommands.ts";
 import { EditorTable, TableColumnResize } from "./tables.ts";
 
 type EditorExtensionOptions = {
@@ -16,6 +18,7 @@ type EditorExtensionOptions = {
   clientId: string;
   onLinkShortcut: () => void;
   onCommentShortcut: () => void;
+  onFootnoteShortcut: () => void;
   comments: CommentAnchor[];
   commentsHidden: boolean;
   onCommentClick: (id: number | null) => void;
@@ -27,6 +30,7 @@ export function editorExtensions({
   clientId,
   onLinkShortcut,
   onCommentShortcut,
+  onFootnoteShortcut,
   comments,
   commentsHidden,
   onCommentClick,
@@ -57,6 +61,10 @@ export function editorExtensions({
             onCommentShortcut();
             return true;
           },
+          "Mod-Alt-f": () => {
+            onFootnoteShortcut();
+            return true;
+          },
           "Mod-\\": () => clearFormatting(this.editor),
           "Mod-]": () => this.editor.commands.changeIndent(1) || true,
           "Mod-[": () => this.editor.commands.changeIndent(-1) || true,
@@ -65,6 +73,7 @@ export function editorExtensions({
         };
       },
     }),
+    TocLinks,
     Extension.create({
       name: "tabIndent",
       // Lower than lists and tables, so Tab still nests list items and moves between cells.
@@ -135,3 +144,43 @@ export function setFontSize(editor: Editor, size: number): boolean {
 export function changeFontSize(editor: Editor, direction: 1 | -1): boolean {
   return setFontSize(editor, stepFontSize(currentFontSize(editor), direction));
 }
+
+/**
+ * A table of contents is one block: a click in it (other than on a link of the linked style, which
+ * jumps to its heading) or a cursor moved into it selects the whole table.
+ */
+const TocLinks = Extension.create({
+  name: "tocLinks",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          handleClick(view, _pos, event) {
+            const target = event.target as HTMLElement | null;
+            const toc = target?.closest?.(".toc");
+            if (!toc || !view.dom.contains(toc)) return false;
+            const tocPos = view.posAtDOM(toc, 0) - 1;
+            const link = target?.closest('.toc[data-style="links"] .toc-text');
+            const entry = link?.closest(".toc-entry");
+            if (entry && followTocEntry(view, tocPos, Array.prototype.indexOf.call(toc.children, entry))) return true;
+            if (view.state.doc.nodeAt(tocPos)?.type.name !== "tableOfContents") return false;
+            view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, tocPos)));
+            return true;
+          },
+        },
+        appendTransaction(_transactions, _old, state) {
+          const { selection } = state;
+          if (selection instanceof NodeSelection) return null;
+          const { $from, $to } = selection;
+          for (let depth = $from.depth; depth > 0; depth--) {
+            if ($from.node(depth).type.name !== "tableOfContents") continue;
+            // A selection that only starts in the table (dragged out of it) is left alone.
+            if (!selection.empty && $to.pos > $from.end(depth)) return null;
+            return state.tr.setSelection(NodeSelection.create(state.doc, $from.before(depth)));
+          }
+          return null;
+        },
+      }),
+    ];
+  },
+});
