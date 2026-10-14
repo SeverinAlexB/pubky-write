@@ -37,6 +37,9 @@ editor's user interface on 2026-10-13 (window 1440 × 900, en-GB locale).
 | [14-special-characters-and-ruler.md](14-special-characters-and-ruler.md) | Special characters dialog, ruler dragging, Page setup dialog details |
 | [15-tab-stops.md](15-tab-stops.md) | Tab stops on the ruler |
 | [16-suggesting.md](16-suggesting.md) | Suggesting mode, suggestion cards, review |
+| [17-everyday-editing.md](17-everyday-editing.md) | Link bubble, preferences and automatic formatting, shortcuts dialog, paste, offline safety |
+| [18-document-tabs.md](18-document-tabs.md) | Multiple tabs per document |
+| [19-columns-images-tables.md](19-columns-images-tables.md) | Columns, image wrapping/rotation/crop/options, split cell, pinned header rows |
 
 ## Priorities
 
@@ -95,3 +98,7 @@ ruler") and 16 (suggesting mode).
   the indent. Shift+Tab outside lists/tables does nothing. (User report: "When I
   set a stop on a new line and then tab, it moves the page start, not to the
   tab stop.")
+
+### Round 4 (fourth capture session)
+
+New documents 17–19. 18 amends 07 (multiple tabs instead of one).
