@@ -1,19 +1,29 @@
 import type { OpenedDocument } from "@docs/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { Link, useParams } from "react-router";
 import { api, ApiError } from "../api.ts";
-import { DocumentEditor } from "./DocumentEditor.tsx";
+
+type DocumentEditorComponent = ComponentType<{ document: OpenedDocument; onReload: () => Promise<void> }>;
+
+// The editor's code is loaded together with the document, so the document list does not load it.
+// It is rendered once both are there rather than through Suspense, which would hold back
+// showing it for a moment after the loading message.
+const loadEditor = (): Promise<DocumentEditorComponent> => import("./DocumentEditor.tsx").then((module) => module.DocumentEditor);
 
 /** Loads the document; reloading (after a restore) remounts the editor with the new version. */
 export function EditorPage() {
   const { id = "" } = useParams();
-  const [loaded, setLoaded] = useState<{ document: OpenedDocument; generation: number } | null>(null);
+  const [loaded, setLoaded] = useState<{
+    document: OpenedDocument;
+    DocumentEditor: DocumentEditorComponent;
+    generation: number;
+  } | null>(null);
   const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const document = await api.openDocument(id);
-      setLoaded((previous) => ({ document, generation: (previous?.generation ?? 0) + 1 }));
+      const [document, DocumentEditor] = await Promise.all([api.openDocument(id), loadEditor()]);
+      setLoaded((previous) => ({ document, DocumentEditor, generation: (previous?.generation ?? 0) + 1 }));
       setError(null);
     } catch (loadError) {
       setError({
@@ -39,5 +49,6 @@ export function EditorPage() {
   }
   if (!loaded) return <div className="page-message">Loading…</div>;
 
+  const { DocumentEditor } = loaded;
   return <DocumentEditor key={`${id}:${loaded.generation}`} document={loaded.document} onReload={load} />;
 }

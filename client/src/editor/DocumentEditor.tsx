@@ -3,7 +3,6 @@ import {
   pageGeometry,
   pageSetupKeys,
   pageSetupOf,
-  toMarkdown,
   type CommentThread,
   type OpenedDocument,
   type PageSetup,
@@ -14,8 +13,9 @@ import { getVersion } from "prosemirror-collab";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { api, ApiError, stepsTransport } from "../api.ts";
+import { api, ApiError } from "../api.ts";
 import { Icon } from "../components/Icon.tsx";
+import { lazyComponent } from "../components/lazyComponent.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { shortcut } from "../components/shortcuts.ts";
 import type { EditorActions } from "./actions.ts";
@@ -24,22 +24,29 @@ import { getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
 import { AllCommentsPanel } from "./AllCommentsPanel.tsx";
 import { COMMENT_MARGIN_WIDTH, CommentMargin, useCommentAnchors } from "./CommentMargin.tsx";
 import { CommentPill } from "./CommentPill.tsx";
-import { CustomSpacingDialog } from "./CustomSpacingDialog.tsx";
 import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
-import { FindReplaceDialog } from "./FindReplaceDialog.tsx";
 import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
-import { HistoryMode } from "./HistoryMode.tsx";
 import { MenuBar } from "./MenuBar.tsx";
 import { OutlinePanel, OutlineToggle } from "./OutlinePanel.tsx";
-import { PageSetupDialog } from "./PageSetupDialog.tsx";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { resetPagination } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
+import { stepsTransport } from "./stepsTransport.ts";
 import { DocumentSync, type SaveStatus } from "./sync.ts";
+import { ColorPalette } from "./toolbar/ColorPicker.tsx";
 import { Toolbar } from "./toolbar/Toolbar.tsx";
 import type { Zoom } from "./toolbar/ZoomControl.tsx";
-import { LiveWordCount, useLiveCountSetting, WordCountDialog } from "./WordCountDialog.tsx";
+import { LiveWordCount, useLiveCountSetting } from "./LiveWordCount.tsx";
+
+// Parts used now and then are in their own chunks, fetched once the editor is idle (or when
+// first opened, if that is sooner), so they are not in the way of opening the document.
+const HistoryMode = lazyComponent(() => import("./HistoryMode.tsx").then((module) => module.HistoryMode));
+const FindReplaceDialog = lazyComponent(() => import("./FindReplaceDialog.tsx").then((module) => module.FindReplaceDialog));
+const WordCountDialog = lazyComponent(() => import("./WordCountDialog.tsx").then((module) => module.WordCountDialog));
+const PageSetupDialog = lazyComponent(() => import("./PageSetupDialog.tsx").then((module) => module.PageSetupDialog));
+const CustomSpacingDialog = lazyComponent(() => import("./CustomSpacingDialog.tsx").then((module) => module.CustomSpacingDialog));
+const onDemand = [HistoryMode, FindReplaceDialog, WordCountDialog, PageSetupDialog, CustomSpacingDialog, ColorPalette];
 
 const OUTLINE_SETTING = "docs.outlineOpen";
 const RULER_SETTING = "docs.rulerVisible";
@@ -198,6 +205,11 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   useEffect(() => {
     localStorage.setItem(PRINT_LAYOUT_SETTING, String(printLayout));
   }, [printLayout]);
+
+  useEffect(() => {
+    const idle = requestIdleCallback(() => onDemand.forEach((component) => void component.preload()));
+    return () => cancelIdleCallback(idle);
+  }, []);
 
   const pageSetup = useEditorState({
     editor,
@@ -451,9 +463,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     print: () => window.print(),
     cut: () => editor.commands.focus() && document.execCommand("cut"),
     copy: () => editor.commands.focus() && document.execCommand("copy"),
-    copyAsMarkdown: () => {
+    copyAsMarkdown: async () => {
       const { from, to } = editor.state.selection;
-      void navigator.clipboard.writeText(toMarkdown(editor.state.doc.cut(from, to)).trimEnd());
+      const { toMarkdown } = await import("@docs/shared/markdown");
+      await navigator.clipboard.writeText(toMarkdown(editor.state.doc.cut(from, to)).trimEnd());
     },
     paste: () => void pasteFromClipboard(editor, true),
     pasteWithoutFormatting: () => void pasteFromClipboard(editor, false),

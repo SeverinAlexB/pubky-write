@@ -2,7 +2,6 @@
 // document's top node, so they are saved, versioned and restored like any other edit
 // (changed with a DocAttrStep, `tr.setDocAttribute`). Documents saved before these
 // attributes existed load with the defaults.
-import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 
 export const paperSizes = {
@@ -39,7 +38,7 @@ export const defaultPageSetup: PageSetup = {
 };
 
 export const pageSetupKeys = Object.keys(defaultPageSetup) as (keyof PageSetup)[];
-const marginKeys = ["marginTop", "marginBottom", "marginLeft", "marginRight"] as const;
+export const marginKeys = ["marginTop", "marginBottom", "marginLeft", "marginRight"] as const;
 
 export const PX_PER_PT = 96 / 72;
 export const PX_PER_MM = 96 / 25.4;
@@ -49,7 +48,7 @@ export function isPaperSize(value: unknown): value is PaperSize {
   return typeof value === "string" && Object.hasOwn(paperSizes, value);
 }
 
-function isMargin(value: unknown): value is number {
+export function isMargin(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_MARGIN_PT;
 }
 
@@ -130,44 +129,3 @@ export function lengthUnit(locale: string): LengthUnit {
 export function pointsPerUnit(unit: LengthUnit): number {
   return unit === "in" ? 72 : PT_PER_CM;
 }
-
-/** Adds the page setup attributes to the document node. */
-export const PageSetupAttributes = Extension.create({
-  name: "pageSetup",
-
-  addGlobalAttributes() {
-    return [
-      {
-        types: ["doc"],
-        attributes: {
-          paperSize: {
-            default: defaultPageSetup.paperSize,
-            rendered: false,
-            validate: (value: unknown) => {
-              if (!isPaperSize(value)) throw new RangeError(`Unknown paper size ${String(value)}`);
-            },
-          },
-          orientation: {
-            default: defaultPageSetup.orientation,
-            rendered: false,
-            validate: (value: unknown) => {
-              if (value !== "portrait" && value !== "landscape") throw new RangeError(`Unknown orientation ${String(value)}`);
-            },
-          },
-          ...Object.fromEntries(
-            marginKeys.map((key) => [
-              key,
-              {
-                default: DEFAULT_MARGIN_PT,
-                rendered: false,
-                validate: (value: unknown) => {
-                  if (!isMargin(value)) throw new RangeError(`Invalid margin ${String(value)}`);
-                },
-              },
-            ]),
-          ),
-        },
-      },
-    ];
-  },
-});

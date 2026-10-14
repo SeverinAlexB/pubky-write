@@ -12,7 +12,7 @@ import Superscript from "@tiptap/extension-superscript";
 import StarterKit from "@tiptap/starter-kit";
 import { checklistExtensions, ListPreset } from "./lists.ts";
 import { PageBreak } from "./pageBreak.ts";
-import { PageSetupAttributes } from "./pageSetup.ts";
+import { PageSetupAttributes } from "./pageSetupAttributes.ts";
 import { ParagraphFormat } from "./paragraphFormat.ts";
 import { headingLevels, ParagraphStyle } from "./paragraphStyles.ts";
 
