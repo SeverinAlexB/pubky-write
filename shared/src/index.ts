@@ -9,3 +9,4 @@ export * from "./pageSetupAttributes.ts";
 export * from "./anchors.ts";
 export * from "./markdown.ts";
 export * from "./versionDiff.ts";
+export * from "./templates.ts";

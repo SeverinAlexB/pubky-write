@@ -3,8 +3,10 @@ import {
   type CommentThread,
   type CreateCommentRequest,
   type CreateDocumentRequest,
+  type DocumentPreview,
   type DocumentSort,
   type DocumentSummary,
+  type ImportResponse,
   type OpenedDocument,
   type Revision,
   type RevisionWithContent,
@@ -37,12 +39,22 @@ export const api = {
     if (options.sort) params.set("sort", options.sort);
     return request<DocumentSummary[]>(`/api/documents?${params}`);
   },
-  /** Creates a blank document on the paper size used in the user's locale. */
-  createDocument: (title?: string) =>
+  /** Creates a blank document, or one from a built-in template, on the paper size used in the user's locale. */
+  createDocument: (options: { title?: string; template?: string } = {}) =>
     request<DocumentSummary>("/api/documents", {
       method: "POST",
-      body: JSON.stringify({ title, paperSize: defaultPaperSize(navigator.language) } satisfies CreateDocumentRequest),
+      body: JSON.stringify({ ...options, paperSize: defaultPaperSize(navigator.language) } satisfies CreateDocumentRequest),
     }),
+  /** Converts a Word or Markdown file into a new document. */
+  importDocument: (file: File) => {
+    const form = new FormData();
+    form.set("file", file);
+    form.set("paperSize", defaultPaperSize(navigator.language));
+    return request<ImportResponse>("/api/documents/import", { method: "POST", body: form });
+  },
+  /** `updatedAt` makes the URL change with the document, so the browser may cache each preview. */
+  getPreview: (id: string, updatedAt: number) =>
+    request<DocumentPreview>(`/api/documents/${id}/preview?v=${updatedAt}`),
   copyDocument: (id: string) => request<DocumentSummary>(`/api/documents/${id}/copy`, { method: "POST" }),
   openDocument: (id: string) => request<OpenedDocument>(`/api/documents/${id}`),
   renameDocument: (id: string, title: string) =>

@@ -43,6 +43,7 @@ import formatParagraphSvg from "@material-symbols/svg-400/outlined/format_paragr
 import formatSizeSvg from "@material-symbols/svg-400/outlined/format_size.svg?raw";
 import formatUnderlinedSvg from "@material-symbols/svg-400/outlined/format_underlined.svg?raw";
 import fullscreenSvg from "@material-symbols/svg-400/outlined/fullscreen.svg?raw";
+import gridViewSvg from "@material-symbols/svg-400/outlined/grid_view.svg?raw";
 import historySvg from "@material-symbols/svg-400/outlined/history.svg?raw";
 import horizontalRuleSvg from "@material-symbols/svg-400/outlined/horizontal_rule.svg?raw";
 import imageSvg from "@material-symbols/svg-400/outlined/image.svg?raw";
@@ -54,6 +55,7 @@ import keyboardArrowUpSvg from "@material-symbols/svg-400/outlined/keyboard_arro
 import linkSvg from "@material-symbols/svg-400/outlined/link.svg?raw";
 import listSvg from "@material-symbols/svg-400/outlined/list.svg?raw";
 import markdownSvg from "@material-symbols/svg-400/outlined/markdown.svg?raw";
+import menuSvg from "@material-symbols/svg-400/outlined/menu.svg?raw";
 import moreVertSvg from "@material-symbols/svg-400/outlined/more_vert.svg?raw";
 import openInNewSvg from "@material-symbols/svg-400/outlined/open_in_new.svg?raw";
 import pageHeaderSvg from "@material-symbols/svg-400/outlined/page_header.svg?raw";
@@ -63,6 +65,7 @@ import removeSvg from "@material-symbols/svg-400/outlined/remove.svg?raw";
 import restartAltSvg from "@material-symbols/svg-400/outlined/restart_alt.svg?raw";
 import searchSvg from "@material-symbols/svg-400/outlined/search.svg?raw";
 import selectAllSvg from "@material-symbols/svg-400/outlined/select_all.svg?raw";
+import sortByAlphaSvg from "@material-symbols/svg-400/outlined/sort_by_alpha.svg?raw";
 import specialCharacterSvg from "@material-symbols/svg-400/outlined/special_character.svg?raw";
 import strikethroughSSvg from "@material-symbols/svg-400/outlined/strikethrough_s.svg?raw";
 import subscriptSvg from "@material-symbols/svg-400/outlined/subscript.svg?raw";
@@ -74,7 +77,11 @@ import textFormatSvg from "@material-symbols/svg-400/outlined/text_format.svg?ra
 import tocSvg from "@material-symbols/svg-400/outlined/toc.svg?raw";
 import tuneSvg from "@material-symbols/svg-400/outlined/tune.svg?raw";
 import undoSvg from "@material-symbols/svg-400/outlined/undo.svg?raw";
+import unfoldLessSvg from "@material-symbols/svg-400/outlined/unfold_less.svg?raw";
+import unfoldMoreSvg from "@material-symbols/svg-400/outlined/unfold_more.svg?raw";
 import uploadSvg from "@material-symbols/svg-400/outlined/upload.svg?raw";
+import uploadFileSvg from "@material-symbols/svg-400/outlined/upload_file.svg?raw";
+import viewListSvg from "@material-symbols/svg-400/outlined/view_list.svg?raw";
 
 const symbols = {
   add: addSvg,
@@ -121,6 +128,7 @@ const symbols = {
   format_size: formatSizeSvg,
   format_underlined: formatUnderlinedSvg,
   fullscreen: fullscreenSvg,
+  grid_view: gridViewSvg,
   history: historySvg,
   horizontal_rule: horizontalRuleSvg,
   image: imageSvg,
@@ -132,6 +140,7 @@ const symbols = {
   link: linkSvg,
   list: listSvg,
   markdown: markdownSvg,
+  menu: menuSvg,
   more_vert: moreVertSvg,
   open_in_new: openInNewSvg,
   page_header: pageHeaderSvg,
@@ -141,6 +150,7 @@ const symbols = {
   restart_alt: restartAltSvg,
   search: searchSvg,
   select_all: selectAllSvg,
+  sort_by_alpha: sortByAlphaSvg,
   special_character: specialCharacterSvg,
   strikethrough_s: strikethroughSSvg,
   subscript: subscriptSvg,
@@ -152,7 +162,11 @@ const symbols = {
   toc: tocSvg,
   tune: tuneSvg,
   undo: undoSvg,
+  unfold_less: unfoldLessSvg,
+  unfold_more: unfoldMoreSvg,
   upload: uploadSvg,
+  upload_file: uploadFileSvg,
+  view_list: viewListSvg,
 };
 
 export type IconName = keyof typeof symbols;

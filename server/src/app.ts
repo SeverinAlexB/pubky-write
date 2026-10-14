@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
-import { toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type SubmitStepsRequest } from "@docs/shared";
+import { extname } from "node:path";
+import { toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type ImportResponse, type SubmitStepsRequest } from "@docs/shared";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import {
   addReply,
@@ -25,36 +24,36 @@ import {
   createDocument,
   deleteDocument,
   getDocumentContent,
+  getDocumentPreview,
   InvalidStepsError,
   listDocuments,
   nameCurrentVersion,
   openDocument,
   renameDocument,
   restoreRevision,
+  templateDocument,
 } from "./documents.ts";
 import { toDocx } from "./export/docx.ts";
+import { ImportError, importedTitle, importFile, isImportable, MAX_IMPORT_BYTES } from "./import/index.ts";
 import { getRevision, listRevisions, nameRevision } from "./revisions.ts";
+import { imageTypes, readUpload, sniffImageType, storeUpload } from "./uploads.ts";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-const imageTypes: Record<string, string> = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/gif": ".gif",
-  "image/webp": ".webp",
-};
 const contentTypes = Object.fromEntries(Object.entries(imageTypes).map(([type, ext]) => [ext, type]));
-const sorts: DocumentSort[] = ["lastOpened", "lastModified", "title"];
+const sorts: DocumentSort[] = ["lastOpened", "lastModifiedByMe", "lastModified", "title"];
 
 export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string }): Hono {
   mkdirSync(uploadsDir, { recursive: true });
   const app = new Hono();
 
   app.onError((error, c) => {
-    if (error instanceof HTTPException) return error.getResponse();
+    // As JSON, so the client can show the message.
+    if (error instanceof HTTPException) return c.json({ error: error.message }, error.status);
     if (error instanceof InvalidStepsError || error instanceof InvalidCommentError) {
       return c.json({ error: error.message }, 400);
     }
     if (error instanceof CommentVersionConflictError) return c.json({ error: error.message }, 409);
+    if (error instanceof ImportError) return c.json({ error: error.message }, 422);
     console.error(error);
     return c.json({ error: "Internal server error" }, 500);
   });
@@ -66,10 +65,49 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
 
   app.post("/api/documents", async (c) => {
     const body = await c.req.json<CreateDocumentRequest>().catch(() => ({}) as CreateDocumentRequest);
+    if (body.template !== undefined) {
+      const template = templateDocument(String(body.template), body.paperSize);
+      if (!template) throw new HTTPException(400, { message: `Unknown template: ${body.template}` });
+      return c.json(createDocument(db, body.title ?? template.name, Date.now(), template.doc), 201);
+    }
     return c.json(createDocument(db, body.title, Date.now(), blankDocument(body.paperSize)), 201);
   });
 
+  app.post(
+    "/api/documents/import",
+    // The form around the file adds a little to its size.
+    bodyLimit({
+      maxSize: MAX_IMPORT_BYTES + 64 * 1024,
+      onError: (c) => c.json({ error: "Files can be at most 20 MB" }, 413),
+    }),
+    async (c) => {
+      const form = await c.req.formData();
+      const file = form.get("file");
+      if (!(file instanceof File)) throw new HTTPException(400, { message: "file is required" });
+      if (!isImportable(file.name)) {
+        throw new HTTPException(415, { message: "Only Word (.docx) and Markdown (.md) files can be opened" });
+      }
+      if (file.size > MAX_IMPORT_BYTES) throw new HTTPException(413, { message: "Files can be at most 20 MB" });
+      const paperSize = form.get("paperSize");
+      const { doc, dropped } = await importFile(file.name, new Uint8Array(await file.arrayBuffer()), {
+        paperSize: typeof paperSize === "string" ? paperSize : undefined,
+        storeImage: async (data) => {
+          const type = sniffImageType(data);
+          return type ? storeUpload(uploadsDir, data, type) : null;
+        },
+      });
+      return c.json({ document: createDocument(db, importedTitle(file.name), Date.now(), doc), dropped } satisfies ImportResponse, 201);
+    },
+  );
+
   app.get("/api/documents/:id", (c) => c.json(found(openDocument(db, c.req.param("id")))));
+
+  // The client asks with ?v=<updatedAt>, so a cached preview is only reused while it is current.
+  app.get("/api/documents/:id/preview", (c) => {
+    const preview = found(getDocumentPreview(db, c.req.param("id")));
+    if (c.req.query("v")) c.header("Cache-Control", "private, max-age=31536000, immutable");
+    return c.json(preview);
+  });
 
   app.post("/api/documents/:id/copy", (c) => c.json(found(copyDocument(db, c.req.param("id"))), 201));
 
@@ -185,9 +223,7 @@ export function createApp({ db, uploadsDir }: { db: Database; uploadsDir: string
     if (!extension) throw new HTTPException(415, { message: "Only PNG, JPEG, GIF and WebP images are supported" });
     if (file.size > MAX_UPLOAD_BYTES) throw new HTTPException(413, { message: "Images can be at most 10 MB" });
 
-    const name = `${randomUUID()}${extension}`;
-    await writeFile(join(uploadsDir, name), new Uint8Array(await file.arrayBuffer()));
-    return c.json({ url: `/uploads/${name}` }, 201);
+    return c.json({ url: await storeUpload(uploadsDir, new Uint8Array(await file.arrayBuffer()), file.type) }, 201);
   });
 
   app.get("/uploads/:name", async (c) => {
@@ -212,14 +248,6 @@ async function nameFrom(body: Promise<{ name?: unknown }>): Promise<string> {
 function found<T>(value: T | null | undefined): T {
   if (value === null || value === undefined) throw new HTTPException(404, { message: "Not found" });
   return value;
-}
-
-/** Reads an uploaded image by its `/uploads/<name>` URL; other URLs are not read. */
-async function readUpload(uploadsDir: string, src: string): Promise<Buffer | null> {
-  if (!src.startsWith("/uploads/")) return null;
-  const name = basename(src);
-  if (name !== src.slice("/uploads/".length)) return null;
-  return readFile(join(uploadsDir, name)).catch(() => null);
 }
 
 function download(body: string | Uint8Array<ArrayBuffer>, filename: string, contentType: string): Response {

@@ -4,8 +4,10 @@ import { randomUUID } from "node:crypto";
 import {
   documentSchema,
   emptyDocument,
+  findTemplate,
   isPaperSize,
   replaceDifference,
+  type DocumentPreview,
   type DocumentSort,
   type DocumentSummary,
   type OpenedDocument,
@@ -16,6 +18,7 @@ import { Node } from "@tiptap/pm/model";
 import { Mapping, Step, Transform } from "@tiptap/pm/transform";
 import { listComments, mapComments } from "./comments.ts";
 import { inTransaction, type Database } from "./database.ts";
+import { documentPreview } from "./preview.ts";
 import { getRevision, nameCurrentRevision, recordRevision } from "./revisions.ts";
 
 export const UNTITLED = "Untitled document";
@@ -28,6 +31,7 @@ type DocumentRow = {
   created_at: number;
   updated_at: number;
   last_opened_at: number;
+  preview: string | null;
 };
 
 export class InvalidStepsError extends Error {}
@@ -38,6 +42,7 @@ const summaryColumns = "id, title, created_at, updated_at, last_opened_at";
 
 const orderBy: Record<DocumentSort, string> = {
   lastOpened: "last_opened_at DESC",
+  lastModifiedByMe: "updated_at DESC",
   lastModified: "updated_at DESC",
   title: "title COLLATE NOCASE ASC",
 };
@@ -50,9 +55,9 @@ export function createDocument(
 ): DocumentSummary {
   const id = randomUUID();
   db.prepare(
-    `INSERT INTO documents (id, title, content, plain_text, version, created_at, updated_at, last_opened_at)
-     VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
-  ).run(id, normalizeTitle(title), JSON.stringify(doc.toJSON()), plainText(doc), now, now, now);
+    `INSERT INTO documents (id, title, content, plain_text, preview, version, created_at, updated_at, last_opened_at)
+     VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+  ).run(id, normalizeTitle(title), JSON.stringify(doc.toJSON()), plainText(doc), previewJson(doc), now, now, now);
   return { id, title: normalizeTitle(title), createdAt: now, updatedAt: now, lastOpenedAt: now };
 }
 
@@ -60,6 +65,29 @@ export function createDocument(
 export function blankDocument(paperSize?: unknown): Node {
   const doc = Node.fromJSON(documentSchema, emptyDocument);
   return isPaperSize(paperSize) ? new Transform(doc).setDocAttribute("paperSize", paperSize).doc : doc;
+}
+
+/** A new document from a built-in template, on the given paper size. Null for an unknown template. */
+export function templateDocument(templateId: string, paperSize?: unknown): { name: string; doc: Node } | null {
+  const template = findTemplate(templateId);
+  if (!template) return null;
+  const doc = Node.fromJSON(documentSchema, template.content);
+  return {
+    name: template.name,
+    doc: isPaperSize(paperSize) ? new Transform(doc).setDocAttribute("paperSize", paperSize).doc : doc,
+  };
+}
+
+/** The thumbnail content of a document (see preview.ts); made and stored on first use for older documents. */
+export function getDocumentPreview(db: Database, id: string): DocumentPreview | null {
+  const row = db.prepare("SELECT content, preview FROM documents WHERE id = ?").get(id) as
+    | Pick<DocumentRow, "content" | "preview">
+    | undefined;
+  if (!row) return null;
+  if (row.preview !== null) return { content: JSON.parse(row.preview) };
+  const preview = previewJson(Node.fromJSON(documentSchema, JSON.parse(row.content)));
+  db.prepare("UPDATE documents SET preview = ? WHERE id = ?").run(preview, id);
+  return { content: JSON.parse(preview) };
 }
 
 /** File > Make a copy: a new document named "Copy of <title>" with the same content, without comments. */
@@ -163,9 +191,10 @@ export function applySteps(
     mapComments(db, id, mapping);
 
     const content = JSON.stringify(doc.toJSON());
-    db.prepare("UPDATE documents SET content = ?, plain_text = ?, version = ?, updated_at = ? WHERE id = ?").run(
+    db.prepare("UPDATE documents SET content = ?, plain_text = ?, preview = ?, version = ?, updated_at = ? WHERE id = ?").run(
       content,
       plainText(doc),
+      previewJson(doc),
       version,
       now,
       id,
@@ -226,6 +255,10 @@ function applyStep(step: Step, doc: Node): Node {
 
 function plainText(doc: Node): string {
   return doc.textBetween(0, doc.content.size, "\n", " ");
+}
+
+function previewJson(doc: Node): string {
+  return JSON.stringify(documentPreview(doc));
 }
 
 function findRow(db: Database, id: string): DocumentRow | undefined {

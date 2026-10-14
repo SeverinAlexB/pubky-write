@@ -17,7 +17,8 @@ export function openDatabase(path: string): Database {
       version        INTEGER NOT NULL,
       created_at     INTEGER NOT NULL,
       updated_at     INTEGER NOT NULL,
-      last_opened_at INTEGER NOT NULL
+      last_opened_at INTEGER NOT NULL,
+      preview        TEXT -- the top of the first page as JSON, for thumbnails (see preview.ts)
     );
 
     -- Every accepted step, so clients that fall behind can catch up.
@@ -66,6 +67,9 @@ export function openDatabase(path: string): Database {
   // Databases created before versions could be named.
   const revisionColumns = db.prepare("PRAGMA table_info(revisions)").all() as { name: string }[];
   if (!revisionColumns.some((column) => column.name === "name")) db.exec("ALTER TABLE revisions ADD COLUMN name TEXT");
+  // Databases created before thumbnails: their previews are made on first request.
+  const documentColumns = db.prepare("PRAGMA table_info(documents)").all() as { name: string }[];
+  if (!documentColumns.some((column) => column.name === "preview")) db.exec("ALTER TABLE documents ADD COLUMN preview TEXT");
   return db;
 }
 

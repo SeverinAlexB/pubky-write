@@ -2,12 +2,22 @@ const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-di
 const dayMonth = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
 const fullDate = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
 
-/** Short date for lists: the time for today, day and month this year, the full date otherwise. */
-export function formatShortDate(timestamp: number, now = new Date()): string {
+/** Dates in the document list: the time for today ("06:58"), otherwise the full date ("7 Oct 2026"). */
+export function formatListDate(timestamp: number, now = new Date()): string {
   const date = new Date(timestamp);
-  if (date.toDateString() === now.toDateString()) return time.format(date);
-  if (date.getFullYear() === now.getFullYear()) return dayMonth.format(date);
-  return fullDate.format(date);
+  return date.toDateString() === now.toDateString() ? time.format(date) : fullDate.format(date);
+}
+
+export type DateGroup = "Today" | "Previous 7 days" | "Previous 30 days" | "Earlier";
+
+/** The heading a document falls under in the list view, counted in calendar days before today. */
+export function dateGroup(timestamp: number, now = new Date()): DateGroup {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const daysAgo = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days).getTime();
+  if (timestamp >= today) return "Today";
+  if (timestamp >= daysAgo(7)) return "Previous 7 days";
+  if (timestamp >= daysAgo(30)) return "Previous 30 days";
+  return "Earlier";
 }
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });

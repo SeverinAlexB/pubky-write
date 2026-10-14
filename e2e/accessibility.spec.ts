@@ -110,6 +110,31 @@ test("the document list, editor, dialogs and version history have no serious acc
   await expectAccessible(page, "Version history");
 });
 
+test("the document list's views, menus and Open a file dialog have no serious accessibility violations", async ({ page }) => {
+  await page.request.post("/api/documents", { data: { template: "report" } });
+  await page.goto("/");
+  await expect(page.locator(".document-thumbnail .page-preview").first()).toBeVisible();
+  await expectAccessible(page, "Grid view with thumbnails");
+
+  await page.getByRole("button", { name: "Sort options" }).click();
+  await expect(page.getByRole("menu", { name: "Sort options" })).toBeVisible();
+  await expectAccessible(page, "Sort options menu");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "List view" }).click();
+  await expect(page.getByRole("group", { name: "Documents" })).toBeVisible();
+  await expectAccessible(page, "List view");
+
+  await page.getByRole("button", { name: "Open file picker" }).click();
+  await expect(page.getByRole("dialog", { name: "Open a file" })).toBeVisible();
+  await expectAccessible(page, "Open a file");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Main menu" }).click();
+  await expect(page.getByRole("dialog", { name: "Main menu" })).toBeVisible();
+  await expectAccessible(page, "Main menu");
+});
+
 test("the toolbar and menu bar work with the keyboard", async ({ page }) => {
   await createDocument(page);
   await editor(page).click();

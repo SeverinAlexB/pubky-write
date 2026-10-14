@@ -11,12 +11,14 @@ import {
   createDocument,
   deleteDocument,
   getDocumentContent,
+  getDocumentPreview,
   InvalidStepsError,
   listDocuments,
   nameCurrentVersion,
   openDocument,
   renameDocument,
   restoreRevision,
+  templateDocument,
 } from "./documents.ts";
 import { listRevisions, nameRevision, SESSION_GAP_MS } from "./revisions.ts";
 
@@ -98,6 +100,7 @@ describe("document list", () => {
 
     expect(listDocuments(db, { sort: "lastOpened" }).map((doc) => doc.title)).toEqual(["Banana", "apple"]);
     expect(listDocuments(db, { sort: "lastModified" }).map((doc) => doc.title)).toEqual(["apple", "Banana"]);
+    expect(listDocuments(db, { sort: "lastModifiedByMe" }).map((doc) => doc.title)).toEqual(["apple", "Banana"]);
     expect(listDocuments(db, { sort: "title" }).map((doc) => doc.title)).toEqual(["apple", "Banana"]);
   });
 
@@ -219,5 +222,57 @@ describe("version history", () => {
     applySteps(db, id, { clientId: "a", version: 0, steps: insertTextSteps(id, "text") });
     const { content } = openDocument(db, id)!;
     expect(() => Node.fromJSON(documentSchema, content).check()).not.toThrow();
+  });
+});
+
+describe("previews", () => {
+  it("hold the top of the first page and follow edits", () => {
+    const { id } = createDocument(db);
+    applySteps(db, id, { clientId: "a", version: 0, steps: insertTextSteps(id, "Hello") });
+    expect(getDocumentPreview(db, id)).toEqual({ content: getDocumentContent(db, id)!.doc.toJSON() });
+    expect(getDocumentPreview(db, "missing")).toBeNull();
+  });
+
+  it("stop at the first page break and cut long documents to about a page", () => {
+    const paragraph = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+    const long = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        ...Array.from({ length: 200 }, (_, index) => paragraph(`Paragraph ${index}`)),
+        { type: "pageBreak" },
+        paragraph("Second page"),
+      ],
+    });
+    const { id } = createDocument(db, "Long", 1, long);
+    const preview = getDocumentPreview(db, id)!.content;
+    expect(preview.content!.length).toBeGreaterThan(40);
+    expect(preview.content!.length).toBeLessThan(80);
+
+    const broken = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [paragraph("First page"), { type: "pageBreak" }, paragraph("Second page")],
+    });
+    const short = createDocument(db, "Short", 1, broken);
+    expect(getDocumentPreview(db, short.id)!.content.content?.map((block) => block.content?.[0]?.text)).toEqual(["First page"]);
+  });
+
+  it("are made for documents stored before previews existed", () => {
+    const { id } = createDocument(db);
+    db.prepare("UPDATE documents SET preview = NULL WHERE id = ?").run(id);
+    expect(getDocumentPreview(db, id)!.content.type).toBe("doc");
+    expect(db.prepare("SELECT preview FROM documents WHERE id = ?").get(id)).not.toEqual({ preview: null });
+  });
+});
+
+describe("templateDocument", () => {
+  it("builds valid documents from every template on the requested paper size", () => {
+    for (const id of ["letter", "resume", "project-proposal", "report"]) {
+      const template = templateDocument(id, "Letter")!;
+      template.doc.check();
+      expect(template.doc.attrs.paperSize).toBe("Letter");
+      expect(template.doc.textContent.length).toBeGreaterThan(100);
+    }
+    expect(templateDocument("Resume")?.name).toBeUndefined();
+    expect(templateDocument("resume")?.name).toBe("Resume");
   });
 });

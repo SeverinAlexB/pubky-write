@@ -57,8 +57,16 @@ To restore a backup:
 
 ## Features
 
-- **Document list:** create, open, rename, delete, search titles and contents,
-  sort by last opened, last modified or title.
+- **Document list:** a grid of page thumbnails or a list grouped by date
+  (Today, Previous 7 days, Previous 30 days, Earlier); search titles and
+  contents; sort by last opened, last modified or title; rename, remove or open
+  in a new tab from each document's ⋮ menu. The view, sort and owner filter are
+  remembered in the browser. Thumbnails are drawn from the top of each
+  document's first page when its tile scrolls into view.
+- **Templates:** a blank document or one of four built-in templates (Letter,
+  Resume, Project proposal, Report, in `shared/src/templates.ts`).
+- **Import:** Open file picker opens Word (.docx) and Markdown (.md) files up to
+  20 MB as new documents (see [How import works](#how-import-works)).
 - **Editor:** paragraph styles (Normal text, Title, Subtitle, Heading 1–6,
   ⌘⌥0–6), fonts and font sizes, bold, italic, underline, strikethrough (⌘⇧X),
   superscript (⌘.), subscript (⌘,), capitalisation (lowercase, UPPERCASE,
@@ -182,6 +190,33 @@ tables and other atomic blocks move to the next page whole; one taller than a
 page overflows. Printing hides the spacers and lets the browser break pages with
 the same page size and margins.
 
+## How import works
+
+The server converts the file into the shared schema (`server/src/import/`) and
+checks the result against it before creating the document.
+
+- **Word** (`docx.ts`, with JSZip and xml-js): Title, Subtitle and Heading 1–9
+  styles (7–9 become Heading 6, outline levels count as headings), alignment,
+  line spacing, space before and after, indentation; bold, italic, underline,
+  strikethrough, superscript, subscript, text colour, highlight, font size and
+  font; links (hyperlinks and HYPERLINK fields); bulleted and numbered lists
+  with the closest list preset, continued numbering and nesting; paragraphs
+  starting with ☐ or ☑ (as the Word export writes checklists) become
+  checklists; tables with merged cells and header rows; PNG, JPEG, GIF and WebP
+  images (stored in `uploads/`); line and page breaks; page size, orientation
+  and margins. Deleted tracked changes are left out.
+- **Markdown** (`markdown.ts`, with markdown-it): headings, emphasis,
+  strikethrough, inline code, links, lists and `- [ ]` checklists, quotes, code
+  blocks, horizontal lines, tables with column alignment, images (data URLs are
+  stored, web addresses kept), `<u>`, `<sup>`, `<sub>`, `<mark>` and
+  `<!-- page break -->`. A `#` heading becomes Heading 1, since Markdown cannot
+  tell it apart from a Title.
+
+Everything else is dropped, and the editor shows which kinds of content were
+left out: headers and footers, footnotes, comments, equations, text boxes,
+charts and shapes, embedded objects, images in other formats or from local
+paths, and other HTML.
+
 ## How the comment margin works
 
 The pages and the comment margin sit side by side in one centred column
@@ -218,7 +253,9 @@ removed text, struck through, where it was.
 | Method and path                                      | Purpose                                 |
 | ---------------------------------------------------- | --------------------------------------- |
 | `GET /api/documents?q=&sort=`                        | List or search documents                |
-| `POST /api/documents`                                | Create a document                       |
+| `POST /api/documents`                                | Create a document (blank or `template`) |
+| `POST /api/documents/import`                         | Open a .docx or .md file as a new document (multipart `file`) |
+| `GET /api/documents/:id/preview?v=`                  | The top of the first page, for thumbnails |
 | `POST /api/documents/:id/copy`                       | Make a copy                             |
 | `GET /api/documents/:id`                             | Open a document (content, version, comments) |
 | `PATCH /api/documents/:id`                           | Rename                                  |
@@ -242,7 +279,7 @@ removed text, struck through, where it was.
 ## Tests
 
 ```bash
-npm test             # unit tests: step authority, revisions, comments, exports, sync, search
+npm test             # unit tests: step authority, revisions, comments, exports, imports, sync, search
 npm run e2e          # browser tests against a throwaway server and data directory
 npm run typecheck
 npm run perf         # performance with a 60-page document, against the production build

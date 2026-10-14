@@ -13,9 +13,18 @@ export type CreateDocumentRequest = {
   title?: string;
   /** Paper size of the new document, chosen from the user's locale (see defaultPaperSize). */
   paperSize?: string;
+  /** Starts from a built-in template (see templates.ts); the title defaults to the template's name. */
+  template?: string;
 };
 
-export type DocumentSort = "lastOpened" | "lastModified" | "title";
+/** "Last modified by me" and "Last modified" are the same order while there is one user. */
+export type DocumentSort = "lastOpened" | "lastModifiedByMe" | "lastModified" | "title";
+
+/** The top of a document's first page, for its thumbnail in the document list. */
+export type DocumentPreview = { content: JSONContent };
+
+/** POST /api/documents/import: the new document and the kinds of content that could not be converted. */
+export type ImportResponse = { document: DocumentSummary; dropped: string[] };
 
 export type OpenedDocument = DocumentSummary & {
   version: number;

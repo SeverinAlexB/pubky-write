@@ -48,13 +48,13 @@ test("documents can be renamed, searched and deleted from the list", async ({ pa
   await expect(page).toHaveTitle("Quarterly report - Docs");
 
   await page.getByLabel("Docs home").click();
-  await page.getByLabel("Search documents").fill("revenue");
+  await page.getByLabel("Search documents").fill("revenue grew");
   await expect(page.getByRole("list", { name: "Documents" }).getByRole("link")).toHaveText([/Quarterly report/]);
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "More actions for Quarterly report" }).click();
   await page.getByRole("menuitem", { name: "Remove" }).click();
-  await expect(page.getByText('No documents match "revenue".')).toBeVisible();
+  await page.getByRole("dialog", { name: "Remove document?" }).getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByText('No documents match "revenue grew".')).toBeVisible();
 });
 
 test("an earlier version can be previewed and restored from version history", async ({ page }) => {

@@ -12,7 +12,7 @@ import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/r
 import { getVersion } from "prosemirror-collab";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { api, ApiError } from "../api.ts";
 import { Icon } from "../components/Icon.tsx";
 import { lazyComponent } from "../components/lazyComponent.tsx";
@@ -34,6 +34,7 @@ import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { resetPagination } from "./pagination.ts";
 import { HorizontalRuler, VerticalRuler } from "./Rulers.tsx";
 import { stepsTransport } from "./stepsTransport.ts";
+import type { ImportNotice } from "../home/HomePage.tsx";
 import { DocumentSync, type SaveStatus } from "./sync.ts";
 import { ColorPalette } from "./toolbar/ColorPicker.tsx";
 import { Toolbar } from "./toolbar/Toolbar.tsx";
@@ -83,7 +84,11 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [threads, setThreads] = useState<CommentThread[]>(doc.comments);
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [commentsHidden, setCommentsHidden] = useState(() => localStorage.getItem(COMMENTS_HIDDEN_SETTING) === "true");
-  const [notice, setNotice] = useState<string | null>(null);
+  const location = useLocation();
+  // A notice from the document list, such as content an import left out.
+  const [notice, setNotice] = useState<string | null>(
+    () => (location.state as Partial<ImportNotice> | null)?.importNotice ?? null,
+  );
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
   const sync = useRef<DocumentSync | null>(null);
   const scrollBeforeHistory = useRef(0);
@@ -190,9 +195,15 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   useEffect(() => {
     if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), 4000);
+    // Longer messages stay longer.
+    const timer = setTimeout(() => setNotice(null), notice.length > 60 ? 10000 : 4000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // Show the notice once: not again after a reload.
+  useEffect(() => {
+    if (location.state) navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, []);
 
   // A link to a comment (?comment=<id>) opens the document with that thread active.
   useEffect(() => {

@@ -1,25 +1,39 @@
-import type { DocumentSort, DocumentSummary } from "@docs/shared";
+import type { DocumentSort, DocumentSummary, DocumentTemplate, ImportResponse } from "@docs/shared";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { api } from "../api.ts";
-import { Icon } from "../components/Icon.tsx";
-import { Menu } from "../components/Menu.tsx";
+import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
+import { lazyComponent } from "../components/lazyComponent.tsx";
+import type { MenuEntry } from "../components/Menu.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
-import { formatShortDate } from "../format.ts";
+import { HomeHeader } from "./HomeHeader.tsx";
+import { RecentDocuments, sortLabels, type DocumentView, type OwnerFilter } from "./RecentDocuments.tsx";
+import { TemplatesBand } from "./TemplatesBand.tsx";
+import { useStoredSetting } from "./useStoredSetting.ts";
 
-const sortLabels: Record<DocumentSort, string> = {
-  lastOpened: "Last opened by me",
-  lastModified: "Last modified",
-  title: "Title",
-};
+const ImportDialog = lazyComponent(() => import("./ImportDialog.tsx").then((module) => module.ImportDialog));
+
+const VIEW_SETTING = "docs.home.view";
+const SORT_SETTING = "docs.home.sort";
+const OWNER_SETTING = "docs.home.owner";
+const TEMPLATES_SETTING = "docs.home.templates";
+
+/** Shown in the editor after importing, when some content could not be converted. */
+export type ImportNotice = { importNotice: string };
 
 export function HomePage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<DocumentSort>("lastOpened");
+  const [view, setView] = useStoredSetting<DocumentView>(VIEW_SETTING, "grid", ["grid", "list"]);
+  const [sort, setSort] = useStoredSetting<DocumentSort>(SORT_SETTING, "lastOpened", Object.keys(sortLabels) as DocumentSort[]);
+  // There is one user, so both choices show every document.
+  const [owner, setOwner] = useStoredSetting<OwnerFilter>(OWNER_SETTING, "anyone", ["anyone", "me"]);
+  const [templates, setTemplates] = useStoredSetting(TEMPLATES_SETTING, "shown", ["shown", "hidden"]);
   const [documents, setDocuments] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<DocumentSummary | null>(null);
+  const [removing, setRemoving] = useState<DocumentSummary | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -36,13 +50,13 @@ export function HomePage() {
     return () => clearTimeout(timer);
   }, [load, query]);
 
-  async function createBlank() {
-    const created = await api.createDocument();
+  async function create(template?: DocumentTemplate) {
+    const created = await api.createDocument({ template: template?.id });
     navigate(`/d/${created.id}`);
   }
 
   async function remove(doc: DocumentSummary) {
-    if (!confirm(`Delete "${doc.title}"? This can't be undone.`)) return;
+    setRemoving(null);
     await api.deleteDocument(doc.id);
     await load();
   }
@@ -53,90 +67,50 @@ export function HomePage() {
     await load();
   }
 
-  const dateFor = (doc: DocumentSummary) => (sort === "lastModified" ? doc.updatedAt : doc.lastOpenedAt);
+  function opened({ document, dropped }: ImportResponse) {
+    const state: ImportNotice | undefined =
+      dropped.length > 0 ? { importNotice: `Some content could not be converted and was left out: ${dropped.join(", ")}.` } : undefined;
+    navigate(`/d/${document.id}`, { state });
+  }
+
+  const actions = (doc: DocumentSummary): MenuEntry[] => [
+    { label: "Rename", icon: "edit", onSelect: () => setRenaming(doc) },
+    { label: "Remove", icon: "delete", onSelect: () => setRemoving(doc) },
+    { label: "Open in new tab", icon: "open_in_new", onSelect: () => window.open(`/d/${doc.id}`, "_blank") },
+  ];
 
   return (
     <div className="home">
-      <header className="home-header">
-        <Link to="/" className="brand">
-          <img src="/favicon.svg" alt="" width={24} height={32} />
-          <span>Docs</span>
-        </Link>
-        <div className="search" role="search">
-          <Icon name="search" />
-          <input
-            type="search"
-            placeholder="Search"
-            aria-label="Search documents"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {query && (
-            <button type="button" className="icon-button" aria-label="Clear search" onClick={() => setQuery("")}>
-              <Icon name="close" />
-            </button>
+      <HomeHeader
+        query={query}
+        onQueryChange={setQuery}
+        templatesShown={templates === "shown"}
+        onTemplatesShownChange={(shown) => setTemplates(shown ? "shown" : "hidden")}
+      />
+
+      {templates === "shown" && <TemplatesBand onCreate={(template) => void create(template)} onHide={() => setTemplates("hidden")} />}
+
+      <main className="home-column recent-documents">
+        <RecentDocuments
+          documents={documents ?? []}
+          title={query ? "Search results" : "Recent documents"}
+          view={view}
+          sort={sort}
+          owner={owner}
+          onViewChange={setView}
+          onSortChange={setSort}
+          onOwnerChange={setOwner}
+          onOpenFilePicker={() => setImporting(true)}
+          onPreloadFilePicker={() => void ImportDialog.preload()}
+          actions={actions}
+        >
+          {error && <p className="error">Couldn't load documents: {error}</p>}
+          {documents?.length === 0 && (
+            <p className="empty">              {query
+                ? `No documents match "${query}".`
+                : `No documents yet.${templates === "shown" ? " Start a blank document above." : ""}`}</p>
           )}
-        </div>
-      </header>
-
-      <section className="templates" aria-labelledby="start-heading">
-        <div className="home-width">
-          <h2 id="start-heading">Start a new document</h2>
-          <button type="button" className="template-card" onClick={createBlank}>
-            <span className="template-preview">
-              <Icon name="add" size={48} />
-            </span>
-            <span className="template-name">Blank document</span>
-          </button>
-        </div>
-      </section>
-
-      <main className="home-width">
-        <div className="list-header">
-          <h2>{query ? "Search results" : "Recent documents"}</h2>
-          <label className="sort">
-            <span>Sort by</span>
-            <select value={sort} onChange={(event) => setSort(event.target.value as DocumentSort)}>
-              {Object.entries(sortLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {error && <p className="error">Couldn't load documents: {error}</p>}
-        {documents?.length === 0 && (
-          <p className="empty">{query ? `No documents match "${query}".` : "No documents yet. Start a blank document above."}</p>
-        )}
-
-        <ul className="document-list" aria-label="Documents">
-          {documents?.map((doc) => (
-            <li key={doc.id} className="document-row">
-              <Link to={`/d/${doc.id}`} className="document-link">
-                <Icon name="description" className="document-icon" />
-                <span className="document-title">{doc.title}</span>
-                <span className="document-date">{formatShortDate(dateFor(doc))}</span>
-              </Link>
-              <Menu
-                label={<Icon name="more_vert" />}
-                buttonClassName="icon-button"
-                ariaLabel={`More actions for ${doc.title}`}
-                align="end"
-                entries={[
-                  { label: "Rename", icon: "edit", onSelect: () => setRenaming(doc) },
-                  { label: "Remove", icon: "delete", onSelect: () => void remove(doc) },
-                  {
-                    label: "Open in new tab",
-                    icon: "open_in_new",
-                    onSelect: () => window.open(`/d/${doc.id}`, "_blank"),
-                  },
-                ]}
-              />
-            </li>
-          ))}
-        </ul>
+        </RecentDocuments>
       </main>
 
       {renaming && (
@@ -148,6 +122,18 @@ export function HomePage() {
           onCancel={() => setRenaming(null)}
         />
       )}
+
+      {removing && (
+        <ConfirmDialog
+          title="Remove document?"
+          message={`"${removing.title}" will be deleted permanently.`}
+          confirmLabel="Remove"
+          onConfirm={() => void remove(removing)}
+          onCancel={() => setRemoving(null)}
+        />
+      )}
+
+      {importing && <ImportDialog onImported={opened} onClose={() => setImporting(false)} />}
     </div>
   );
 }
