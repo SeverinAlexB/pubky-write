@@ -2201,8 +2201,74 @@ button:disabled {
   margin: 8px 0;
 }
 
-.page-content img.ProseMirror-selectednode {
-  outline: 2px solid var(--blue);
+/* A selected image: a 1px outline with eight 6px handles and a rotation handle on a stem above. */
+
+.page-content .image-frame {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 8px 0;
+}
+
+.page-content .image-frame img {
+  margin: 0;
+}
+
+.image-handles {
+  display: none;
+  position: absolute;
+  inset: 0;
+  outline: 1px solid var(--primary);
+  pointer-events: none;
+}
+
+.page-content .image-frame.ProseMirror-selectednode .image-handles {
+  display: block;
+}
+
+.image-handle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -4px 0 0 -4px;
+  border: 1px solid #fff;
+  background: var(--primary);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.image-handle-nw { top: 0; left: 0; cursor: nwse-resize; }
+.image-handle-n { top: 0; left: 50%; cursor: ns-resize; }
+.image-handle-ne { top: 0; left: 100%; cursor: nesw-resize; }
+.image-handle-e { top: 50%; left: 100%; cursor: ew-resize; }
+.image-handle-se { top: 100%; left: 100%; cursor: nwse-resize; }
+.image-handle-s { top: 100%; left: 50%; cursor: ns-resize; }
+.image-handle-sw { top: 100%; left: 0; cursor: nesw-resize; }
+.image-handle-w { top: 50%; left: 0; cursor: ew-resize; }
+
+.image-rotate-stem {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  width: 1px;
+  height: 16px;
+  background: var(--primary);
+}
+
+.image-rotate-handle {
+  position: absolute;
+  bottom: calc(100% + 16px);
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border: 1px solid var(--primary);
+  border-radius: 50%;
+  background: #fff;
+}
+
+.image-frame.is-resizing .image-handles {
+  outline-style: dashed;
 }
 
 .page-content mark {
@@ -2216,19 +2282,27 @@ button:disabled {
   table-layout: fixed;
 }
 
+/* Cells: 5pt (7px) padding, top aligned, 1px black borders unless Table options sets others. */
 .page-content th,
 .page-content td {
   position: relative;
-  min-width: 40px;
-  padding: 5px 7px;
-  border: 1px solid #000;
+  min-width: 20px;
+  padding: 7px;
+  border: var(--table-border-width, 1px) solid var(--table-border-color, #000);
   vertical-align: top;
   text-align: left;
 }
 
+/* Header rows (from imported files) look like any other row. */
 .page-content th {
-  background: #f3f3f3;
-  font-weight: 700;
+  font-weight: inherit;
+}
+
+.page-content.is-column-resize,
+.page-content.is-column-resize *,
+body.is-column-resizing,
+body.is-column-resizing * {
+  cursor: col-resize !important;
 }
 
 .page-content .selectedCell::after {
@@ -3289,4 +3363,130 @@ button:disabled {
     outline: 0;
     break-after: page;
   }
+}
+
+/* The right-click menu: 260px wide, at the pointer. */
+.context-menu-list {
+  min-width: 260px;
+}
+
+/* The floating pill under a selected image. */
+.image-pill {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+}
+
+.image-pill .icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+}
+
+.image-pill .image-pill-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  padding: 0 4px 0 8px;
+  border-radius: 16px;
+}
+
+.image-pill .menu-list {
+  top: calc(100% + 4px);
+}
+
+/* Table options and Image options */
+.side-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 360px;
+  overflow-y: auto;
+  background: var(--surface);
+}
+
+.side-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 24px;
+}
+
+.side-panel-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.side-panel-body {
+  padding: 0 24px 24px;
+}
+
+.side-panel-empty {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.side-panel-section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.side-panel-section h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.side-panel-row,
+.side-panel-field,
+.side-panel-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  font-size: 14px;
+}
+
+.side-panel-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.side-panel-check {
+  justify-content: flex-start;
+}
+
+.side-panel input[type="number"],
+.side-panel select,
+.side-panel textarea {
+  padding: 6px 8px;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+  background: #fff;
+  font: inherit;
+}
+
+.side-panel textarea {
+  resize: vertical;
+}
+
+.side-panel-swatch {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
 }

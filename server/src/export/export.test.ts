@@ -239,6 +239,70 @@ describe("toDocx", () => {
     expect(a4).toMatch(/<w:pgSz w:w="11906" w:h="16838" w:orient="portrait"\/>/);
   });
 
+  it("uses the image size set in the editor", async () => {
+    // A 4 × 2 PNG.
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEUlEQVR42mNk+M9QzwAEjDAGACCDAv8cI7IoAAAAAElFTkSuQmCC",
+      "base64",
+    );
+    const doc = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        { type: "image", attrs: { src: "/uploads/a.png", width: 320, height: 100 } },
+        { type: "image", attrs: { src: "/uploads/a.png", width: 200 } },
+        { type: "image", attrs: { src: "/uploads/a.png" } },
+        { type: "image", attrs: { src: "/uploads/a.png", width: 2000, height: 1000 } },
+      ],
+    });
+    const body = await documentXml(await toDocx(doc, "Images", async () => png), "word/document.xml");
+    // Word sizes are in EMU: 9525 per pixel. A4 with 2.54 cm margins has 602 px between the margins.
+    const extents = [...body.matchAll(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/g)].map(([, cx, cy]) => [
+      Math.round(Number(cx) / 9525),
+      Math.round(Number(cy) / 9525),
+    ]);
+    expect(extents).toEqual([
+      [320, 100],
+      [200, 100],
+      [4, 2],
+      [602, 301],
+    ]);
+  });
+
+  it("exports column widths, row heights, cell backgrounds and borders", async () => {
+    const doc = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          attrs: { borderColor: "#cc0000", borderWidth: 1.5 },
+          content: [
+            {
+              type: "tableRow",
+              attrs: { height: 40 },
+              content: [
+                { type: "tableCell", attrs: { colwidth: [300], backgroundColor: "#fff2cc" }, content: [paragraph(text("A"))] },
+                { type: "tableCell", attrs: { colwidth: [100] }, content: [paragraph(text("B"))] },
+              ],
+            },
+          ],
+        },
+        { type: "table", content: [{ type: "tableRow", content: [cell("tableCell", "C"), cell("tableCell", "D")] }] },
+      ],
+    });
+    const body = await documentXml(await toDocx(doc, "Tables", async () => null), "word/document.xml");
+    // 602 px between A4's margins is 9026 twips (rounded from the page size in millimetres).
+    const grids = [...body.matchAll(/<w:tblGrid>(.*?)<\/w:tblGrid>/g)].map(([, grid]) =>
+      [...grid!.matchAll(/w:w="(\d+)"/g)].map(([, width]) => Number(width)),
+    );
+    expect(grids[0]!.reduce((sum, width) => sum + width, 0)).toBeCloseTo(9026, -1);
+    expect(grids[0]![0]! / grids[0]![1]!).toBeCloseTo(3, 2);
+    expect(grids[1]![0]).toBe(grids[1]![1]);
+    expect(body).toContain('<w:tblLayout w:type="fixed"/>');
+    expect(body).toMatch(/<w:trHeight w:val="600" w:hRule="atLeast"\/>/);
+    expect(body).toMatch(/<w:shd [^>]*w:fill="FFF2CC"/);
+    expect(body).toMatch(/<w:top w:val="single" w:color="CC0000" w:sz="12"/);
+  });
+
   it("produces a Word file and tolerates missing images", async () => {
     const buffer = await toDocx(sample, "Sample", async () => null);
     expect(buffer.subarray(0, 2).toString()).toBe("PK"); // .docx is a zip archive

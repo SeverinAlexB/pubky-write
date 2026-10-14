@@ -10,3 +10,5 @@ export * from "./anchors.ts";
 export * from "./markdown.ts";
 export * from "./versionDiff.ts";
 export * from "./templates.ts";
+export * from "./tables.ts";
+export * from "./images.ts";

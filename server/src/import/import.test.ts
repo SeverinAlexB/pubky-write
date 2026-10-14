@@ -402,6 +402,32 @@ describe("docxToDocument", () => {
     expect(findNode(doc, "orderedList")?.attrs.listPreset).toBe("outline");
   });
 
+  it("keeps column widths through an export and import", async () => {
+    const paragraph = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+    const original = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                { type: "tableCell", attrs: { colwidth: [450] }, content: [paragraph("Wide")] },
+                { type: "tableCell", attrs: { colwidth: [150] }, content: [paragraph("Narrow")] },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const word = await toDocx(original, "Widths", async () => null);
+    const { doc } = await docxToDocument(word, { storeImage: imageStore().storeImage });
+    const row = findNode(doc, "tableRow")!;
+    const [wide, narrow] = [row.child(0).attrs.colwidth[0], row.child(1).attrs.colwidth[0]];
+    expect(wide / narrow).toBeCloseTo(3, 1);
+  });
+
   it("rejects files that are not Word documents", async () => {
     await expect(docxToDocument(Buffer.from("not a zip"), { storeImage: imageStore().storeImage })).rejects.toThrow(ImportError);
   });

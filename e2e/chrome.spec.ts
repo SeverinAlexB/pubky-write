@@ -392,9 +392,9 @@ test("Insert > Table inserts the size picked in the grid", async ({ page }) => {
   await editor(page).click();
   await menuBarItem(page, "Insert").click();
   await menu(page, "Insert").getByRole("menuitem", { name: "Table" }).hover();
-  await page.getByRole("button", { name: "3 x 2" }).hover();
+  await page.getByRole("menuitem", { name: "3 x 2" }).hover();
   await expect(page.getByRole("group", { name: "Table" })).toContainText("3 x 2");
-  await page.getByRole("button", { name: "3 x 2" }).click();
+  await page.getByRole("menuitem", { name: "3 x 2" }).click();
   await expect(editor(page).locator("tr")).toHaveCount(2);
   await expect(editor(page).locator("tr").first().locator("td")).toHaveCount(3);
 });

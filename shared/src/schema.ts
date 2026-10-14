@@ -2,19 +2,19 @@
 // The server applies client steps against this schema, so both sides must use the same extensions.
 import { getSchema, type AnyExtension, type JSONContent } from "@tiptap/core";
 import Highlight from "@tiptap/extension-highlight";
-import Image from "@tiptap/extension-image";
-import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import { Color, FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Strike from "@tiptap/extension-strike";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import StarterKit from "@tiptap/starter-kit";
+import { DocsImage } from "./images.ts";
 import { checklistExtensions, ListPreset } from "./lists.ts";
 import { PageBreak } from "./pageBreak.ts";
 import { PageSetupAttributes } from "./pageSetupAttributes.ts";
 import { ParagraphFormat } from "./paragraphFormat.ts";
 import { headingLevels, ParagraphStyle } from "./paragraphStyles.ts";
+import { DocsTable, DocsTableCell, DocsTableHeader, DocsTableRow } from "./tables.ts";
 
 export const documentExtensions: AnyExtension[] = [
   StarterKit.configure({
@@ -46,11 +46,11 @@ export const documentExtensions: AnyExtension[] = [
   ...checklistExtensions,
   PageBreak,
   PageSetupAttributes,
-  Image.configure({ inline: false, allowBase64: false }),
-  Table.configure({ resizable: false }),
-  TableRow,
-  TableHeader,
-  TableCell,
+  DocsImage,
+  DocsTable,
+  DocsTableRow,
+  DocsTableHeader,
+  DocsTableCell,
 ];
 
 export const documentSchema = getSchema(documentExtensions);

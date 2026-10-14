@@ -6,12 +6,12 @@ import { MenuList, type MenuEntry, type MenuItem } from "../components/MenuList.
 import { shortcut } from "../components/shortcuts.ts";
 import { useDismiss } from "../components/useDismiss.ts";
 import type { EditorActions, ListKind, ViewSettings } from "./actions.ts";
-import { changeFontSize, clearFormatting } from "./extensions.ts";
-import { lineSpacingEntries, paragraphSpacingAt } from "./formatMenus.ts";
+import { clearFormatting } from "./extensions.ts";
+import { alignAndIndentMenu, lineSpacingEntries, paragraphSpacingAt, paragraphStylesMenu, textMenu } from "./formatMenus.ts";
 import { ListPresetMenu } from "./ListPresets.tsx";
-import { currentParagraphStyle, paragraphStyles } from "./paragraphStyles.ts";
+import { currentParagraphStyle } from "./paragraphStyles.ts";
+import { formatTableMenu, tableMenuState } from "./tableMenus.ts";
 import { TableSizePicker } from "./TableSizePicker.tsx";
-import { styleEntry } from "./toolbar/TextControls.tsx";
 
 type MenuBarProps = { editor: Editor; actions: EditorActions; view: ViewSettings };
 
@@ -23,6 +23,7 @@ function selectMenuState({ editor }: { editor: Editor }) {
     canRedo: editor.can().redo(),
     hasSelection: !editor.state.selection.empty,
     inTable: editor.isActive("table"),
+    table: tableMenuState(editor),
     style: currentParagraphStyle(editor),
     spacing: paragraphSpacingAt(editor),
     listPresets: {
@@ -290,72 +291,10 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
 }
 
 function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): MenuEntry[] {
-  const run = () => editor.chain().focus();
-  const capitalise = actions.setCapitalisation;
   return [
-    {
-      label: "Text",
-      icon: "format_bold",
-      submenu: [
-        { label: "Bold", icon: "format_bold", shortcut: shortcut("⌘B"), onSelect: () => run().toggleBold().run() },
-        { label: "Italic", icon: "format_italic", shortcut: shortcut("⌘I"), onSelect: () => run().toggleItalic().run() },
-        {
-          label: "Underline",
-          icon: "format_underlined",
-          shortcut: shortcut("⌘U"),
-          onSelect: () => run().toggleUnderline().run(),
-        },
-        {
-          label: "Strikethrough",
-          icon: "strikethrough_s",
-          shortcut: shortcut("⌘+Shift+X"),
-          onSelect: () => run().toggleStrike().run(),
-        },
-        { label: "Superscript", icon: "superscript", shortcut: shortcut("⌘."), onSelect: actions.toggleSuperscript },
-        { label: "Subscript", icon: "subscript", shortcut: shortcut("⌘,"), onSelect: actions.toggleSubscript },
-        "separator",
-        {
-          label: "Size",
-          icon: "format_size",
-          submenu: [
-            { label: "Increase font size", shortcut: shortcut("⌘+Shift+."), onSelect: () => changeFontSize(editor, 1) },
-            { label: "Decrease font size", shortcut: shortcut("⌘+Shift+,"), onSelect: () => changeFontSize(editor, -1) },
-          ],
-        },
-        {
-          label: "Capitalisation",
-          icon: "text_format",
-          submenu: [
-            { label: "lowercase", onSelect: capitalise && (() => capitalise("lowercase")) },
-            { label: "UPPERCASE", onSelect: capitalise && (() => capitalise("uppercase")) },
-            { label: "Title Case", onSelect: capitalise && (() => capitalise("titleCase")) },
-          ],
-        },
-      ],
-    },
-    {
-      label: "Paragraph styles",
-      icon: "format_paragraph",
-      submenu: [
-        ...paragraphStyles.map((style) => styleEntry(editor, style, state.style, false)),
-        "separator",
-        { label: "Options", onSelect: actions.styleOptions },
-      ],
-    },
-    {
-      label: "Align and indent",
-      icon: "format_align_left",
-      submenu: [
-        { label: "Left", shortcut: shortcut("⌘+Shift+L"), onSelect: () => run().setTextAlign("left").run() },
-        { label: "Centre", shortcut: shortcut("⌘+Shift+E"), onSelect: () => run().setTextAlign("center").run() },
-        { label: "Right", shortcut: shortcut("⌘+Shift+R"), onSelect: () => run().setTextAlign("right").run() },
-        { label: "Justified", shortcut: shortcut("⌘+Shift+J"), onSelect: () => run().setTextAlign("justify").run() },
-        "separator",
-        { label: "Increase indent", shortcut: shortcut("⌘+]"), onSelect: () => run().changeIndent(1).run() },
-        { label: "Decrease indent", shortcut: shortcut("⌘+["), onSelect: () => run().changeIndent(-1).run() },
-        { label: "Indentation options", onSelect: actions.indentationOptions },
-      ],
-    },
+    textMenu(editor, actions),
+    paragraphStylesMenu(editor, actions, state.style),
+    alignAndIndentMenu(editor, actions),
     {
       label: "Line & paragraph spacing",
       icon: "format_line_spacing",
@@ -378,16 +317,7 @@ function formatMenu(editor: Editor, actions: EditorActions, state: MenuState): M
       label: "Table",
       icon: "table",
       disabled: !state.inTable,
-      submenu: [
-        { label: "Insert row above", onSelect: () => run().addRowBefore().run() },
-        { label: "Insert row below", onSelect: () => run().addRowAfter().run() },
-        { label: "Insert column left", onSelect: () => run().addColumnBefore().run() },
-        { label: "Insert column right", onSelect: () => run().addColumnAfter().run() },
-        "separator",
-        { label: "Delete row", onSelect: () => run().deleteRow().run() },
-        { label: "Delete column", onSelect: () => run().deleteColumn().run() },
-        { label: "Delete table", onSelect: () => run().deleteTable().run() },
-      ],
+      submenu: formatTableMenu(editor, actions, state.table),
     },
     "separator",
     { label: "Clear formatting", icon: "format_clear", shortcut: shortcut("⌘\\"), onSelect: () => clearFormatting(editor) },

@@ -1,7 +1,11 @@
 import { DEFAULT_LINE_SPACING, lineSpacings, paragraphSpace } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
-import type { MenuEntry } from "../components/MenuList.tsx";
+import type { MenuEntry, MenuItem } from "../components/MenuList.tsx";
+import { shortcut } from "../components/shortcuts.ts";
 import type { EditorActions } from "./actions.ts";
+import { changeFontSize } from "./extensions.ts";
+import { paragraphStyles, type ParagraphStyle } from "./paragraphStyles.ts";
+import { styleEntry } from "./toolbar/TextControls.tsx";
 
 export function lineSpacingLabel(spacing: number): string {
   if (spacing === 1) return "Single";
@@ -46,4 +50,82 @@ export function lineSpacingEntries(editor: Editor, actions: EditorActions, curre
     { label: "Prevent single lines", checked: false, onSelect: actions.togglePreventSingleLines },
     { label: "Add page break before", checked: false, onSelect: actions.togglePageBreakBefore },
   ];
+}
+
+/** Format > Text, also under Format options in the right-click menu. */
+export function textMenu(editor: Editor, actions: EditorActions): MenuItem {
+  const run = () => editor.chain().focus();
+  const capitalise = actions.setCapitalisation;
+  return {
+    label: "Text",
+    icon: "format_bold",
+    submenu: [
+      { label: "Bold", icon: "format_bold", shortcut: shortcut("⌘B"), onSelect: () => run().toggleBold().run() },
+      { label: "Italic", icon: "format_italic", shortcut: shortcut("⌘I"), onSelect: () => run().toggleItalic().run() },
+      {
+        label: "Underline",
+        icon: "format_underlined",
+        shortcut: shortcut("⌘U"),
+        onSelect: () => run().toggleUnderline().run(),
+      },
+      {
+        label: "Strikethrough",
+        icon: "strikethrough_s",
+        shortcut: shortcut("⌘+Shift+X"),
+        onSelect: () => run().toggleStrike().run(),
+      },
+      { label: "Superscript", icon: "superscript", shortcut: shortcut("⌘."), onSelect: actions.toggleSuperscript },
+      { label: "Subscript", icon: "subscript", shortcut: shortcut("⌘,"), onSelect: actions.toggleSubscript },
+      "separator",
+      {
+        label: "Size",
+        icon: "format_size",
+        submenu: [
+          { label: "Increase font size", shortcut: shortcut("⌘+Shift+."), onSelect: () => changeFontSize(editor, 1) },
+          { label: "Decrease font size", shortcut: shortcut("⌘+Shift+,"), onSelect: () => changeFontSize(editor, -1) },
+        ],
+      },
+      {
+        label: "Capitalisation",
+        icon: "text_format",
+        submenu: [
+          { label: "lowercase", onSelect: capitalise && (() => capitalise("lowercase")) },
+          { label: "UPPERCASE", onSelect: capitalise && (() => capitalise("uppercase")) },
+          { label: "Title Case", onSelect: capitalise && (() => capitalise("titleCase")) },
+        ],
+      },
+    ],
+  };
+}
+
+/** Format > Paragraph styles. */
+export function paragraphStylesMenu(editor: Editor, actions: EditorActions, current: ParagraphStyle | null): MenuItem {
+  return {
+    label: "Paragraph styles",
+    icon: "format_paragraph",
+    submenu: [
+      ...paragraphStyles.map((style) => styleEntry(editor, style, current, false)),
+      "separator",
+      { label: "Options", onSelect: actions.styleOptions },
+    ],
+  };
+}
+
+/** Format > Align and indent. */
+export function alignAndIndentMenu(editor: Editor, actions: EditorActions): MenuItem {
+  const run = () => editor.chain().focus();
+  return {
+    label: "Align and indent",
+    icon: "format_align_left",
+    submenu: [
+      { label: "Left", shortcut: shortcut("⌘+Shift+L"), onSelect: () => run().setTextAlign("left").run() },
+      { label: "Centre", shortcut: shortcut("⌘+Shift+E"), onSelect: () => run().setTextAlign("center").run() },
+      { label: "Right", shortcut: shortcut("⌘+Shift+R"), onSelect: () => run().setTextAlign("right").run() },
+      { label: "Justified", shortcut: shortcut("⌘+Shift+J"), onSelect: () => run().setTextAlign("justify").run() },
+      "separator",
+      { label: "Increase indent", shortcut: shortcut("⌘+]"), onSelect: () => run().changeIndent(1).run() },
+      { label: "Decrease indent", shortcut: shortcut("⌘+["), onSelect: () => run().changeIndent(-1).run() },
+      { label: "Indentation options", onSelect: actions.indentationOptions },
+    ],
+  };
 }

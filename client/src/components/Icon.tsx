@@ -3,9 +3,12 @@ import addSvg from "@material-symbols/svg-400/outlined/add.svg?raw";
 import addCommentSvg from "@material-symbols/svg-400/outlined/add_comment.svg?raw";
 import addReactionSvg from "@material-symbols/svg-400/outlined/add_reaction.svg?raw";
 import arrowBackSvg from "@material-symbols/svg-400/outlined/arrow_back.svg?raw";
+import arrowDownwardSvg from "@material-symbols/svg-400/outlined/arrow_downward.svg?raw";
 import arrowDropDownSvg from "@material-symbols/svg-400/outlined/arrow_drop_down.svg?raw";
 import arrowRightSvg from "@material-symbols/svg-400/outlined/arrow_right.svg?raw";
+import arrowUpwardSvg from "@material-symbols/svg-400/outlined/arrow_upward.svg?raw";
 import articleSvg from "@material-symbols/svg-400/outlined/article.svg?raw";
+import borderColorSvg from "@material-symbols/svg-400/outlined/border_color.svg?raw";
 import checkSvg from "@material-symbols/svg-400/outlined/check.svg?raw";
 import checkCircleSvg from "@material-symbols/svg-400/outlined/check_circle.svg?raw";
 import checklistSvg from "@material-symbols/svg-400/outlined/checklist.svg?raw";
@@ -16,6 +19,7 @@ import commentSvg from "@material-symbols/svg-400/outlined/comment.svg?raw";
 import contentCopySvg from "@material-symbols/svg-400/outlined/content_copy.svg?raw";
 import contentCutSvg from "@material-symbols/svg-400/outlined/content_cut.svg?raw";
 import contentPasteSvg from "@material-symbols/svg-400/outlined/content_paste.svg?raw";
+import cropSvg from "@material-symbols/svg-400/outlined/crop.svg?raw";
 import deleteSvg from "@material-symbols/svg-400/outlined/delete.svg?raw";
 import descriptionSvg from "@material-symbols/svg-400/outlined/description.svg?raw";
 import downloadSvg from "@material-symbols/svg-400/outlined/download.svg?raw";
@@ -30,8 +34,11 @@ import formatAlignLeftSvg from "@material-symbols/svg-400/outlined/format_align_
 import formatAlignRightSvg from "@material-symbols/svg-400/outlined/format_align_right.svg?raw";
 import formatBoldSvg from "@material-symbols/svg-400/outlined/format_bold.svg?raw";
 import formatClearSvg from "@material-symbols/svg-400/outlined/format_clear.svg?raw";
+import formatColorFillSvg from "@material-symbols/svg-400/outlined/format_color_fill.svg?raw";
 import formatColorResetSvg from "@material-symbols/svg-400/outlined/format_color_reset.svg?raw";
 import formatColorTextSvg from "@material-symbols/svg-400/outlined/format_color_text.svg?raw";
+import formatImageBreakLeftSvg from "@material-symbols/svg-400/outlined/format_image_break_left.svg?raw";
+import formatImageInlineLeftSvg from "@material-symbols/svg-400/outlined/format_image_inline_left.svg?raw";
 import formatIndentDecreaseSvg from "@material-symbols/svg-400/outlined/format_indent_decrease.svg?raw";
 import formatIndentIncreaseSvg from "@material-symbols/svg-400/outlined/format_indent_increase.svg?raw";
 import formatItalicSvg from "@material-symbols/svg-400/outlined/format_italic.svg?raw";
@@ -47,12 +54,16 @@ import gridViewSvg from "@material-symbols/svg-400/outlined/grid_view.svg?raw";
 import historySvg from "@material-symbols/svg-400/outlined/history.svg?raw";
 import horizontalRuleSvg from "@material-symbols/svg-400/outlined/horizontal_rule.svg?raw";
 import imageSvg from "@material-symbols/svg-400/outlined/image.svg?raw";
+import imagesmodeSvg from "@material-symbols/svg-400/outlined/imagesmode.svg?raw";
 import infoSvg from "@material-symbols/svg-400/outlined/info.svg?raw";
 import inkHighlighterSvg from "@material-symbols/svg-400/outlined/ink_highlighter.svg?raw";
 import insertPageBreakSvg from "@material-symbols/svg-400/outlined/insert_page_break.svg?raw";
 import keyboardArrowDownSvg from "@material-symbols/svg-400/outlined/keyboard_arrow_down.svg?raw";
 import keyboardArrowUpSvg from "@material-symbols/svg-400/outlined/keyboard_arrow_up.svg?raw";
+import lineStyleSvg from "@material-symbols/svg-400/outlined/line_style.svg?raw";
+import lineWeightSvg from "@material-symbols/svg-400/outlined/line_weight.svg?raw";
 import linkSvg from "@material-symbols/svg-400/outlined/link.svg?raw";
+import linkOffSvg from "@material-symbols/svg-400/outlined/link_off.svg?raw";
 import listSvg from "@material-symbols/svg-400/outlined/list.svg?raw";
 import markdownSvg from "@material-symbols/svg-400/outlined/markdown.svg?raw";
 import menuSvg from "@material-symbols/svg-400/outlined/menu.svg?raw";
@@ -63,8 +74,10 @@ import printSvg from "@material-symbols/svg-400/outlined/print.svg?raw";
 import redoSvg from "@material-symbols/svg-400/outlined/redo.svg?raw";
 import removeSvg from "@material-symbols/svg-400/outlined/remove.svg?raw";
 import restartAltSvg from "@material-symbols/svg-400/outlined/restart_alt.svg?raw";
+import rotateRightSvg from "@material-symbols/svg-400/outlined/rotate_right.svg?raw";
 import searchSvg from "@material-symbols/svg-400/outlined/search.svg?raw";
 import selectAllSvg from "@material-symbols/svg-400/outlined/select_all.svg?raw";
+import sortSvg from "@material-symbols/svg-400/outlined/sort.svg?raw";
 import sortByAlphaSvg from "@material-symbols/svg-400/outlined/sort_by_alpha.svg?raw";
 import specialCharacterSvg from "@material-symbols/svg-400/outlined/special_character.svg?raw";
 import strikethroughSSvg from "@material-symbols/svg-400/outlined/strikethrough_s.svg?raw";
@@ -72,6 +85,7 @@ import subscriptSvg from "@material-symbols/svg-400/outlined/subscript.svg?raw";
 import superscriptSvg from "@material-symbols/svg-400/outlined/superscript.svg?raw";
 import syncSvg from "@material-symbols/svg-400/outlined/sync.svg?raw";
 import tableSvg from "@material-symbols/svg-400/outlined/table.svg?raw";
+import tableRowsSvg from "@material-symbols/svg-400/outlined/table_rows.svg?raw";
 import tagSvg from "@material-symbols/svg-400/outlined/tag.svg?raw";
 import textFormatSvg from "@material-symbols/svg-400/outlined/text_format.svg?raw";
 import tocSvg from "@material-symbols/svg-400/outlined/toc.svg?raw";
@@ -81,16 +95,21 @@ import unfoldLessSvg from "@material-symbols/svg-400/outlined/unfold_less.svg?ra
 import unfoldMoreSvg from "@material-symbols/svg-400/outlined/unfold_more.svg?raw";
 import uploadSvg from "@material-symbols/svg-400/outlined/upload.svg?raw";
 import uploadFileSvg from "@material-symbols/svg-400/outlined/upload_file.svg?raw";
+import viewColumnSvg from "@material-symbols/svg-400/outlined/view_column.svg?raw";
 import viewListSvg from "@material-symbols/svg-400/outlined/view_list.svg?raw";
+import wrapTextSvg from "@material-symbols/svg-400/outlined/wrap_text.svg?raw";
 
 const symbols = {
   add: addSvg,
   add_comment: addCommentSvg,
   add_reaction: addReactionSvg,
   arrow_back: arrowBackSvg,
+  arrow_downward: arrowDownwardSvg,
   arrow_drop_down: arrowDropDownSvg,
   arrow_right: arrowRightSvg,
+  arrow_upward: arrowUpwardSvg,
   article: articleSvg,
+  border_color: borderColorSvg,
   check: checkSvg,
   check_circle: checkCircleSvg,
   checklist: checklistSvg,
@@ -101,6 +120,7 @@ const symbols = {
   content_copy: contentCopySvg,
   content_cut: contentCutSvg,
   content_paste: contentPasteSvg,
+  crop: cropSvg,
   delete: deleteSvg,
   description: descriptionSvg,
   download: downloadSvg,
@@ -115,8 +135,11 @@ const symbols = {
   format_align_right: formatAlignRightSvg,
   format_bold: formatBoldSvg,
   format_clear: formatClearSvg,
+  format_color_fill: formatColorFillSvg,
   format_color_reset: formatColorResetSvg,
   format_color_text: formatColorTextSvg,
+  format_image_break_left: formatImageBreakLeftSvg,
+  format_image_inline_left: formatImageInlineLeftSvg,
   format_indent_decrease: formatIndentDecreaseSvg,
   format_indent_increase: formatIndentIncreaseSvg,
   format_italic: formatItalicSvg,
@@ -132,12 +155,16 @@ const symbols = {
   history: historySvg,
   horizontal_rule: horizontalRuleSvg,
   image: imageSvg,
+  imagesmode: imagesmodeSvg,
   info: infoSvg,
   ink_highlighter: inkHighlighterSvg,
   insert_page_break: insertPageBreakSvg,
   keyboard_arrow_down: keyboardArrowDownSvg,
   keyboard_arrow_up: keyboardArrowUpSvg,
+  line_style: lineStyleSvg,
+  line_weight: lineWeightSvg,
   link: linkSvg,
+  link_off: linkOffSvg,
   list: listSvg,
   markdown: markdownSvg,
   menu: menuSvg,
@@ -148,8 +175,10 @@ const symbols = {
   redo: redoSvg,
   remove: removeSvg,
   restart_alt: restartAltSvg,
+  rotate_right: rotateRightSvg,
   search: searchSvg,
   select_all: selectAllSvg,
+  sort: sortSvg,
   sort_by_alpha: sortByAlphaSvg,
   special_character: specialCharacterSvg,
   strikethrough_s: strikethroughSSvg,
@@ -157,6 +186,7 @@ const symbols = {
   superscript: superscriptSvg,
   sync: syncSvg,
   table: tableSvg,
+  table_rows: tableRowsSvg,
   tag: tagSvg,
   text_format: textFormatSvg,
   toc: tocSvg,
@@ -166,7 +196,9 @@ const symbols = {
   unfold_more: unfoldMoreSvg,
   upload: uploadSvg,
   upload_file: uploadFileSvg,
+  view_column: viewColumnSvg,
   view_list: viewListSvg,
+  wrap_text: wrapTextSvg,
 };
 
 export type IconName = keyof typeof symbols;

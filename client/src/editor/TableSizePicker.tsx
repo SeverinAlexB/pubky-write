@@ -1,12 +1,12 @@
 import { useState } from "react";
 
 const MAX_SIZE = 20;
-const MIN_SHOWN = 10;
+const MIN_SHOWN = 5;
 
 /** Insert > Table: hover over the grid to choose columns × rows, click to insert. */
 export function TableSizePicker({ onPick }: { onPick: (columns: number, rows: number) => void }) {
   const [size, setSize] = useState({ columns: 1, rows: 1 });
-  // The grid grows one step beyond the hovered cell, up to 20 × 20.
+  // The grid starts at 5 × 5 and grows one step beyond the hovered cell, up to 20 × 20.
   const shownColumns = Math.min(Math.max(MIN_SHOWN, size.columns + 1), MAX_SIZE);
   const shownRows = Math.min(Math.max(MIN_SHOWN, size.rows + 1), MAX_SIZE);
 
@@ -22,6 +22,7 @@ export function TableSizePicker({ onPick }: { onPick: (columns: number, rows: nu
             <button
               key={`${row}-${column}`}
               type="button"
+              role="menuitem"
               tabIndex={-1}
               className={`table-picker-cell${column < size.columns && row < size.rows ? " is-selected" : ""}`}
               aria-label={`${column + 1} x ${row + 1}`}
@@ -31,7 +32,8 @@ export function TableSizePicker({ onPick }: { onPick: (columns: number, rows: nu
           )),
         )}
       </div>
-      <div className="table-picker-label" aria-live="polite">
+      {/* Each cell's name already says its size. */}
+      <div className="table-picker-label" aria-hidden>
         {size.columns} x {size.rows}
       </div>
     </div>

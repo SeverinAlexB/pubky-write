@@ -32,6 +32,8 @@ type MenuListProps = {
   isSubmenu?: boolean;
   label?: string;
   className?: string;
+  /** Opens the menu at a point of the window (a right-click), flipped to stay inside it. */
+  at?: { x: number; y: number };
 };
 
 /**
@@ -47,12 +49,13 @@ export function MenuList({
   isSubmenu = false,
   label,
   className = "",
+  at,
 }: MenuListProps) {
   const choosable = entries.flatMap((entry, index) => (isItem(entry) && !isDisabled(entry) ? [index] : []));
   const [active, setActive] = useState<number | null>(highlightFirst ? (choosable[0] ?? null) : null);
   const [open, setOpen] = useState<{ index: number; fromKeyboard: boolean } | null>(null);
   const list = useRef<HTMLUListElement>(null);
-  useFitInViewport(list, isSubmenu);
+  useFitInViewport(list, isSubmenu, at);
 
   const openItem = open ? (entries[open.index] as MenuItem) : null;
 
@@ -121,6 +124,7 @@ export function MenuList({
       className={`menu-list${isSubmenu ? " submenu" : ""} ${className}`}
       role="menu"
       aria-label={label}
+      style={at && { position: "fixed", left: at.x, top: at.y }}
       onMouseLeave={() => {
         if (!open) setActive(null);
       }}
@@ -212,13 +216,23 @@ function isDisabled(entry: MenuItem): boolean {
   return entry.disabled === true || (!entry.onSelect && !hasSubmenu(entry));
 }
 
-/** Keeps a menu on screen: submenus open to the left instead, other menus shift. */
-function useFitInViewport(ref: RefObject<HTMLElement | null>, isSubmenu: boolean): void {
+/**
+ * Keeps a menu on screen: submenus open to the left instead, other menus shift. A menu opened at
+ * a point opens to the left of it or above it where it would not fit.
+ */
+function useFitInViewport(ref: RefObject<HTMLElement | null>, isSubmenu: boolean, at?: { x: number; y: number }): void {
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
     const margin = 8;
     const rect = element.getBoundingClientRect();
+    if (at) {
+      const flip = (start: number, size: number, limit: number) =>
+        Math.max(margin, start + size > limit - margin ? Math.min(start - size, limit - margin - size) : start);
+      element.style.left = `${flip(at.x, rect.width, innerWidth)}px`;
+      element.style.top = `${flip(at.y, rect.height, innerHeight)}px`;
+      return;
+    }
     let x = 0;
     if (rect.right > innerWidth - margin) {
       if (isSubmenu) element.classList.add("submenu-start");
@@ -226,5 +240,5 @@ function useFitInViewport(ref: RefObject<HTMLElement | null>, isSubmenu: boolean
     }
     const y = rect.bottom > innerHeight - margin ? Math.max(innerHeight - margin - rect.bottom, margin - rect.top) : 0;
     if (x || y) element.style.translate = `${x}px ${y}px`;
-  }, [ref, isSubmenu]);
+  }, [ref, isSubmenu, at]);
 }

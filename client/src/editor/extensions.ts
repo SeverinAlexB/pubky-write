@@ -1,12 +1,14 @@
-import { documentExtensions, paragraphStyleDefinitions, paragraphStyleOf } from "@docs/shared";
+import { DocsImage, DocsTable, documentExtensions, paragraphStyleDefinitions, paragraphStyleOf } from "@docs/shared";
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import type { Mark, Node } from "@tiptap/pm/model";
 import { UndoRedo } from "@tiptap/extensions";
 import { collab } from "prosemirror-collab";
 import { clampFontSize, DEFAULT_FONT, parseFontSize, stepFontSize } from "./fonts.ts";
 import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
+import { EditorImage } from "./imageView.ts";
 import { Pagination } from "./pagination.ts";
 import { Search } from "./search.ts";
+import { EditorTable, TableColumnResize } from "./tables.ts";
 
 type EditorExtensionOptions = {
   /** Server version of the loaded document. */
@@ -30,7 +32,11 @@ export function editorExtensions({
   onCommentClick,
 }: EditorExtensionOptions): AnyExtension[] {
   return [
-    ...documentExtensions,
+    // The shared schema, with the editor's own views of tables and images.
+    ...documentExtensions.map((extension) =>
+      extension === DocsTable ? EditorTable : extension === DocsImage ? EditorImage : extension,
+    ),
+    TableColumnResize,
     UndoRedo,
     Search,
     Pagination,

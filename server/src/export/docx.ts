@@ -5,6 +5,7 @@ import {
   Document,
   ExternalHyperlink,
   HeadingLevel,
+  HeightRule,
   ImageRun,
   LevelFormat,
   Packer,
@@ -14,6 +15,7 @@ import {
   ShadingType,
   Table,
   TableCell,
+  TableLayoutType,
   TableRow,
   TextRun,
   WidthType,
@@ -24,12 +26,18 @@ import {
 } from "docx";
 import { imageSize } from "image-size";
 import type { Mark, Node } from "@tiptap/pm/model";
+import { TableMap } from "@tiptap/pm/tables";
 import {
   bulletPresets,
+  columnFractions,
+  DEFAULT_TABLE_BORDER_COLOR,
+  DEFAULT_TABLE_BORDER_WIDTH_PT,
+  isSize,
   DEFAULT_LINE_SPACING,
   listPresetIndex,
   numberedPresets,
   pageSetupOf,
+  pageSizeMm,
   paperSizes,
   paragraphStyleDefinitions,
   type NumberFormat,
@@ -47,6 +55,8 @@ const MAX_IMAGE_WIDTH_PX = 600;
 /** Half an inch, matching the editor's indent step. */
 const TWIPS_PER_INDENT = 720;
 const TWIPS_PER_POINT = 20;
+/** A CSS pixel is 1/96 inch: 15 twips. */
+const TWIPS_PER_PX = 15;
 const LIST_LEVELS = 9;
 const SUBTITLE_STYLE = "Subtitle";
 
@@ -76,13 +86,19 @@ const numberFormats: Record<NumberFormat, (typeof LevelFormat)[keyof typeof Leve
 };
 
 export async function toDocx(doc: Node, title: string, readImage: ImageReader): Promise<Buffer> {
-  const converter = new DocxConverter(readImage);
+  const converter = new DocxConverter(readImage, contentWidthTwips(doc));
   const children = await converter.blocks(doc);
   const file = new Document({ title, styles, numbering, sections: [{ properties: sectionProperties(doc), children }] });
   return Packer.toBuffer(file);
 }
 
 const TWIPS_PER_MM = 1440 / 25.4;
+
+/** The width between the page's left and right margins. */
+function contentWidthTwips(doc: Node): number {
+  const setup = pageSetupOf(doc);
+  return Math.round(pageSizeMm(setup).width * TWIPS_PER_MM - (setup.marginLeft + setup.marginRight) * TWIPS_PER_POINT);
+}
 
 /** Page size, orientation and margins from File > Page setup. */
 function sectionProperties(doc: Node) {
@@ -183,7 +199,10 @@ const numbering: INumberingOptions = {
 class DocxConverter {
   private listCount = 0;
 
-  constructor(private readonly readImage: ImageReader) {}
+  constructor(
+    private readonly readImage: ImageReader,
+    private readonly contentWidth: number,
+  ) {}
 
   async blocks(parent: Node, list?: ListContext, quoted = false): Promise<Block[]> {
     const blocks: Block[] = [];
@@ -286,36 +305,79 @@ class DocxConverter {
     return blocks;
   }
 
+  /** Column widths, row heights, cell backgrounds and borders as in the editor; the table fills the content width. */
   private async table(table: Node): Promise<Table> {
+    const map = TableMap.get(table);
+    const columnWidths = columnFractions(table).map((fraction) => Math.round(fraction * this.contentWidth));
     const rows: TableRow[] = [];
+    let offset = 0;
     for (const row of children(table)) {
       const cells: TableCell[] = [];
+      let cellOffset = offset + 1;
       for (const cell of children(row)) {
         const content = (await this.blocks(cell)).filter((block): block is Paragraph => block instanceof Paragraph);
+        const start = map.colCount(cellOffset);
+        const width = columnWidths.slice(start, start + cell.attrs.colspan).reduce((sum, value) => sum + value, 0);
         cells.push(
           new TableCell({
             children: content.length > 0 ? content : [new Paragraph("")],
             columnSpan: cell.attrs.colspan,
             rowSpan: cell.attrs.rowspan,
-            ...(cell.type.name === "tableHeader" && { shading: { type: ShadingType.CLEAR, fill: "F1F3F4" } }),
+            width: { size: width, type: WidthType.DXA },
+            ...(hexColor(cell.attrs.backgroundColor) && {
+              shading: { type: ShadingType.CLEAR, fill: hexColor(cell.attrs.backgroundColor) },
+            }),
           }),
         );
+        cellOffset += cell.nodeSize;
       }
-      rows.push(new TableRow({ children: cells }));
+      const header = row.childCount > 0 && children(row).every((cell) => cell.type.name === "tableHeader");
+      rows.push(
+        new TableRow({
+          children: cells,
+          ...(header && { tableHeader: true }),
+          ...(isSize(row.attrs.height) && {
+            height: { value: Math.round(row.attrs.height * TWIPS_PER_PX), rule: HeightRule.ATLEAST },
+          }),
+        }),
+      );
+      offset += row.nodeSize;
     }
-    return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
+    const borderWidth = typeof table.attrs.borderWidth === "number" ? table.attrs.borderWidth : DEFAULT_TABLE_BORDER_WIDTH_PT;
+    // Word measures borders in eighths of a point.
+    const border =
+      borderWidth > 0
+        ? {
+            style: BorderStyle.SINGLE,
+            size: Math.round(borderWidth * 8),
+            color: hexColor(table.attrs.borderColor) ?? hexColor(DEFAULT_TABLE_BORDER_COLOR)!,
+          }
+        : { style: BorderStyle.NONE, size: 0, color: "auto" };
+    return new Table({
+      rows,
+      columnWidths,
+      width: { size: this.contentWidth, type: WidthType.DXA },
+      layout: TableLayoutType.FIXED,
+      borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
+    });
   }
 
+  /** At the size set in the editor, or the natural size; never wider than the page's content. */
   private async image(node: Node): Promise<ParagraphChild> {
     const data = await this.readImage(node.attrs.src);
     const size = data ? safeImageSize(data) : null;
     if (!data || !size) return new TextRun({ text: `[Image: ${node.attrs.alt || node.attrs.src}]`, italics: true });
 
-    const scale = Math.min(1, MAX_IMAGE_WIDTH_PX / size.width);
+    const { width, height } = node.attrs;
+    let shown = isSize(width)
+      ? { width, height: isSize(height) ? height : (width * size.height) / size.width }
+      : { width: size.width, height: size.height };
+    const maxWidth = isSize(width) ? this.contentWidth / TWIPS_PER_PX : MAX_IMAGE_WIDTH_PX;
+    if (shown.width > maxWidth) shown = { width: maxWidth, height: (shown.height * maxWidth) / shown.width };
     return new ImageRun({
       type: size.type,
       data,
-      transformation: { width: Math.round(size.width * scale), height: Math.round(size.height * scale) },
+      transformation: { width: Math.round(shown.width), height: Math.round(shown.height) },
       altText: node.attrs.alt ? { name: node.attrs.alt, description: node.attrs.alt, title: node.attrs.alt } : undefined,
     });
   }

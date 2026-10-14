@@ -8,6 +8,7 @@ import { usePopover } from "../../components/usePopover.ts";
 import { useRovingToolbar } from "../../components/useRovingToolbar.ts";
 import { withShortcut } from "../../components/shortcuts.ts";
 import type { EditorActions } from "../actions.ts";
+import { isImage } from "../imageView.ts";
 import { clearFormatting, selectedFontFamily, selectedFontSize } from "../extensions.ts";
 import { paragraphSpacingAt } from "../formatMenus.ts";
 import { currentParagraphStyle } from "../paragraphStyles.ts";
@@ -55,6 +56,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
         },
         hasSelection: !editor.state.selection.empty,
         spacing: paragraphSpacingAt(editor),
+        image: isImage(editor),
       };
     },
   });
@@ -64,37 +66,7 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
   useRovingToolbar(toolbar, useCallback(() => editor.commands.focus(), [editor]));
   const run = () => editor.chain().focus();
 
-  const items: ReactNode[] = [
-    <ToolButton key="search" label={withShortcut("Search the menus", "Option+/")} onClick={actions.searchMenus}>
-      <Icon name="search" />
-    </ToolButton>,
-    <ToolButton key="undo" label={withShortcut("Undo", "⌘Z")} disabled={!state.canUndo} onClick={() => run().undo().run()}>
-      <Icon name="undo" />
-    </ToolButton>,
-    <ToolButton key="redo" label={withShortcut("Redo", "⌘Y")} disabled={!state.canRedo} onClick={() => run().redo().run()}>
-      <Icon name="redo" />
-    </ToolButton>,
-    <ToolButton key="print" label={withShortcut("Print", "⌘P")} onClick={actions.print}>
-      <Icon name="print" />
-    </ToolButton>,
-    <ToolButton
-      key="paint"
-      label="Paint format"
-      active={paintFormat.active}
-      onClick={() => paintFormat.start(false)}
-      onDoubleClick={() => paintFormat.start(true)}
-    >
-      <Icon name="format_paint" />
-    </ToolButton>,
-    <ZoomControl
-      key="zoom"
-      zoom={zoom}
-      onChange={(value) => {
-        onZoomChange(value);
-        editor.commands.focus();
-      }}
-    />,
-    <Divider key="divider-zoom" />,
+  const textControls: ReactNode[] = [
     <StylesControl key="styles" editor={editor} current={state.style} actions={actions} />,
     <Divider key="divider-styles" />,
     <FontControl key="font" editor={editor} current={state.fontFamily} actions={actions} />,
@@ -135,6 +107,41 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
       allowNone
       onPick={(color) => (color ? run().setHighlight({ color }).run() : run().unsetHighlight().run())}
     />,
+  ];
+
+  const items: ReactNode[] = [
+    <ToolButton key="search" label={withShortcut("Search the menus", "Option+/")} onClick={actions.searchMenus}>
+      <Icon name="search" />
+    </ToolButton>,
+    <ToolButton key="undo" label={withShortcut("Undo", "⌘Z")} disabled={!state.canUndo} onClick={() => run().undo().run()}>
+      <Icon name="undo" />
+    </ToolButton>,
+    <ToolButton key="redo" label={withShortcut("Redo", "⌘Y")} disabled={!state.canRedo} onClick={() => run().redo().run()}>
+      <Icon name="redo" />
+    </ToolButton>,
+    <ToolButton key="print" label={withShortcut("Print", "⌘P")} onClick={actions.print}>
+      <Icon name="print" />
+    </ToolButton>,
+    <ToolButton
+      key="paint"
+      label="Paint format"
+      active={paintFormat.active}
+      onClick={() => paintFormat.start(false)}
+      onDoubleClick={() => paintFormat.start(true)}
+    >
+      <Icon name="format_paint" />
+    </ToolButton>,
+    <ZoomControl
+      key="zoom"
+      zoom={zoom}
+      onChange={(value) => {
+        onZoomChange(value);
+        editor.commands.focus();
+      }}
+    />,
+    <Divider key="divider-zoom" />,
+    // While an image is selected, image controls take the place of the text formatting controls.
+    ...(state.image ? imageControls() : textControls),
     <Divider key="divider-colour" />,
     <ToolButton key="link" label={withShortcut("Insert link", "⌘K")} onClick={actions.insertLink}>
       <Icon name="link" />
@@ -244,6 +251,25 @@ export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onTo
       </ToolButton>
     </div>
   );
+}
+
+/** Border colour, weight and dash and cropping are not available yet: shown disabled. */
+function imageControls(): ReactNode[] {
+  return [
+    <ToolButton key="border-colour" label="Border colour" disabled>
+      <Icon name="border_color" />
+    </ToolButton>,
+    <ToolButton key="border-weight" label="Border weight" disabled>
+      <Icon name="line_weight" />
+    </ToolButton>,
+    <ToolButton key="border-dash" label="Border dash" disabled>
+      <Icon name="line_style" />
+    </ToolButton>,
+    <Divider key="divider-border" />,
+    <ToolButton key="crop" label="Crop image" disabled>
+      <Icon name="crop" />
+    </ToolButton>,
+  ];
 }
 
 /** A colour button's icon with the colour bar under it. */

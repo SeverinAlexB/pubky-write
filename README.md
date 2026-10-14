@@ -71,11 +71,34 @@ To restore a backup:
   ⌘⌥0–6), fonts and font sizes, bold, italic, underline, strikethrough (⌘⇧X),
   superscript (⌘.), subscript (⌘,), capitalisation (lowercase, UPPERCASE,
   Title Case), text and highlight colour, paint format, links, images (upload,
-  by URL, paste or drag and drop), tables (Insert > Table size grid), bulleted
+  by URL, paste or drag and drop), tables (see below), bulleted
   and numbered lists with glyph and numbering presets, checklists (⌘⇧9),
   alignment, line spacing, space before and after paragraphs (Custom spacing),
   indentation (Tab, Shift+Tab, ⌘] and ⌘[), page breaks (⌘↵), quotes, code
   blocks, horizontal lines, undo and redo, zoom (presets, typed or Fit).
+- **Tables:** Insert > Table picks the size in a grid that grows from 5 × 5 to
+  20 × 20. Tables fill the width between the margins with equal columns; drag
+  the border between two columns to change their widths (stored in the
+  document as each cell's `colwidth` and shown as proportions, so a table still
+  fills the page after the margins change). Format > Table and the right-click
+  menu insert and delete rows and columns, distribute rows and columns, merge
+  and unmerge cells, and sort the rows by the cursor's column (header rows stay
+  on top; one undo step). Table options (a side panel) shows the number of
+  columns and rows and sets the minimum row height, border colour and width,
+  and cell background colour.
+- **Images:** click an image to select it: an outline with eight handles (and a
+  rotation handle, not available yet). Corner handles resize keeping the
+  proportions, edge handles stretch one side (Shift keeps the proportions);
+  the size is stored as the image's `width` and `height`. A pill under the
+  image has Wrap text options (in line with text only), Image options (size and
+  alt text) and Add comment; while it is selected the toolbar shows the image
+  controls (border and crop, not available yet). Delete or Backspace removes it.
+- **Right-click menu:** the document has its own menu (Shift+right-click shows
+  the browser's, for spelling suggestions) with the clipboard commands,
+  Comment, Insert or Edit link (plus Copy link and Remove link on a link),
+  Format options and Clear formatting, and the table commands inside a table.
+  A right-click inside the selection keeps it; elsewhere it moves the cursor
+  to the pointer first.
 - **Menus and toolbar:** a File / Edit / View / Insert / Format / Tools menu
   bar with submenus and keyboard navigation, and a toolbar whose controls move
   into a "More" row when the window is narrow. Both follow the WAI-ARIA menubar
@@ -132,8 +155,9 @@ To restore a backup:
   versions. Restoring replaces only the text that differs, so comments on
   unchanged text survive.
 - **Export:** File > Download as Microsoft Word (.docx), plain text (.txt) or
-  Markdown (.md). Word files use Word's Title, Subtitle and Heading 1–6 styles
-  and the document's page size, orientation and margins.
+  Markdown (.md). Word files use Word's Title, Subtitle and Heading 1–6 styles,
+  the document's page size, orientation and margins, the tables' column
+  widths, row heights, borders and cell colours, and the images' sizes.
   In Markdown, Title becomes a level 1 heading, Subtitle a plain paragraph,
   checklists `- [ ]` / `- [x]`, superscript and subscript `<sup>` / `<sub>`,
   and a page break the comment `<!-- page break -->`. PDF uses the browser's
@@ -202,7 +226,7 @@ checks the result against it before creating the document.
   font; links (hyperlinks and HYPERLINK fields); bulleted and numbered lists
   with the closest list preset, continued numbering and nesting; paragraphs
   starting with ☐ or ☑ (as the Word export writes checklists) become
-  checklists; tables with merged cells and header rows; PNG, JPEG, GIF and WebP
+  checklists; tables with merged cells, header rows and column widths; PNG, JPEG, GIF and WebP
   images (stored in `uploads/`); line and page breaks; page size, orientation
   and margins. Deleted tracked changes are left out.
 - **Markdown** (`markdown.ts`, with markdown-it): headings, emphasis,
@@ -296,6 +320,9 @@ the pages settle and frame times while typing on pages 1 and 50. Set
 - One user, no accounts or sharing.
 - Tables are not split across pages, and printed page breaks can differ
   slightly from the screen because the browser paginates the printout.
+- Images are always in line with text; wrapping, rotation, cropping and image
+  borders are not available yet. Table alignment and fixed column widths in
+  Table options are not available yet either.
 - No headers, footers or page numbers.
 - Comments are not included in exports. The author is always "You"; emoji
   reactions and renaming the tab are not available yet.

@@ -1,6 +1,6 @@
 // Comment threads. Anchors are kept in step with the document: applySteps calls mapComments
 // with the same steps it applies, so stored positions always refer to the current version.
-import { mapAnchor, type CommentMessage, type CommentThread, type CreateCommentRequest } from "@docs/shared";
+import { commentQuote, mapAnchor, type CommentMessage, type CommentThread, type CreateCommentRequest } from "@docs/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { Mappable } from "@tiptap/pm/transform";
 import type { Database } from "./database.ts";
@@ -60,7 +60,7 @@ export function createComment(
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to > current.doc.content.size || to <= from) {
     throw new InvalidCommentError("The comment must be anchored to a non-empty range in the document");
   }
-  const quote = current.doc.textBetween(from, to, " ", " ").trim();
+  const quote = commentQuote(current.doc, from, to);
   if (!quote) throw new InvalidCommentError("Select some text to comment on");
 
   const body = validateBody(request.body);

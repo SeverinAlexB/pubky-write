@@ -73,6 +73,8 @@ export type EditorActions = {
   applyListPreset?: (kind: ListKind, preset: number) => void;
   setPageOrientation?: () => void;
   switchToPageless?: () => void;
+  tableOptions?: () => void;
+  imageOptions?: () => void;
 
   // Tools
   wordCount: () => void;

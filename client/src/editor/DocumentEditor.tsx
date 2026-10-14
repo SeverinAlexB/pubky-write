@@ -1,4 +1,5 @@
 import {
+  commentQuote,
   lengthUnit,
   pageGeometry,
   pageSetupKeys,
@@ -9,6 +10,7 @@ import {
   type Revision,
 } from "@docs/shared";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
+import { closeHistory as startUndoStep } from "@tiptap/pm/history";
 import { getVersion } from "prosemirror-collab";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
@@ -25,6 +27,8 @@ import { getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
 import { AllCommentsPanel } from "./AllCommentsPanel.tsx";
 import { COMMENT_MARGIN_WIDTH, CommentMargin, useCommentAnchors } from "./CommentMargin.tsx";
 import { CommentPill } from "./CommentPill.tsx";
+import { ContextMenu } from "./ContextMenu.tsx";
+import { ImagePill } from "./ImagePill.tsx";
 import { editorExtensions } from "./extensions.ts";
 import { FindBar } from "./FindBar.tsx";
 import { paragraphSpacingAt, type ParagraphSpacingState } from "./formatMenus.ts";
@@ -48,7 +52,18 @@ const FindReplaceDialog = lazyComponent(() => import("./FindReplaceDialog.tsx").
 const WordCountDialog = lazyComponent(() => import("./WordCountDialog.tsx").then((module) => module.WordCountDialog));
 const PageSetupDialog = lazyComponent(() => import("./PageSetupDialog.tsx").then((module) => module.PageSetupDialog));
 const CustomSpacingDialog = lazyComponent(() => import("./CustomSpacingDialog.tsx").then((module) => module.CustomSpacingDialog));
-const onDemand = [HistoryMode, FindReplaceDialog, WordCountDialog, PageSetupDialog, CustomSpacingDialog, ColorPalette];
+const TableOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.TableOptionsPanel));
+const ImageOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then((module) => module.ImageOptionsPanel));
+const onDemand = [
+  HistoryMode,
+  FindReplaceDialog,
+  WordCountDialog,
+  PageSetupDialog,
+  CustomSpacingDialog,
+  ColorPalette,
+  TableOptionsPanel,
+  ImageOptionsPanel,
+];
 
 const OUTLINE_SETTING = "docs.outlineOpen";
 const RULER_SETTING = "docs.rulerVisible";
@@ -83,6 +98,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [outlineOpen, setOutlineOpen] = useState(() => localStorage.getItem(OUTLINE_SETTING) === "true");
   const [threads, setThreads] = useState<CommentThread[]>(doc.comments);
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
+  // Table options or Image options, in place of All comments.
+  const [optionsPanel, setOptionsPanel] = useState<"table" | "image" | null>(null);
   const [commentsHidden, setCommentsHidden] = useState(() => localStorage.getItem(COMMENTS_HIDDEN_SETTING) === "true");
   const location = useLocation();
   // A notice from the document list, such as content an import left out.
@@ -288,7 +305,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   function startComment() {
     const { from, to, empty } = editor.state.selection;
-    if (empty || historyOpen || !editor.state.doc.textBetween(from, to, " ", " ").trim()) return;
+    if (empty || historyOpen || !commentQuote(editor.state.doc, from, to)) return;
     setCommentsHidden(false);
     editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: { from, to } }));
   }
@@ -439,7 +456,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     setImageUrlDialog(false);
     const src = url.trim();
     if (!/^https?:\/\//i.test(src)) return editor.commands.focus();
-    editor.chain().focus().insertContent({ type: "image", attrs: { src } }).run();
+    editor
+      .chain()
+      .focus()
+      .command(({ tr }) => Boolean(startUndoStep(tr)))
+      .insertContent({ type: "image", attrs: { src } })
+      .run();
   }
 
   function applyPageSetup(setup: PageSetup) {
@@ -518,7 +540,23 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     setPageOrientation: () => setPageSetupOpen(true),
     switchToPageless: () => setPrintLayout(false),
     wordCount: () => setWordCountOpen(true),
+    tableOptions: () => openOptionsPanel("table"),
+    imageOptions: () => openOptionsPanel("image"),
   };
+
+  function openOptionsPanel(panel: "table" | "image") {
+    setAllCommentsOpen(false);
+    setOptionsPanel(panel);
+  }
+
+  async function copyLink(href: string) {
+    try {
+      await navigator.clipboard.writeText(href);
+      setNotice("Link copied to clipboard");
+    } catch {
+      setNotice(`Couldn't copy the link: ${href}`);
+    }
+  }
 
   const openCommentCount = threads.filter((thread) => !thread.resolved).length;
   const commentState = useCommentAnchors(editor);
@@ -665,6 +703,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                   />
                 )}
                 {!historyOpen && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
+                {!historyOpen && (
+                  <ImagePill
+                    editor={editor}
+                    column={column}
+                    onImageOptions={() => openOptionsPanel("image")}
+                    onAddComment={startComment}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -677,7 +723,15 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
               onClose={() => setAllCommentsOpen(false)}
             />
           )}
+          {optionsPanel === "table" && !allCommentsOpen && !historyOpen && (
+            <TableOptionsPanel editor={editor} onClose={() => setOptionsPanel(null)} />
+          )}
+          {optionsPanel === "image" && !allCommentsOpen && !historyOpen && (
+            <ImageOptionsPanel editor={editor} onClose={() => setOptionsPanel(null)} />
+          )}
         </div>
+
+        {!historyOpen && <ContextMenu editor={editor} actions={actions} onCopyLink={(href) => void copyLink(href)} />}
 
         <input
           ref={imageInput}
@@ -845,8 +899,10 @@ async function insertImages(editor: Editor, files: File[], at?: number): Promise
     try {
       const { url } = await api.uploadImage(file);
       const image = { type: "image", attrs: { src: url, alt: file.name } };
-      if (at === undefined) editor.chain().focus().insertContent(image).run();
-      else editor.chain().focus().insertContentAt(at, image).run();
+      // Inserting an image is an undo step of its own.
+      const chain = editor.chain().focus().command(({ tr }) => Boolean(startUndoStep(tr)));
+      if (at === undefined) chain.insertContent(image).run();
+      else chain.insertContentAt(at, image).run();
     } catch (error) {
       alert(`Couldn't upload ${file.name}: ${(error as Error).message}`);
     }

@@ -110,6 +110,45 @@ test("the document list, editor, dialogs and version history have no serious acc
   await expectAccessible(page, "Version history");
 });
 
+test("tables, images, their panels and the right-click menu have no serious accessibility violations", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("Intro");
+  await page.keyboard.press("Enter");
+  await menuBarItem(page, "Insert").click();
+  await page.getByRole("menu", { name: "Insert" }).getByRole("menuitem", { name: "Table" }).hover();
+  await page.getByRole("menuitem", { name: "3 x 2", exact: true }).hover();
+  await expectAccessible(page, "Table size picker");
+  await page.getByRole("menuitem", { name: "3 x 2", exact: true }).click();
+  await page.keyboard.type("Cell");
+
+  await editor(page).locator("td").first().click({ button: "right" });
+  await expect(page.getByRole("menu", { name: "Context menu" })).toBeVisible();
+  await expectAccessible(page, "Right-click menu in a table");
+  await page.getByRole("menu", { name: "Context menu" }).getByRole("menuitem", { name: "Table options" }).click();
+  await expect(page.getByRole("complementary", { name: "Table options" })).toBeVisible();
+  await expectAccessible(page, "Table options");
+  await page.getByRole("button", { name: "Close table options" }).click();
+
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 120;
+    canvas.height = 60;
+    canvas.getContext("2d")!.fillRect(0, 0, 120, 60);
+    return canvas.toDataURL("image/png").split(",")[1]!;
+  });
+  await editor(page).getByText("Intro").click();
+  await page
+    .locator('input[type="file"][accept^="image"]')
+    .setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  await editor(page).locator(".image-frame img").click();
+  await expect(page.getByRole("toolbar", { name: "Image actions" })).toBeVisible();
+  await expectAccessible(page, "Selected image with its pill");
+  await page.getByRole("toolbar", { name: "Image actions" }).getByRole("button", { name: "Image options" }).click();
+  await expect(page.getByRole("complementary", { name: "Image options" })).toBeVisible();
+  await expectAccessible(page, "Image options");
+});
+
 test("the document list's views, menus and Open a file dialog have no serious accessibility violations", async ({ page }) => {
   await page.request.post("/api/documents", { data: { template: "report" } });
   await page.goto("/");

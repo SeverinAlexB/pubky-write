@@ -564,6 +564,11 @@ class DocxConverter {
     const rows: JSONContent[] = [];
     /** The cell that a vertically merged cell continues, by grid column. */
     const mergeOrigins = new Map<number, JSONContent>();
+    // Column widths in twips; stored as CSS pixels (15 twips each), shown as proportions.
+    const grid = (child(element, "tblGrid")?.children ?? [])
+      .filter((candidate) => candidate.name === "gridCol")
+      .map((column) => number(val(column, "w")));
+    const hasGrid = grid.length > 0 && grid.every((width) => width !== undefined && width > 0);
     for (const row of element.children.filter((candidate) => candidate.name === "tr")) {
       const rowProperties = child(row, "trPr");
       const header = toggle(child(rowProperties, "tblHeader")) === true;
@@ -578,9 +583,14 @@ class DocxConverter {
           origin.attrs!.rowspan = (origin.attrs!.rowspan as number) + 1;
         } else {
           const content = await this.blocks(cell.children);
+          const widths = grid.slice(column, column + colspan) as number[];
           const node: JSONContent = {
             type: header ? "tableHeader" : "tableCell",
-            attrs: { colspan, rowspan: 1 },
+            attrs: {
+              colspan,
+              rowspan: 1,
+              ...(hasGrid && widths.length === colspan && { colwidth: widths.map((width) => Math.round(width / 15)) }),
+            },
             content: content.length > 0 ? content : [emptyParagraph()],
           };
           cells.push(node);
