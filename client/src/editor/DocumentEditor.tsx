@@ -573,7 +573,12 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       activateSuggestion(null);
     }
     setMode(next);
-    if (next !== "viewing") requestAnimationFrame(() => editor.commands.focus(undefined, { scrollIntoView: false }));
+    if (next === "viewing") return;
+    requestAnimationFrame(() => {
+      // Unless a shortcut pressed meanwhile has opened a footnote, header or footer.
+      if (document.activeElement?.closest(".ProseMirror")) return;
+      editor.commands.focus(undefined, { scrollIntoView: false });
+    });
   }
 
   /** Tools > Review suggested edits: the card, with the first suggestion selected. */
