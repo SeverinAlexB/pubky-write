@@ -134,7 +134,7 @@ test("cards sit beside lines far apart and stack with an 8px gap on the same lin
 
   // A second comment on the first line: the active (new) card stays at its line, the other moves up.
   await editor(page).focus();
-  // The editor puts its selection back into the page shortly after it gets the focus.
+  // The editor puts its selection back into the page after it gets the focus.
   await selectionSynced(page);
   await page.keyboard.press(`${mod}+ArrowUp`);
   await selectionSynced(page);
@@ -170,7 +170,7 @@ test("cards follow their lines when the zoom, the text or the window changes", a
 
   // Lines added above push the text, and its card, down.
   await editor(page).focus();
-  // The editor puts its selection back into the page shortly after it gets the focus.
+  // The editor puts its selection back into the page after it gets the focus.
   await selectionSynced(page);
   await page.keyboard.press(`${mod}+ArrowUp`);
   await selectionSynced(page);
