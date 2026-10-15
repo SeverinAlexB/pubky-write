@@ -79,3 +79,12 @@
 - Rotating and cropping persist after reload.
 - Split cell 2 × 2 produces four cells; a pinned header row repeats on the
   next page.
+
+## Amendment (round 5): closing known limits
+
+- **Wrap text on both sides**: with "Wrap text", when the image is placed with
+  at least 1 cm of free text width on both sides, text flows on both sides of
+  it (left part of each line, then right part), as in a two-sided square wrap.
+  Otherwise text flows on the wider side.
+- **Tables across columns**: with columns, tables break between rows into the
+  next column (and page), repeating pinned header rows, like across pages.

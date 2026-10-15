@@ -144,3 +144,9 @@ tracked changes where the format allows.
   Table row" card; accepting removes the row.
 - Typing in the header in Suggesting mode produces a suggestion with a card;
   accepting it makes it normal header text.
+
+## Amendment (round 5)
+
+- "Preview reject all" also shows suggested formatting, paragraph changes and
+  image changes reverted (the preview renders the rejected result, not just
+  hidden insertions).

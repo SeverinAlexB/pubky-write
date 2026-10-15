@@ -63,3 +63,10 @@ tabs, and "Top level").
 - `?tab=` links open the right tab.
 - Comments in Tab 2 show in the margin only in Tab 2 and in "All comments"
   with the tab name.
+
+## Amendment (round 5)
+
+- **Undo per tab**: ⌘Z / ⌘Y undo and redo the edits of the current tab only;
+  edits in other tabs stay. Document-wide actions (page setup, columns,
+  headers/footers, tab add/delete/move/rename) are in a shared history that ⌘Z
+  reaches when they are the most recent change in the current tab's timeline.

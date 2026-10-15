@@ -40,6 +40,7 @@ editor's user interface on 2026-10-13 (window 1440 × 900, en-GB locale).
 | [17-everyday-editing.md](17-everyday-editing.md) | Link bubble, preferences and automatic formatting, shortcuts dialog, paste, offline safety |
 | [18-document-tabs.md](18-document-tabs.md) | Multiple tabs per document |
 | [19-columns-images-tables.md](19-columns-images-tables.md) | Columns, image wrapping/rotation/crop/options, split cell, pinned header rows |
+| [20-equations-and-emoji.md](20-equations-and-emoji.md) | Equations and the equation toolbar, emoji picker, colon picker, comment reactions |
 
 ## Priorities
 
@@ -111,3 +112,11 @@ New documents 17–19. 18 amends 07 (multiple tabs instead of one).
 - 17: Keyboard shortcuts dialog styling (filled search pill, dark section
   headers, 44px rows with dividers). 19: Column options dialog rows (label
   left, control right). 18: no empty-outline hint under tabs.
+
+### Round 5 (fifth capture session)
+
+- New document 20 (equations, emoji). Note: the reference left `\sqrt` as
+  literal text in our capture; the spec makes structure commands work
+  consistently as a deliberate choice.
+- Amendments closing known limits: 19 (wrap text on both sides, tables across
+  columns), 16 (Preview reject all reverts formatting), 18 (undo per tab).
