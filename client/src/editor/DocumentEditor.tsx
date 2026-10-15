@@ -481,6 +481,16 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         windowShortcuts.current[chord.id]?.();
         return;
       }
+      // With nothing focused (the card button that was clicked has gone, say), Chrome sends ⌘Z to
+      // the editor as a historyUndo input; Safari and Firefox do nothing, so undo and redo here.
+      if ((document.activeElement === document.body || !document.activeElement) && editor.isEditable) {
+        const command = matchesShortcut(event, "undo") ? "undo" : matchesShortcut(event, "redo") ? "redo" : null;
+        if (command) {
+          event.preventDefault();
+          editor.commands[command]();
+          return;
+        }
+      }
       const single = singles.find((entry) => matchesShortcut(event, entry.id));
       const action = single && windowShortcuts.current[single.id];
       if (!action) return;
@@ -1186,7 +1196,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                   onChange={(event) => setTitle(event.target.value)}
                   onBlur={() => void commitTitle()}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    }
                     if (event.key === "Escape") {
                       setTitle(savedTitle);
                       editor.commands.focus();

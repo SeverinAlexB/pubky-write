@@ -38,7 +38,11 @@ export function ZoomControl({ zoom, onChange }: { zoom: Zoom; onChange: (zoom: Z
         onFocus={(event) => event.target.select()}
         onClick={() => setOpen(true)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") commit();
+          if (event.key === "Enter") {
+            // The zoom returns the focus to the document, which would otherwise receive the Enter.
+            event.preventDefault();
+            commit();
+          }
           if (event.key === "Escape") setDraft(display);
         }}
         onBlur={() => setDraft(display)}

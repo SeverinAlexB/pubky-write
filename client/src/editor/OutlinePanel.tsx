@@ -337,7 +337,10 @@ function RenameField({ name, onDone }: { name: string; onDone: (name: string | n
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
         event.stopPropagation();
-        if (event.key === "Enter") finish(value);
+        if (event.key === "Enter") {
+          event.preventDefault();
+          finish(value);
+        }
         if (event.key === "Escape") finish(null);
       }}
       onBlur={() => finish(value)}

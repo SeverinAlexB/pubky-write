@@ -7,6 +7,7 @@ import { collab } from "prosemirror-collab";
 import { clampFontSize, DEFAULT_FONT, parseFontSize, stepFontSize } from "./fonts.ts";
 import { keyBinding } from "../shortcuts.ts";
 import { Autoformat } from "./autoformat.ts";
+import { FocusSelection } from "./focusSelection.ts";
 import { PasteCleanup } from "./paste.ts";
 import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
 import { DocumentTabs } from "./documentTabs.ts";
@@ -94,6 +95,7 @@ export function editorExtensions({
     }),
     TocLinks,
     TabKey,
+    FocusSelection,
     Autoformat,
     PasteCleanup.configure({ onImageError }),
   ];

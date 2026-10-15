@@ -24,6 +24,7 @@ import type { EditorView } from "@tiptap/pm/view";
 import { closeHistory } from "@tiptap/pm/history";
 import { keyBinding, keyBindings } from "../shortcuts.ts";
 import { AUTOFORMAT, Autoformat } from "./autoformat.ts";
+import { FocusSelection } from "./focusSelection.ts";
 import { PasteCleanup } from "./paste.ts";
 import { currentTab } from "./documentTabs.ts";
 import { documentFootnotes, layOutNow, pageIndexAt, tabFootnotes } from "./pagination.ts";
@@ -135,6 +136,7 @@ export function createRegionEditor({ main, binding, element, className, onEscape
       ...documentExtensions,
       TabLayout,
       TabKey,
+      FocusSelection,
       Autoformat,
       PasteCleanup,
       // In Suggesting mode the region's edits become suggestions in its content, like the body's.

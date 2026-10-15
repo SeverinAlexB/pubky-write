@@ -457,7 +457,10 @@ function NumberField({
         onChange={(event) => setText(event.target.value)}
         onBlur={commit}
         onKeyDown={(event) => {
-          if (event.key === "Enter") commit();
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
         }}
       />
     </label>

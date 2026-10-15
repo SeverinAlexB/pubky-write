@@ -176,17 +176,17 @@ export function FindReplaceDialog({ editor, onClose }: { editor: Editor; onClose
   );
 }
 
-/** Tab from the last control goes to the first one and Shift+Tab from the first to the last. */
+/** Tab and Shift+Tab move through the dialog's controls; from the last control Tab goes to the first, and back. */
 function keepFocusInside(dialog: HTMLElement, event: KeyboardEvent) {
   const focusable = [...dialog.querySelectorAll<HTMLElement>("input, button")].filter(
     (element) => !element.matches(":disabled") && element.offsetParent !== null,
   );
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (!first || !last) return;
-  const target = event.shiftKey ? last : first;
-  const edge = event.shiftKey ? first : last;
-  if (document.activeElement !== edge && dialog.contains(document.activeElement)) return;
+  if (focusable.length === 0) return;
+  // Moves the focus itself rather than leaving Tab to the browser: Safari skips buttons and
+  // checkboxes by default, so its next stop could be outside the dialog.
+  const index = focusable.indexOf(document.activeElement as HTMLElement);
+  const step = event.shiftKey ? -1 : 1;
+  const next = index === -1 ? (event.shiftKey ? focusable.length - 1 : 0) : (index + step + focusable.length) % focusable.length;
   event.preventDefault();
-  target.focus();
+  focusable[next]!.focus();
 }
