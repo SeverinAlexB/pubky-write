@@ -111,6 +111,31 @@ test.describe("link bubble", () => {
     expect(await documentText(page)).toBe("Read https://example.com/guide/ now");
   });
 
+  test("clicking the title opens the link in a new tab", async ({ page, context }) => {
+    // Serve the linked page locally so the test does not depend on the network.
+    await context.route("https://example.com/**", (route) =>
+      route.fulfill({ contentType: "text/html", body: "<title>Guide</title><p>Linked page</p>" }),
+    );
+    await newDocument(page);
+    await page.keyboard.type("Read ");
+    await page.keyboard.press(`${mod}+k`);
+    await page.getByLabel("Link URL").fill("https://example.com/guide/");
+    await page.getByRole("button", { name: "Apply" }).click();
+    await editor(page).locator("a").click({ position: { x: 20, y: 5 } });
+    const bubble = page.getByRole("dialog", { name: "Change or remove link." });
+    await expect(bubble).toBeVisible();
+
+    // Hold the button like a person does (about 150 ms), so the card has frames to react in.
+    const opened = context.waitForEvent("page", { timeout: 5000 });
+    await bubble.getByRole("link").click({ delay: 150 });
+    const tab = await opened;
+    await tab.waitForLoadState();
+    expect(tab.url()).toBe("https://example.com/guide/");
+    await expect(tab.getByText("Linked page")).toBeVisible();
+    // The document keeps its cursor in the link.
+    await expect(editor(page)).toBeFocused();
+  });
+
   test("is not shown when Show link details is off", async ({ page }) => {
     await newDocument(page);
     const dialog = await openPreferences(page);

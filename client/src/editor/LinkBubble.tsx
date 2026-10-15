@@ -93,10 +93,9 @@ export function LinkBubble({ editor, column, onEdit, onCopy }: LinkBubbleProps) 
       role="dialog"
       aria-label="Change or remove link."
       style={{ left: bubble.left, top: bubble.top }}
-      // Keep the editor's focus and cursor.
-      onMouseDown={(event) => {
-        if (!(event.target as HTMLElement).closest("a")) event.preventDefault();
-      }}
+      // Keep the editor's focus and cursor. This includes the title link: if the editor lost
+      // focus on mousedown, the card would hide before the click and the link would not open.
+      onMouseDown={(event) => event.preventDefault()}
     >
       <SiteIcon href={bubble.href} />
       <div className="link-bubble-text">
