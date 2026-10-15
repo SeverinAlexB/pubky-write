@@ -183,6 +183,12 @@ test("a column break moves the text after it to the next column, and is only off
   expect(second.page).toBe(0);
   expect(second.left).toBe(Math.round(COLUMN_WIDTH + 48));
   expect(Math.abs(second.top - first.top)).toBeLessThanOrEqual(1);
+  // The column holds what follows the break, even where balancing the columns would move a line
+  // back (one line before the break, two after it).
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Also second");
+  await expect.poll(async () => (await placeOf(page, editor(page).getByText("Also second"))).left).toBe(Math.round(COLUMN_WIDTH + 48));
+  expect((await placeOf(page, editor(page).getByText("Second column"))).left).toBe(Math.round(COLUMN_WIDTH + 48));
 
   // A column break in the last column starts the next page.
   await (await breakMenu()).getByRole("menuitem", { name: "Column break" }).click();

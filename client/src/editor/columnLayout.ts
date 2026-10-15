@@ -150,14 +150,17 @@ export function columnSpacers(
     }
     const columnsHeight = drawn.get(spacer.pos) ?? estimate(fromPage);
     const height = contentTop(frame, toPage) - contentTop(frame, fromPage) - columnsHeight - marginAt(spacer.pos, spacer.inline);
+    // Without forced breaks the drawn columns are only right once the fillers are, so the fillers
+    // are sized from the measured columns.
+    const tallest = forcedBreaks ? columnsHeight : estimate(fromPage);
     return {
       ...spacer,
       height: Math.max(0, round(height)),
       breaks: columns - 1 - (from % columns),
       spanner: true,
       after: to % columns,
-      fill: round(columnsHeight),
-      endFill: endFill(from, columnsHeight),
+      fill: round(tallest),
+      endFill: endFill(from, tallest),
     };
   });
   return [...spacers, ending];
