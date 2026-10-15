@@ -312,17 +312,22 @@ function currentSpacersOf(value: PaginationState): RenderedSpacer[] {
   return value.decorations.find().map((decoration) => ({ ...(decoration.spec.spacer as RenderedSpacer), pos: decoration.from }));
 }
 
+/**
+ * Whether two sets of spacers draw the same. Heights may differ by layout rounding: measured with
+ * a spacer of 205.73px, the next pass can ask for 205.75px and then for 205.73px again.
+ */
 function sameRenderedSpacers(a: RenderedSpacer[], b: RenderedSpacer[]): boolean {
+  const close = (x = 0, y = 0) => Math.abs(x - y) < 0.1;
   return (
     sameSpacers(a, b) &&
     a.every((spacer, i) => {
       const other = b[i]!;
       return (
-        spacer.height === other.height &&
+        close(spacer.height, other.height) &&
         spacer.breaks === other.breaks &&
         spacer.spanner === other.spanner &&
         spacer.after === other.after &&
-        spacer.fill === other.fill &&
+        close(spacer.fill, other.fill) &&
         spacer.repeat === other.repeat
       );
     })
@@ -608,17 +613,19 @@ function flushPendingSelection(view: EditorView): void {
 
 /**
  * Converts a measured position into the position it would have without the current spacers,
- * by subtracting the shift of every spacer above it.
+ * by subtracting the shift of every spacer above it. A position is below a spacer when it is
+ * below the spacer's middle: Firefox's text boxes reach a little beyond their line, so the top of
+ * the first line after a spacer can be above the spacer's bottom.
  */
 function naturalPositions(view: EditorView, toY: (clientY: number) => number): (y: number) => number {
-  const spacers = Array.from(shownTabElement(view).querySelectorAll<HTMLElement>("[data-shift]"), (element) => ({
-    bottom: toY(element.getBoundingClientRect().bottom),
-    shift: Number(element.dataset.shift) || 0,
-  })).sort((a, b) => a.bottom - b.bottom);
+  const spacers = Array.from(shownTabElement(view).querySelectorAll<HTMLElement>("[data-shift]"), (element) => {
+    const rect = element.getBoundingClientRect();
+    return { middle: toY((rect.top + rect.bottom) / 2), shift: Number(element.dataset.shift) || 0 };
+  }).sort((a, b) => a.middle - b.middle);
   return (y) => {
     let total = 0;
     for (const spacer of spacers) {
-      if (spacer.bottom > y + 0.5) break;
+      if (spacer.middle > y) break;
       total += spacer.shift;
     }
     return y - total;
