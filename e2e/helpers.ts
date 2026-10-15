@@ -21,6 +21,19 @@ export function editor(page: Page) {
   return page.getByLabel("Document content");
 }
 
+/**
+ * Gives the editor the focus the way the app does (ProseMirror's `view.focus()`, which puts its
+ * selection into the DOM with the focus). After a bare `element.focus()` with a backward selection,
+ * Firefox sometimes ignores the arrow keys that follow.
+ */
+export async function focusEditor(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const element = document.querySelector(".ProseMirror") as unknown as { editor: { view: { focus(): void } } };
+    element.editor.view.focus();
+  });
+  await expect(editor(page)).toBeFocused();
+}
+
 export async function waitUntilSaved(page: Page): Promise<void> {
   await expect(page.getByRole("status").first()).toHaveAttribute("title", "Saved");
 }

@@ -52,6 +52,7 @@ import { placeFixedImages } from "./imagePlacement.ts";
 import { pinnedRowCount, pinnedRowsKey, tableRowLines } from "./tableLayout.ts";
 import { layoutTabsIn } from "./tabLayout.ts";
 import { clientRect } from "./rects.ts";
+import { flushPendingSelection } from "./pendingSelection.ts";
 
 /** Space between pages, in CSS pixels at 100% zoom. */
 export const PAGE_GAP = 10;
@@ -609,15 +610,6 @@ function updatePageFields(view: EditorView, stack: HTMLElement, stride: number, 
     else value = String(Math.max(0, Math.floor((clientRect(field).top - top) / scale / stride)) + start);
     if (field.textContent !== value) field.textContent = value;
   }
-}
-
-/**
- * ProseMirror reads browser selection changes asynchronously; its DOM observer's flush applies
- * any pending one now. The observer is not part of the public API, so this is a no-op if it changes.
- */
-function flushPendingSelection(view: EditorView): void {
-  const observer = (view as unknown as { domObserver?: { flush?: () => void } }).domObserver;
-  observer?.flush?.();
 }
 
 /**

@@ -82,6 +82,7 @@ import {
   rebasePending,
   type PendingEntry,
 } from "./pendingSteps.ts";
+import { flushPendingSelection } from "./pendingSelection.ts";
 import {
   applyDirectly,
   getSuggesting,
@@ -371,6 +372,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     // Catch up with the server first (the entry may be newer than what this editor loaded).
     const fromEditor = editorVersion - since;
     if (steps.length > fromEditor) {
+      flushPendingSelection(editor.view);
       editor.view.dispatch(
         receiveTransaction(editor.state, steps.slice(fromEditor), server.clientIds.slice(fromEditor), { mapSelectionBackward: true }),
       );

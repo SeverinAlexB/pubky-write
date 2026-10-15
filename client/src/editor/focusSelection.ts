@@ -1,4 +1,9 @@
 import { Extension, isAndroid, isiOS, isSafari, isTextSelection, resolveFocusPosition } from "@tiptap/core";
+import { Plugin } from "@tiptap/pm/state";
+import { flushPendingSelection } from "./pendingSelection.ts";
+
+/** How long after the focus ProseMirror checks the browser's selection (its focus handler). */
+const PROSEMIRROR_FOCUS_CHECK_MS = 20;
 
 /**
  * Tiptap's `focus` command, except that in desktop Safari the selection goes into the DOM together
@@ -12,6 +17,35 @@ import { Extension, isAndroid, isiOS, isSafari, isTextSelection, resolveFocusPos
  */
 export const FocusSelection = Extension.create({
   name: "focusSelection",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          handleDOMEvents: {
+            // A moment after the editor gets the focus, ProseMirror writes its selection back to
+            // the DOM if the browser's differs from the one it last read, to undo a caret the
+            // browser placed on focus. When that timer runs late, keys pressed since then (a
+            // Shift+Arrow whose selectionchange has not been read yet) were undone. If a key was
+            // pressed, read the browser's selection just before: this timer is set first, so it
+            // runs first.
+            focus(view) {
+              if ((view as unknown as { focused: boolean }).focused) return false;
+              let pressed = false;
+              const onKeyDown = () => {
+                pressed = true;
+              };
+              view.dom.addEventListener("keydown", onKeyDown, true);
+              setTimeout(() => {
+                view.dom.removeEventListener("keydown", onKeyDown, true);
+                if (pressed && !view.isDestroyed) flushPendingSelection(view);
+              }, PROSEMIRROR_FOCUS_CHECK_MS);
+              return false;
+            },
+          },
+        },
+      }),
+    ];
+  },
   addCommands() {
     return {
       focus:

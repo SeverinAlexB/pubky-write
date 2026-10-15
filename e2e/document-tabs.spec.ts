@@ -1,7 +1,7 @@
 // Document tabs (docs/spec/18-document-tabs.md).
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
-import { allowClipboard, chooseStyle, createDocument, editor, menuBarItem, mod, readClipboard, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { allowClipboard, chooseStyle, createDocument, editor, focusEditor, menuBarItem, mod, readClipboard, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 function sidebar(page: Page) {
   return page.getByRole("complementary", { name: "Tabs and outlines" });
@@ -203,7 +203,7 @@ test("Rename, Choose emoji, Add subtab, Duplicate, Move up and down, Move into a
   await shownText(page).toBe("Plan text");
 
   // Undo brings the deleted tabs back.
-  await editor(page).focus();
+  await focusEditor(page);
   await page.keyboard.press(`${mod}+z`);
   await expect(tabNames(page)).toHaveText(["Plan", "Tab 2", "Copy of Plan"]);
   await waitUntilSaved(page);

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { allowClipboard, createDocument, editor, lineEnd, lineStart, menuBarItem, mod, readClipboard, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { allowClipboard, createDocument, editor, focusEditor, lineEnd, lineStart, menuBarItem, mod, readClipboard, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 /** Types `text`, then selects `word` (its last occurrence) with the keyboard. */
 async function typeAndSelect(page: Page, text: string, word: string): Promise<void> {
@@ -121,7 +121,7 @@ test("cards sit beside lines far apart and stack with an 8px gap on the same lin
   await createDocument(page);
   await typeAndSelect(page, "alpha beta gamma", "alpha");
   await addComment(page, "On alpha");
-  await editor(page).focus();
+  await focusEditor(page);
   await selectionSynced(page);
   await page.keyboard.press(lineEnd);
   await selectionSynced(page);
@@ -135,7 +135,7 @@ test("cards sit beside lines far apart and stack with an 8px gap on the same lin
   await expectBeside(card(page, "below"), highlights.filter({ hasText: "below" }));
 
   // A second comment on the first line: the active (new) card stays at its line, the other moves up.
-  await editor(page).focus();
+  await focusEditor(page);
   // The editor puts its selection back into the page after it gets the focus.
   await selectionSynced(page);
   await page.keyboard.press(`${mod}+ArrowUp`);
@@ -171,7 +171,7 @@ test("cards follow their lines when the zoom, the text or the window changes", a
   await expectBeside(thread, highlight);
 
   // Lines added above push the text, and its card, down.
-  await editor(page).focus();
+  await focusEditor(page);
   // The editor puts its selection back into the page after it gets the focus.
   await selectionSynced(page);
   await page.keyboard.press(`${mod}+ArrowUp`);
@@ -190,7 +190,7 @@ test("active and idle cards, and the colours of commented text", async ({ page }
   await createDocument(page);
   await typeAndSelect(page, "one two three", "one");
   await addComment(page, "First");
-  await editor(page).focus();
+  await focusEditor(page);
   await selectionSynced(page);
   await page.keyboard.press(lineEnd);
   await selectionSynced(page);
@@ -262,7 +262,7 @@ test("All comments lists threads in document order and activates the clicked one
   await createDocument(page);
   await typeAndSelect(page, "first second", "second");
   await addComment(page, "On second");
-  await editor(page).focus();
+  await focusEditor(page);
   await selectionSynced(page);
   await page.keyboard.press(lineEnd);
   await selectionSynced(page);

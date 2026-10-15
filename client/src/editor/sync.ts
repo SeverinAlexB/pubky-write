@@ -11,6 +11,7 @@ import type { SubmitStepsRequest } from "@docs/shared";
 import { receiveTransaction, sendableSteps } from "prosemirror-collab";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { Step } from "@tiptap/pm/transform";
+import { flushPendingSelection } from "./pendingSelection.ts";
 
 export type SaveStatus = "saved" | "saving" | "offline" | "error";
 
@@ -185,6 +186,8 @@ export class DocumentSync {
   }
 
   private receive(steps: readonly Step[], clientIds: readonly (string | number)[]): void {
+    // The confirmation can arrive in the middle of a keyboard selection: read the browser's first.
+    flushPendingSelection(this.target);
     this.target.dispatch(receiveTransaction(this.target.state, steps, clientIds, { mapSelectionBackward: true }));
   }
 
