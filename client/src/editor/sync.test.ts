@@ -1,6 +1,6 @@
 import type { SubmitStepsRequest } from "@docs/shared";
 import { documentSchema } from "@docs/shared";
-import { collab, getVersion, sendableSteps } from "prosemirror-collab";
+import { collab, getVersion, sendableSteps } from "./collab.ts";
 import { EditorState, type Transaction } from "@tiptap/pm/state";
 import { Step } from "@tiptap/pm/transform";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

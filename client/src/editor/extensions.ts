@@ -3,7 +3,7 @@ import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import type { Mark, Node } from "@tiptap/pm/model";
 import { UndoRedo } from "@tiptap/extensions";
-import { collab } from "prosemirror-collab";
+import { collab } from "./collab.ts";
 import { clampFontSize, DEFAULT_FONT, parseFontSize, stepFontSize } from "./fonts.ts";
 import { keyBinding } from "../shortcuts.ts";
 import { Autoformat } from "./autoformat.ts";

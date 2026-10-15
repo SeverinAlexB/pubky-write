@@ -327,15 +327,17 @@ step. `client/src/editor/sync.ts` sends unsaved steps in batches:
 3. The server (`server/src/documents.ts`) applies the steps to its copy of the
    document, stores them and returns the new version.
 4. If the batch is based on an old version, the server answers `409` with the
-   steps the client is missing. `prosemirror-collab` rebases the local steps on
-   top of them and the batch is sent again.
+   steps the client is missing. The collab plugin (`collab.ts`, prosemirror-collab
+   with exact inverses for formatting steps) rebases the local steps on top of
+   them and the batch is sent again.
 5. Network errors are retried with backoff. A rejected batch (invalid step)
    stops saving and asks the user to reload.
 6. Before each batch is sent, the unconfirmed steps are written to IndexedDB with
    the version they are built on, so they survive a closed tab. A batch sent again
    after its answer was lost is recognised by the server (`alreadyApplied`), and
    when kept steps are restored, the server's steps from this session's client id
-   show which of them it already has (see
+   show which of them it already has; restoring ends the old session on the
+   server first, so a batch of it still on its way cannot be applied as well (see
    [docs/design/everyday-editing.md](docs/design/everyday-editing.md)).
 
 The server validates every step against the same schema as the editor
@@ -344,8 +346,11 @@ The server validates every step against the same schema as the editor
 Comment anchors follow the same steps: the server moves every anchor through
 each accepted batch (`server/src/comments.ts`), and the editor moves its copy
 through every local change (`client/src/editor/commentAnchors.ts`). Both use the
-same rule from `shared/src/anchors.ts`. A new comment is created only after
-pending edits are saved, so its positions refer to the server's version.
+same rule from `shared/src/anchors.ts`, also for anchors whose text was deleted.
+Steps received from the server move the editor's anchors in the server's order
+(from its confirmed version), so both end in the same place after concurrent
+edits. A new comment is created only after pending edits are saved, so its
+positions refer to the server's version.
 
 To add real-time collaboration later, push accepted steps to other open
 clients (for example over WebSocket) and apply them with `receiveTransaction`,
@@ -487,6 +492,7 @@ removed text, struck through, where it was.
 | `DELETE /api/documents/:id`                          | Delete                                  |
 | `POST /api/documents/:id/steps`                      | Submit a batch of steps                 |
 | `GET /api/documents/:id/steps?since=`                | The steps after a version, with their client ids |
+| `POST /api/documents/:id/sessions/:clientId/end`     | End an editor session whose kept edits are restored (body `since`); the steps after `since` |
 | `GET /api/documents/:id/revisions`                   | List versions                           |
 | `GET /api/documents/:id/revisions/:revisionId`       | Get one version's content               |
 | `POST /api/documents/:id/revisions/:revisionId/restore` | Restore a version                    |
@@ -515,6 +521,12 @@ npm run e2e:all      # the same in Chrome, Firefox and WebKit (see e2e/README.md
 npm run typecheck
 npm run perf         # performance with a 60-page document, against the production build
 ```
+
+`npm test` includes property tests (`tests/property/`, with fast-check): random edits by two
+editors over a network that delays and fails requests and loses answers, crashes whose kept edits
+are restored, suggestions, document tabs and undo. Each property runs 100 cases;
+`PROPERTY_RUNS=20000 npx vitest run tests/property` runs more, and `PROPERTY_SEED=<seed>` replays
+a failure fast-check reported.
 
 `npm run perf` builds the client, opens a 60-page document with 40 comments, the
 outline and the live word count, and prints the time to open it, the time until

@@ -39,6 +39,9 @@ type DocumentRow = {
 
 export class InvalidStepsError extends Error {}
 
+/** The batch comes from an editor session whose kept edits another session has restored. */
+export class SessionEndedError extends InvalidStepsError {}
+
 /** `alreadyApplied`: the batch had been applied before (a client resending it after losing the answer). */
 export type ApplyStepsResult =
   | { kind: "applied"; version: number; alreadyApplied?: true }
@@ -191,6 +194,9 @@ export function applySteps(
   return inTransaction(db, () => {
     const row = findRow(db, id);
     if (!row) return null;
+    if (db.prepare("SELECT 1 FROM ended_sessions WHERE document_id = ? AND client_id = ?").get(id, request.clientId)) {
+      throw new SessionEndedError("This editing session has ended: its edits were restored in another one");
+    }
 
     if (request.version !== row.version) {
       if (request.version > row.version) throw new InvalidStepsError("Version is ahead of the server");
@@ -277,6 +283,20 @@ export function getStepsSince(db: Database, id: string, version: number): StepsC
   if (!row) return null;
   if (version > row.version || version < 0) throw new InvalidStepsError("Version is not known to the server");
   return { version: row.version, ...stepsSince(db, id, version) };
+}
+
+/**
+ * Ends an editor session before its kept edits are restored by another one, and returns the steps
+ * after `version` (see getStepsSince). From then on the server refuses the session's batches, so a
+ * batch it sent just before it closed cannot be applied after the restoring session has looked at
+ * the steps: it is either among them or never applied. Null for an unknown document.
+ */
+export function endSession(db: Database, id: string, clientId: string, version: number): StepsConflictResponse | null {
+  return inTransaction(db, () => {
+    const result = getStepsSince(db, id, version);
+    if (result) db.prepare("INSERT OR IGNORE INTO ended_sessions (document_id, client_id) VALUES (?, ?)").run(id, clientId);
+    return result;
+  });
 }
 
 function stepsSince(db: Database, id: string, version: number): { steps: unknown[]; clientIds: string[] } {

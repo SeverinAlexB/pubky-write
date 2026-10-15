@@ -22,7 +22,7 @@ import { getText, getTextSerializersFromSchema } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { closeHistory as startUndoStep } from "@tiptap/pm/history";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
-import { getVersion, receiveTransaction, sendableSteps } from "prosemirror-collab";
+import { getVersion } from "./collab.ts";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -76,10 +76,9 @@ import { stepsTransport } from "./stepsTransport.ts";
 import {
   claimEntry,
   holdEntry,
-  parseSteps,
   PendingPersister,
   pendingStore,
-  rebasePending,
+  restoreEntry,
   type PendingEntry,
 } from "./pendingSteps.ts";
 import { flushPendingSelection } from "./pendingSelection.ts";
@@ -346,7 +345,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       for (const entry of entries) {
         const documentSync = sync.current;
         if (!documentSync) return;
-        const outcome = await claimEntry(entry, () => documentSync.exclusive(() => restoreEntry(entry)));
+        const outcome = await claimEntry(entry, () => documentSync.exclusive(() => (editor.isDestroyed ? Promise.resolve("failed" as const) : restoreKeptEntry(entry))));
         if (outcome === "offline" || editor.isDestroyed) return;
         if (outcome === "restored") setNotice("Unsaved changes restored");
         if (outcome === "failed" || outcome === "partial") setUnsavedEntries((current) => [...current, entry]);
@@ -356,45 +355,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     }
   }
 
-  async function restoreEntry(entry: PendingEntry): Promise<"restored" | "nothing" | "partial" | "failed" | "offline"> {
-    const pending = parseSteps(entry.steps, editor.schema);
-    if (!pending) return "failed";
-    const editorVersion = getVersion(editor.state);
-    const since = Math.min(entry.version, editorVersion);
-    let server;
-    try {
-      server = await api.stepsSince(doc.id, since);
-    } catch (error) {
-      return error instanceof ApiError && error.status < 500 ? "failed" : "offline";
-    }
-    const steps = parseSteps(server.steps, editor.schema);
-    if (!steps || editor.isDestroyed) return "failed";
-    // Catch up with the server first (the entry may be newer than what this editor loaded).
-    const fromEditor = editorVersion - since;
-    if (steps.length > fromEditor) {
-      flushPendingSelection(editor.view);
-      editor.view.dispatch(
-        receiveTransaction(editor.state, steps.slice(fromEditor), server.clientIds.slice(fromEditor), { mapSelectionBackward: true }),
-      );
-    }
-    const fromEntry = entry.version - since;
-    const result = rebasePending(
-      editor.state.doc,
-      pending,
-      entry.clientId,
-      { steps: steps.slice(fromEntry), clientIds: server.clientIds.slice(fromEntry) },
-      sendableSteps(editor.state)?.steps ?? [],
-    );
-    if (result.steps.length > 0) {
-      const tr = editor.state.tr;
-      for (const step of result.steps) tr.step(step);
-      // Raw steps: not an undo step, and not rewritten into suggestions again.
-      editor.view.dispatch(tr.setMeta("addToHistory", false));
-    }
-    // The restored steps are this session's unsaved steps now; the old entry goes in the same write.
-    await persister.current?.replace(entry.key).catch(() => {});
-    if (result.dropped > 0) return "partial";
-    return result.steps.length > 0 ? "restored" : "nothing";
+  function restoreKeptEntry(entry: PendingEntry) {
+    // The view itself: it reads the browser's pending selection before the restored steps are applied.
+    return restoreEntry(editor.view, entry, {
+      endSession: (clientId, version) => api.endSession(doc.id, clientId, version),
+      refused: (error) => error instanceof ApiError && error.status < 500,
+      replaceEntry: async (key) => persister.current?.replace(key),
+    });
   }
 
   useEffect(() => {
@@ -711,13 +678,19 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       if (!draft || draft.from === draft.to) throw new Error("The text you selected was deleted");
       if (sync.current?.hasUnsavedChanges) throw new Error("Couldn't save your latest changes. Try again.");
       try {
-        const thread = await api.createComment(doc.id, { version: getVersion(editor.state), ...draft, body });
+        const version = getVersion(editor.state);
+        const thread = await api.createComment(doc.id, { version, ...draft, body });
         setThreads((current) => [...current, thread]);
         // One update per transaction: each update replaces the transaction's previous one.
         const anchor = getCommentAnchors(editor.state).draft ?? draft;
         editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: null }));
         editor.view.dispatch(
-          updateCommentAnchors(editor.state.tr, { type: "upsert", anchor: { id: thread.id, ...anchor, resolved: false } }),
+          updateCommentAnchors(editor.state.tr, {
+            type: "upsert",
+            anchor: { id: thread.id, ...anchor, resolved: false },
+            // The server's range is at the version the request was made at; typing since then moved only the shown one.
+            ...(getVersion(editor.state) === version && { confirmed: { from: thread.from, to: thread.to } }),
+          }),
         );
         editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "activate", id: thread.id }));
         return;

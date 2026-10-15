@@ -137,12 +137,19 @@ free belongs to a session that has ended. When a document opens (and when the br
 online), the editor restores such entries, holding their lock while it does, so two tabs do not
 restore the same entry.
 
-**Restoring.** With the sync paused (`exclusive`), the editor asks the server for the steps since
-the entry's version (`GET /api/documents/:id/steps?since=`), catches up with any it has not seen
+**Restoring.** With the sync paused (`exclusive`), the editor ends the entry's session on the
+server and gets the steps since the entry's version in the same request
+(`POST /api/documents/:id/sessions/:clientId/end`, `endSession` in `documents.ts`). From then on
+the server refuses that session's batches: a batch the closed tab sent just before it closed is
+either among the returned steps or never applied, so it cannot land after the restore has decided
+what to send again (the property tests found it applied twice otherwise). The editor catches up
+with any steps it has not seen
 (`receiveTransaction`), and rebases the entry's steps over the server's newer steps and its own
 unsaved steps (`rebasePending`, the same mapping prosemirror-collab uses). The rebased steps are
 applied as raw steps (not an undo step, not rewritten into suggestions), and in one IndexedDB
-transaction the old entry is removed and this session's entry written. The sync then sends them.
+transaction the old entry is removed and this session's entry written (or, with nothing left
+unsaved, this session's own earlier entry removed as well). The sync then sends them.
+`restoreEntry` in `pendingSteps.ts` does all of this, so the property tests run the same code.
 
 **No edit is applied twice.** The kept version is always the version the batch in flight is built
 on, because the entry is written before each batch is sent. If the tab closes after the server
@@ -153,7 +160,17 @@ the first unconfirmed steps and is applied whole) and rebases only the rest. In 
 the same case (the answer to a batch is lost and it is sent again) is recognised by the server:
 `applySteps` answers `alreadyApplied` when the steps right after the batch's version are exactly
 the batch, from the same client, so the client treats it as accepted. Otherwise it is a normal
-conflict, and prosemirror-collab confirms the client's own steps by their client id.
+conflict, and the collab plugin confirms the client's own steps by their client id.
+
+**Rebasing.** `collab.ts` is prosemirror-collab with two changes the property tests
+(`tests/property/`) called for. Unconfirmed steps keep exact inverses: a mark step rebased over
+text that already has the mark is undone by restoring each part's marks (`RestoreMarksStep`, a
+step that never leaves the editor) instead of removing the mark from all of it, which lost another
+session's formatting. And when a rebased step no longer applies and is dropped, the undo and redo
+steps after it are dropped too, since one of them may be its undo (which re-inserted its text a
+second time). Comment anchors in the editor are kept as of the confirmed version and moved through
+the confirmed steps in the server's order (`commentAnchors.ts`), so they end where the server's
+do even when rebasing maps a range differently.
 
 **Offline indicator.** A failed request (or the browser's `offline` event) sets the save status to
 offline: the indicator shows a cloud-off icon and "Offline – changes will be saved when you

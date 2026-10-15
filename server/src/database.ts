@@ -74,6 +74,14 @@ export function openDatabase(path: string): Database {
       created_at    INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS suggestion_replies_by_document ON suggestion_replies (document_id, suggestion_id);
+
+    -- Editor sessions whose kept edits another session restored: batches they still send are
+    -- refused, so none of their steps can land after the restore (see documents.ts, endSession).
+    CREATE TABLE IF NOT EXISTS ended_sessions (
+      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      client_id   TEXT NOT NULL,
+      PRIMARY KEY (document_id, client_id)
+    );
   `);
   // Databases created before versions could be named.
   const revisionColumns = db.prepare("PRAGMA table_info(revisions)").all() as { name: string }[];

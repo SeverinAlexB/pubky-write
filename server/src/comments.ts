@@ -138,10 +138,14 @@ export function deleteComment(db: Database, documentId: string, commentId: numbe
   return db.prepare("DELETE FROM comments WHERE document_id = ? AND id = ?").run(documentId, commentId).changes > 0;
 }
 
-/** Moves every live anchor through the steps just applied to the document. */
+/**
+ * Moves every anchor through the steps just applied to the document, also those whose text was
+ * deleted (collapsed to a point): the editor moves them too, and their place decides where the
+ * thread is listed and which tab it belongs to.
+ */
 export function mapComments(db: Database, documentId: string, mapping: Mappable): void {
   const rows = db
-    .prepare("SELECT id, anchor_from, anchor_to FROM comments WHERE document_id = ? AND anchor_to > anchor_from")
+    .prepare("SELECT id, anchor_from, anchor_to FROM comments WHERE document_id = ?")
     .all(documentId) as Pick<CommentRow, "id" | "anchor_from" | "anchor_to">[];
   const update = db.prepare("UPDATE comments SET anchor_from = ?, anchor_to = ? WHERE id = ?");
   for (const row of rows) {

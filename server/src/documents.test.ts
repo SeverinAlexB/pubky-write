@@ -12,6 +12,7 @@ import {
   deleteDocument,
   getDocumentContent,
   getDocumentPreview,
+  endSession,
   getStepsSince,
   InvalidStepsError,
   listDocuments,
@@ -19,6 +20,7 @@ import {
   openDocument,
   renameDocument,
   restoreRevision,
+  SessionEndedError,
   templateDocument,
 } from "./documents.ts";
 import { listRevisions, nameRevision, SESSION_GAP_MS } from "./revisions.ts";
@@ -102,6 +104,17 @@ describe("applySteps", () => {
     expect(getStepsSince(db, id, 2)).toEqual({ version: 2, steps: [], clientIds: [] });
     expect(() => getStepsSince(db, id, 3)).toThrow(InvalidStepsError);
     expect(getStepsSince(db, "missing", 0)).toBeNull();
+  });
+
+  it("refuses the batches of a session whose kept edits another session restored", () => {
+    const { id } = createDocument(db);
+    applySteps(db, id, { clientId: "old", version: 0, steps: insertTextSteps(id, "a") });
+    // The restoring session looks at the steps after the kept entry's version and ends the old session.
+    expect(endSession(db, id, "old", 0)).toMatchObject({ version: 1, clientIds: ["old"] });
+    // A batch the old session sent before it closed, arriving only now, is refused.
+    expect(() => applySteps(db, id, { clientId: "old", version: 1, steps: insertTextSteps(id, "b") })).toThrow(SessionEndedError);
+    expect(applySteps(db, id, { clientId: "new", version: 1, steps: insertTextSteps(id, "b") })).toMatchObject({ kind: "applied", version: 2 });
+    expect(endSession(db, "missing", "old", 0)).toBeNull();
   });
 
   it("rejects steps that do not fit the document", () => {

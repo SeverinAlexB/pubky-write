@@ -29,6 +29,7 @@ import {
   getDocumentContent,
   getDocumentPreview,
   getStepsSince,
+  endSession,
   InvalidStepsError,
   listDocuments,
   nameCurrentVersion,
@@ -159,6 +160,13 @@ export function createApp({
     const since = Number(c.req.query("since"));
     if (!Number.isInteger(since)) throw new HTTPException(400, { message: "since must be a version" });
     return c.json(found(getStepsSince(db, c.req.param("id"), since)));
+  });
+
+  // Restoring edits another session kept in the browser: ends that session and returns the steps after a version.
+  app.post("/api/documents/:id/sessions/:clientId/end", async (c) => {
+    const { since } = await c.req.json<{ since?: unknown }>().catch(() => ({ since: undefined }));
+    if (!Number.isInteger(since)) throw new HTTPException(400, { message: "since must be a version" });
+    return c.json(found(endSession(db, c.req.param("id"), c.req.param("clientId"), since as number)));
   });
 
   // The title of a web page, for the link bubble.

@@ -1,5 +1,7 @@
-import { documentSchema } from "@docs/shared";
+import { documentSchema, mapAnchor } from "@docs/shared";
 import { EditorState } from "@tiptap/pm/state";
+import { Mapping, Transform } from "@tiptap/pm/transform";
+import { collab, receiveTransaction, sendableSteps } from "./collab.ts";
 import type { DecorationSet } from "@tiptap/pm/view";
 import { describe, expect, it } from "vitest";
 import { commentAt, CommentAnchors, getCommentAnchors, updateCommentAnchors } from "./commentAnchors.ts";
@@ -26,6 +28,21 @@ describe("comment anchors in the editor", () => {
       [2, 18, 23],
     ]);
     expect(state.doc.textBetween(12, 17)).toBe("quick");
+  });
+
+  it("end where the server's are after concurrent deletions are rebased", () => {
+    // The anchor on "quick"; this editor deletes from "Title" into "The", another session "quick" and more.
+    const paragraph = (text: string) => documentSchema.node("paragraph", null, [documentSchema.text(text)]);
+    const doc = documentSchema.node("doc", null, [paragraph("Title"), paragraph("The quick"), paragraph("end")]);
+    const extension = CommentAnchors.configure({ initial: [{ id: 1, from: 12, to: 17, resolved: false }] });
+    const plugins = [...extension.config.addProseMirrorPlugins!.call({ options: extension.options } as never), collab({ clientID: "me" })];
+    let state = EditorState.create({ doc, plugins });
+    state = state.apply(state.tr.delete(1, 13));
+    const theirs = new Transform(doc).delete(12, 18);
+    state = state.applyTransaction(receiveTransaction(state, theirs.steps, ["other"])).state;
+    // The server applied theirs, then this editor's rebased deletion.
+    const server = new Mapping([...theirs.steps, ...sendableSteps(state)!.steps].map((step) => step.getMap()));
+    expect(getCommentAnchors(state).anchors[0]).toMatchObject(mapAnchor(server, { from: 12, to: 17 }));
   });
 
   it("collapse when the commented text is deleted", () => {

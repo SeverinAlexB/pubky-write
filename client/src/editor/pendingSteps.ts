@@ -8,7 +8,8 @@
 import { documentSchema } from "@docs/shared";
 import type { Node, Schema } from "@tiptap/pm/model";
 import { Mapping, Step, Transform } from "@tiptap/pm/transform";
-import { sendableSteps } from "prosemirror-collab";
+import { getVersion, receiveTransaction, sendableSteps } from "./collab.ts";
+import { flushPendingSelection } from "./pendingSelection.ts";
 import type { CollabTarget } from "./sync.ts";
 
 export type PendingEntry = {
@@ -64,13 +65,22 @@ async function run<T>(mode: IDBTransactionMode, use: (store: IDBObjectStore) => 
   });
 }
 
-export const pendingStore = {
+/** Where entries are kept: IndexedDB in the browser (`pendingStore`), anything with the same order guarantees in tests. */
+export type PendingStore = {
+  put(entry: PendingEntry): Promise<void>;
+  remove(key: string): Promise<void>;
+  /** Removes the entries `keys` and writes `entry` (if any) in one transaction. */
+  replace(keys: readonly string[], entry: PendingEntry | null): Promise<void>;
+  list(documentId: string): Promise<PendingEntry[]>;
+};
+
+export const pendingStore: PendingStore = {
   put: (entry: PendingEntry) => run("readwrite", (store) => void store.put(entry)).then(() => {}),
   remove: (key: string) => run("readwrite", (store) => void store.delete(key)).then(() => {}),
-  /** Removes `key` and writes `entry` (if any) in one transaction, so the steps are never in both or neither. */
-  replace: (key: string, entry: PendingEntry | null) =>
+  /** Removes `keys` and writes `entry` (if any) in one transaction, so the steps are never in both or neither. */
+  replace: (keys: readonly string[], entry: PendingEntry | null) =>
     run("readwrite", (store) => {
-      store.delete(key);
+      for (const key of keys) store.delete(key);
       if (entry) store.put(entry);
     }).then(() => {}),
   list: async (documentId: string): Promise<PendingEntry[]> =>
@@ -107,6 +117,7 @@ export class PendingPersister {
     private readonly documentId: string,
     private readonly clientId: string,
     private readonly target: CollabTarget,
+    private readonly store: PendingStore = pendingStore,
   ) {}
 
   get key(): string {
@@ -134,17 +145,22 @@ export class PendingPersister {
     if (!entry) {
       if (!this.stored) return Promise.resolve();
       this.stored = false;
-      return pendingStore.remove(this.key);
+      return this.store.remove(this.key);
     }
     this.stored = true;
-    return pendingStore.put(entry);
+    return this.store.put(entry);
   }
 
-  /** Writes `entry` in place of another session's entry (after restoring it). */
+  /**
+   * Writes this session's entry in place of another session's (after restoring it). With nothing
+   * unsaved left, this session's own earlier entry goes too: otherwise it would stay behind once
+   * `stored` says there is none, and be restored again by the next session.
+   */
   replace(otherKey: string): Promise<void> {
     const entry = this.entry();
+    const keys = entry === null && this.stored ? [otherKey, this.key] : [otherKey];
     this.stored = entry !== null;
-    return pendingStore.replace(otherKey, entry);
+    return this.store.replace(keys, entry);
   }
 
   /** After a local change: once typing pauses, saves the steps that are still unconfirmed, with the text. */
@@ -207,6 +223,66 @@ export function rebasePending(
     }
   });
   return { steps, alreadySaved, dropped: remaining.length - steps.length };
+}
+
+export type RestoreOutcome = "restored" | "nothing" | "partial" | "failed" | "offline";
+
+export type RestoreOptions = {
+  /**
+   * Ends the entry's session on the server, so a batch it sent just before it closed is either
+   * among the returned steps or refused, never applied after them; the server's steps after
+   * `version`, with their clients (POST /api/documents/:id/sessions/:clientId/end).
+   */
+  endSession(clientId: string, version: number): Promise<{ steps: unknown[]; clientIds: string[] }>;
+  /** Whether a failed request means the server refused it (the entry cannot be restored) rather than no connection. */
+  refused(error: unknown): boolean;
+  /** Makes the restored steps this session's entry in place of the restored one (`PendingPersister.replace`). */
+  replaceEntry(key: string): Promise<void>;
+};
+
+/**
+ * Restores an entry kept by an earlier session into `target` (an editor whose sync is paused, see
+ * DocumentSync.exclusive): catches the editor up with the server, rebases the entry's steps (see
+ * rebasePending) and applies them as raw steps, which the sync then sends.
+ */
+export async function restoreEntry(target: CollabTarget, entry: PendingEntry, options: RestoreOptions): Promise<RestoreOutcome> {
+  const { schema } = target.state;
+  const pending = parseSteps(entry.steps, schema);
+  if (!pending) return "failed";
+  const editorVersion = getVersion(target.state);
+  const since = Math.min(entry.version, editorVersion);
+  let server;
+  try {
+    server = await options.endSession(entry.clientId, since);
+  } catch (error) {
+    return options.refused(error) ? "failed" : "offline";
+  }
+  const steps = parseSteps(server.steps, target.state.schema);
+  if (!steps) return "failed";
+  // Catch up with the server first (the entry may be newer than what this editor loaded).
+  const fromEditor = editorVersion - since;
+  if (steps.length > fromEditor) {
+    flushPendingSelection(target);
+    target.dispatch(receiveTransaction(target.state, steps.slice(fromEditor), server.clientIds.slice(fromEditor), { mapSelectionBackward: true }));
+  }
+  const fromEntry = entry.version - since;
+  const result = rebasePending(
+    target.state.doc,
+    pending,
+    entry.clientId,
+    { steps: steps.slice(fromEntry), clientIds: server.clientIds.slice(fromEntry) },
+    sendableSteps(target.state)?.steps ?? [],
+  );
+  if (result.steps.length > 0) {
+    const tr = target.state.tr;
+    for (const step of result.steps) tr.step(step);
+    // Raw steps: not an undo step, and not rewritten into suggestions again.
+    target.dispatch(tr.setMeta("addToHistory", false));
+  }
+  // The restored steps are this session's unsaved steps now; the old entry goes in the same write.
+  await options.replaceEntry(entry.key).catch(() => {});
+  if (result.dropped > 0) return "partial";
+  return result.steps.length > 0 ? "restored" : "nothing";
 }
 
 /**

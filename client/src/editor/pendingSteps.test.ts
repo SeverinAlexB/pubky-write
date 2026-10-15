@@ -2,7 +2,9 @@ import { documentSchema } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import { Step, Transform } from "@tiptap/pm/transform";
 import { describe, expect, it } from "vitest";
-import { entryText, parseSteps, rebasePending, type PendingEntry } from "./pendingSteps.ts";
+import { EditorState, type Transaction } from "@tiptap/pm/state";
+import { collab, receiveTransaction, sendableSteps } from "./collab.ts";
+import { entryText, parseSteps, PendingPersister, rebasePending, type PendingEntry, type PendingStore } from "./pendingSteps.ts";
 
 const docOf = (text: string) =>
   Node.fromJSON(documentSchema, { type: "doc", content: [{ type: "paragraph", ...(text && { content: [{ type: "text", text }] }) }] });
@@ -79,6 +81,31 @@ describe("stored entries", () => {
     const steps = typing(docOf(""), 1, "ab").steps.map((step) => step.toJSON());
     expect(parseSteps(steps)).toHaveLength(2);
     expect(parseSteps([...steps, { stepType: "nonsense" }])).toBeNull();
+  });
+
+  it("removes the session's own earlier entry when it restores another one with nothing left unsaved", async () => {
+    const written = new Map<string, PendingEntry>();
+    const store: PendingStore = {
+      put: async (value) => void written.set(value.key, value),
+      remove: async (key) => void written.delete(key),
+      replace: async (keys, value) => {
+        for (const key of keys) written.delete(key);
+        if (value) written.set(value.key, value);
+      },
+      list: async () => [...written.values()],
+    };
+    const base = docOf("Hi");
+    let state = EditorState.create({ doc: base, plugins: [collab({ clientID: "c" })] });
+    const target = { get state() { return state; }, dispatch: (tr: Transaction) => (state = state.apply(tr)) };
+    const persister = new PendingPersister("d", "c", target, store);
+    target.dispatch(state.tr.insertText("!", 3));
+    await persister.save();
+    expect([...written.keys()]).toEqual(["d:c"]);
+    // The step is confirmed, then another session's entry is restored with nothing to add.
+    target.dispatch(receiveTransaction(state, sendableSteps(state)!.steps, ["c"]));
+    written.set("d:other", entry({ key: "d:other", clientId: "other" }));
+    await persister.replace("d:other");
+    expect([...written.keys()]).toEqual([]);
   });
 
   it("offers the saved text, or the text the steps add", () => {

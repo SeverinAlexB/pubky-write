@@ -95,6 +95,13 @@ describe("anchors follow edits", () => {
     edit((tr) => tr.delete(4, 11));
     expect(listComments(db, documentId)[0]).toMatchObject({ from: 4, to: 4, quote: "quick" });
   });
+
+  it("keeps moving after its text was deleted, as the editor moves it", () => {
+    comment(QUICK.from, QUICK.to);
+    edit((tr) => tr.delete(4, 11));
+    edit((tr) => tr.insert(1, documentSchema.text("Oh, ")));
+    expect(listComments(db, documentId)[0]).toMatchObject({ from: 8, to: 8 });
+  });
 });
 
 describe("threads", () => {
