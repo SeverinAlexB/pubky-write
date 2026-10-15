@@ -18,6 +18,7 @@ import { Menu } from "../components/Menu.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { setImageAttributes, setImagePositioning, setImageWrap } from "./imageCommands.ts";
 import { croppingImage, isImage } from "./imageView.ts";
+import { clientRect } from "./rects.ts";
 
 type Position = { left: number; top: number };
 
@@ -198,7 +199,7 @@ function pillPosition(editor: Editor, column: HTMLElement): Position | null {
   const element = editor.view.nodeDOM(editor.state.selection.from);
   if (!(element instanceof HTMLElement)) return null;
   // Below the image as drawn (a rotated image's bounding box).
-  const rect = element.getBoundingClientRect();
+  const rect = clientRect(element);
   const columnRect = column.getBoundingClientRect();
   return { left: Math.round(rect.left - columnRect.left), top: Math.round(rect.bottom - columnRect.top + OFFSET) };
 }

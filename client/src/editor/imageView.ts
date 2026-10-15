@@ -27,6 +27,7 @@ import { Decoration, DecorationSet, type EditorView, type NodeView } from "@tipt
 import { currentTab } from "./documentTabs.ts";
 import { PENDING_IMAGE } from "./paste.ts";
 import { paginationKey, PAGE_GAP } from "./pagination.ts";
+import { clientRect } from "./rects.ts";
 
 /** Handle names and the direction each one moves the right/bottom edge: -1, 0 or 1. */
 const handles = {
@@ -118,7 +119,7 @@ function zoomOf(element: HTMLElement): number {
 
 /** The screen rectangle of an element without its rotation (rotation keeps the centre). */
 function unrotatedRect(element: HTMLElement): { left: number; top: number; width: number; height: number } {
-  const rect = element.getBoundingClientRect();
+  const rect = clientRect(element);
   const zoom = 1 / zoomOf(element);
   const width = element.offsetWidth * zoom;
   const height = element.offsetHeight * zoom;
@@ -310,7 +311,7 @@ class ImageView implements NodeView {
     event.stopPropagation();
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
-    const rect = this.dom.getBoundingClientRect();
+    const rect = clientRect(this.dom);
     const centre = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     const start = this.layout.rotation;
     let rotation = start;
@@ -690,7 +691,7 @@ const ImageCrop = Extension.create({
               if (event.button !== 0 || !view.editable) return false;
               const frames = view.dom.querySelectorAll<HTMLElement>('.image-frame[data-wrap="behind"]');
               for (const frame of frames) {
-                const rect = frame.getBoundingClientRect();
+                const rect = clientRect(frame);
                 if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) continue;
                 if ((event.target as Element | null)?.closest?.(".image-frame") === frame || onText(event.clientX, event.clientY)) return false;
                 const pos = view.posAtDOM(frame, 0);

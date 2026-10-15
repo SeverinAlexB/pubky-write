@@ -8,6 +8,7 @@ import { Plugin, TextSelection, type EditorState, type Transaction } from "@tipt
 import { isInTable, selectedRect, TableMap } from "@tiptap/pm/tables";
 import type { EditorView, NodeView, ViewMutationRecord } from "@tiptap/pm/view";
 import { isHeaderRow } from "./tableLayout.ts";
+import { clientRect } from "./rects.ts";
 
 /** The narrowest a column can be dragged, in CSS pixels. */
 export const MIN_COLUMN_WIDTH = 20;
@@ -196,7 +197,7 @@ type Boundary = { tablePos: number; column: number };
 function boundaryAt(view: EditorView, event: MouseEvent): Boundary | null {
   const cell = (event.target as Element | null)?.closest?.("td, th");
   if (!(cell instanceof HTMLElement) || !view.dom.contains(cell)) return null;
-  const rect = cell.getBoundingClientRect();
+  const rect = clientRect(cell);
   const nearRight = Math.abs(event.clientX - rect.right) <= BORDER_HANDLE;
   const nearLeft = Math.abs(event.clientX - rect.left) <= BORDER_HANDLE;
   if (!nearRight && !nearLeft) return null;

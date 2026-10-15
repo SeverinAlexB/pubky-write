@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.tsx";
 import { Menu } from "../components/Menu.tsx";
 import { deleteTableOfContents, selectedToc, updateTableOfContents } from "./pageElementCommands.ts";
+import { clientRect } from "./rects.ts";
 
 type Position = { left: number; top: number };
 
@@ -71,7 +72,7 @@ function pillPosition(editor: Editor, column: HTMLElement): Position | null {
   const toc = selectedToc(editor.state);
   const element = toc && editor.view.nodeDOM(toc.pos);
   if (!(element instanceof HTMLElement)) return null;
-  const rect = element.getBoundingClientRect();
+  const rect = clientRect(element);
   const columnRect = column.getBoundingClientRect();
   return { left: Math.round(rect.left - columnRect.left), top: Math.round(rect.top - columnRect.top) };
 }

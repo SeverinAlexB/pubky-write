@@ -12,6 +12,7 @@ import type { Node } from "@tiptap/pm/model";
 import { Plugin, type EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { currentTab, shownTabElement } from "./documentTabs.ts";
+import { clientRect } from "./rects.ts";
 
 const TAB_SELECTOR = ".tab-char";
 const TEXTBLOCK_SELECTOR = "p, h1, h2, h3, h4, h5, h6";
@@ -30,7 +31,7 @@ type ParagraphTabs = {
 
 /** The client x where `element`'s content box starts and ends. */
 function contentEdges(element: HTMLElement, zoom: number): { left: number; right: number } {
-  const rect = element.getBoundingClientRect();
+  const rect = clientRect(element);
   const style = getComputedStyle(element);
   const inset = (side: "Left" | "Right") =>
     ((Number.parseFloat(style[`padding${side}`]) || 0) + (Number.parseFloat(style[`border${side}Width`]) || 0)) * zoom;
@@ -110,7 +111,7 @@ export function layoutTabsIn(containers: Iterable<Element>): void {
 /** The width in CSS pixels of the paragraph's `index`-th tab, from where it is now. */
 function tabWidth(entry: ParagraphTabs, index: number, range: Range): number {
   const tab = entry.tabs[index]!;
-  const rect = tab.getBoundingClientRect();
+  const rect = clientRect(tab);
   const middle = (rect.top + rect.bottom) / 2;
   // The text after the tab on its line, up to the next tab.
   range.setStartAfter(tab);

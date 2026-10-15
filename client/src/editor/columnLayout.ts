@@ -3,9 +3,12 @@
 // widgets: forced column breaks within a page, and between pages a spacer across all columns
 // (`column-span: all`) that ends the page's columns and reaches the next page's top margin.
 //
-// The browser balances the columns of every page but the last, so each page gets exactly one
-// forced break per column boundary, even for empty columns. That leaves the browser no choice:
-// every column holds what the pagination put there.
+// The browser balances the columns before a spanner, so each page gets exactly one forced break
+// per column boundary, and an empty column is as tall as the page's tallest column. That leaves
+// the browser no choice: every column holds what the pagination put there (an empty column of no
+// height would let Firefox spread the columns before it over it). The last page ends the same way,
+// with an empty spanner after the content: Firefox ignores forced column breaks in columns that
+// are filled in order (`column-fill: auto`, which the last page's columns would otherwise be).
 import { columnsOf, PX_PER_PT, type PageGeometry } from "@docs/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
@@ -77,8 +80,18 @@ export function drawnColumnHeights(
   return heights;
 }
 
-/** A rendered spacer for columns: see RenderedSpacer in pagination.ts. */
-export type ColumnSpacer = Pagination["spacers"][number] & { height: number; breaks: number; spanner: boolean; after: number };
+/**
+ * A rendered spacer for columns: see RenderedSpacer in pagination.ts. `fill` is the height of the
+ * empty columns its breaks start (with a spanner all of them, otherwise all but the last).
+ */
+export type ColumnSpacer = Pagination["spacers"][number] & {
+  height: number;
+  breaks: number;
+  spanner: boolean;
+  after: number;
+  fill: number;
+  end?: boolean;
+};
 
 /**
  * The column breaks and page spacers for a pagination with columns. A spacer to a new page is as
@@ -90,20 +103,44 @@ export function columnSpacers(
   frame: PageFrame,
   drawn: Map<number, number>,
   marginAt: (pos: number, inline: boolean) => number,
+  end: number,
 ): ColumnSpacer[] {
   const columns = frame.columns ?? 1;
   const heights = pagination.slotHeights ?? [];
   const estimate = (page: number) => Math.max(0, ...heights.slice(page * columns, (page + 1) * columns).map((height) => height ?? 0));
-  return pagination.spacers.map((spacer) => {
+  const lastSlot = pagination.lastSlot ?? 0;
+  // After the content: the last page's remaining column breaks and an empty spanner.
+  const ending: ColumnSpacer = {
+    pos: end,
+    shift: 0,
+    inline: false,
+    from: lastSlot,
+    to: lastSlot,
+    height: 0,
+    breaks: columns - 1 - (lastSlot % columns),
+    spanner: true,
+    after: 0,
+    fill: round(estimate(Math.floor(lastSlot / columns))),
+    end: true,
+  };
+  const spacers = pagination.spacers.map((spacer): ColumnSpacer => {
     const from = spacer.from ?? 0;
     const to = spacer.to ?? from + 1;
     const fromPage = Math.floor(from / columns);
     const toPage = Math.floor(to / columns);
-    if (fromPage === toPage) return { ...spacer, height: 0, breaks: to - from, spanner: false, after: 0 };
+    if (fromPage === toPage) return { ...spacer, height: 0, breaks: to - from, spanner: false, after: 0, fill: round(estimate(fromPage)) };
     const columnsHeight = drawn.get(spacer.pos) ?? estimate(fromPage);
     const height = contentTop(frame, toPage) - contentTop(frame, fromPage) - columnsHeight - marginAt(spacer.pos, spacer.inline);
-    return { ...spacer, height: Math.max(0, round(height)), breaks: columns - 1 - (from % columns), spanner: true, after: to % columns };
+    return {
+      ...spacer,
+      height: Math.max(0, round(height)),
+      breaks: columns - 1 - (from % columns),
+      spanner: true,
+      after: to % columns,
+      fill: round(columnsHeight),
+    };
   });
+  return [...spacers, ending];
 }
 
 /**

@@ -39,12 +39,21 @@ kind of spacer widgets it already used for pages:
   page below the page's tallest column plus the next page's top margin. A spanner ends the columns
   of one page and starts a new set of columns on the next.
 
-The browser balances the columns before a spanner. To leave it no choice, every page except the
-last gets exactly one forced break per column boundary (also for empty columns, for example after a
-page break in the first column). The last page is filled column by column (`column-fill: auto`).
+The browser balances the columns before a spanner. To leave it no choice, every page gets exactly
+one forced break per column boundary (also for empty columns, for example after a page break in the
+first column), and a break that starts an empty column is as tall as the page's tallest column: an
+empty column of no height would let Firefox spread the columns before it over it. The last page ends
+the same way, with an empty spanner after the content (a widget at the end of the shown tab), so its
+columns are balanced like the others rather than filled in order: Firefox ignores forced column
+breaks in columns filled in order (`column-fill: auto` without a spanner after them).
 A spacer is a `display: contents` wrapper with its breaks and spanner, at the line or block where the
-next column starts. Chrome supports forced breaks and spanners both between blocks and inside a
-paragraph (between two of its lines), inside lists and inside document tab wrappers.
+next column starts. Chrome, Firefox and Safari support forced breaks and spanners both between
+blocks and inside a paragraph (between two of its lines), inside lists and inside document tab
+wrappers.
+
+In Safari an element inside the multi-column box also has an empty box for each later row of
+columns, at a wrong place, and `getBoundingClientRect` includes them. Code that measures elements in
+the content uses `clientRect` (`rects.ts`), which leaves empty boxes out.
 
 ### Measuring
 

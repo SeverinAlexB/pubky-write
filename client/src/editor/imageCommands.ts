@@ -5,6 +5,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { paginationKey, PAGE_GAP } from "./pagination.ts";
+import { clientRect } from "./rects.ts";
 
 /** The selected image and its position, or null. */
 export function selectedImage(view: EditorView): { pos: number; attrs: Record<string, unknown> } | null {
@@ -58,7 +59,7 @@ export function setImagePositioning(view: EditorView, positioning: ImagePosition
   const stack = frame instanceof HTMLElement ? frame.closest<HTMLElement>(".page-stack") : null;
   if (!(frame instanceof HTMLElement) || !stack) return setImageAttributes(view, { positioning });
   const scale = stack.offsetWidth / stack.getBoundingClientRect().width || 1;
-  const rect = frame.getBoundingClientRect();
+  const rect = clientRect(frame);
   // The unrotated top left corner: rotation keeps the centre.
   const left = rect.left + rect.width / 2 - frame.offsetWidth / scale / 2;
   const top = rect.top + rect.height / 2 - frame.offsetHeight / scale / 2;

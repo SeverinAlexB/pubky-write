@@ -50,6 +50,7 @@ import {
 import { placeFixedImages } from "./imagePlacement.ts";
 import { pinnedRowCount, pinnedRowsKey, tableRowLines } from "./tableLayout.ts";
 import { layoutTabsIn } from "./tabLayout.ts";
+import { clientRect } from "./rects.ts";
 
 /** Space between pages, in CSS pixels at 100% zoom. */
 export const PAGE_GAP = 10;
@@ -62,7 +63,15 @@ const MAX_PASSES = 6;
  * spacer `height` tall across all columns and `after` more column breaks. A spacer between table
  * rows repeats the table's pinned rows (`repeat` identifies their content).
  */
-type RenderedSpacer = PageSpacer & { height: number; breaks?: number; spanner?: boolean; after?: number; repeat?: string };
+type RenderedSpacer = PageSpacer & {
+  height: number;
+  breaks?: number;
+  spanner?: boolean;
+  after?: number;
+  fill?: number;
+  repeat?: string;
+  end?: boolean;
+};
 
 /**
  * Where the pages' content and footnotes are, for drawing headers, footers and footnotes over
@@ -212,10 +221,11 @@ function spacerDecorations(doc: Node, spacers: RenderedSpacer[]): DecorationSet 
         spacer.pos,
         (view) => (spacer.breaks !== undefined ? columnSpacerElement(spacer) : tableSpacerElement(view, doc, spacer) ?? spacerElement(spacer)),
         {
-          // Before the cursor, so a cursor at the start of a moved line shows on the new page.
-          side: -1,
+          // Before the cursor, so a cursor at the start of a moved line shows on the new page. The
+          // spacer after the content stays after content inserted at the end.
+          side: spacer.end ? 1 : -1,
           ignoreSelection: true,
-          key: `page-spacer:${spacer.inline}:${spacer.height}:${spacer.shift}:${spacer.breaks ?? ""}:${spacer.spanner ?? ""}:${spacer.after ?? ""}:${spacer.repeat ?? ""}`,
+          key: `page-spacer:${spacer.inline}:${spacer.height}:${spacer.shift}:${spacer.breaks ?? ""}:${spacer.spanner ?? ""}:${spacer.after ?? ""}:${spacer.fill ?? ""}:${spacer.repeat ?? ""}`,
           spacer,
         },
       ),
@@ -240,12 +250,16 @@ function columnSpacerElement(spacer: RenderedSpacer): HTMLElement {
   const element = document.createElement("span");
   element.className = "column-spacer";
   element.setAttribute("aria-hidden", "true");
-  const columnBreak = () => {
+  const columnBreak = (fill = 0) => {
     const part = document.createElement("span");
     part.className = "column-break-spacer";
+    if (fill > 0) part.style.height = `${fill}px`;
     return part;
   };
-  for (let index = 0; index < (spacer.breaks ?? 0); index++) element.append(columnBreak());
+  const breaks = spacer.breaks ?? 0;
+  // The columns these breaks start are empty, but the one a break within a page starts.
+  const empty = spacer.spanner ? breaks : breaks - 1;
+  for (let index = 0; index < breaks; index++) element.append(columnBreak(index < empty ? spacer.fill : 0));
   if (spacer.spanner) {
     const spanner = document.createElement("span");
     spanner.className = "page-spacer column-spanner";
@@ -308,6 +322,7 @@ function sameRenderedSpacers(a: RenderedSpacer[], b: RenderedSpacer[]): boolean 
         spacer.breaks === other.breaks &&
         spacer.spanner === other.spanner &&
         spacer.after === other.after &&
+        spacer.fill === other.fill &&
         spacer.repeat === other.repeat
       );
     })
@@ -451,7 +466,7 @@ class PaginationView {
       const marginAt = (pos: number, inline = false) => (inline ? 0 : blockMarginTop(view, pos));
       const drawn = drawnColumnHeights(root, toY, contentTop(frame, 0), marginAt);
       pagination = measureColumnsFlat(stack, () => paginate(layoutBoxes(view, toY, footnotes, footnoteHeight, false), frame));
-      rendered = columnSpacers(pagination, frame, drawn, marginAt);
+      rendered = columnSpacers(pagination, frame, drawn, marginAt, currentTab(view.state).to);
     } else {
       const natural = naturalPositions(view, toY);
       pagination = paginate(layoutBoxes(view, (y) => natural(toY(y)), footnotes, footnoteHeight, true), frame);
@@ -577,7 +592,7 @@ function updatePageFields(view: EditorView, stack: HTMLElement, stride: number, 
     let value: string;
     if (field.classList.contains("footnote-ref")) value = String(++footnote);
     else if (field.dataset.field === "count") value = count;
-    else value = String(Math.max(0, Math.floor((field.getBoundingClientRect().top - top) / scale / stride)) + start);
+    else value = String(Math.max(0, Math.floor((clientRect(field).top - top) / scale / stride)) + start);
     if (field.textContent !== value) field.textContent = value;
   }
 }

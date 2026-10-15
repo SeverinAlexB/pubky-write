@@ -5,6 +5,7 @@ import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { currentTab } from "./documentTabs.ts";
+import { clientRect } from "./rects.ts";
 
 export type SearchRange = { from: number; to: number };
 
@@ -295,7 +296,7 @@ export const Search = Extension.create({
 function revealCurrentMatch(view: EditorView): void {
   const element = view.dom.querySelector(".search-match-current");
   if (!element) return;
-  const rect = element.getBoundingClientRect();
+  const rect = clientRect(element);
   const scroller = view.dom.closest(".editor-scroll");
   const area = scroller?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
   if (rect.top >= area.top && rect.bottom <= area.bottom) return;

@@ -104,6 +104,8 @@ export type Pagination = {
   footnotePages: number[];
   /** With columns: how tall the content of each slot is, from its top. */
   slotHeights?: number[];
+  /** With columns: the slot the content ends in. */
+  lastSlot?: number;
 };
 
 /**
@@ -210,7 +212,7 @@ export function paginate(boxes: LayoutBox[], frame: PageFrame): Pagination {
   // A page break at the very end still starts a (blank) page, and a column break a column.
   if (breakAfter !== null) lastSlot = Math.max(lastSlot, breakAfter.target);
   const pageCount = pageOf(lastSlot) + 1;
-  return { spacers, pageCount, footnotePages, ...(columns > 1 && { slotHeights }) };
+  return { spacers, pageCount, footnotePages, ...(columns > 1 && { slotHeights, lastSlot }) };
 }
 
 /** The footnotes of each line: a reference belongs to the line its middle is on. */
