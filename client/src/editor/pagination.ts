@@ -46,6 +46,7 @@ import {
   drawColumnLines,
   drawnColumnHeights,
   measureColumnsFlat,
+  supportsColumnBreaks,
 } from "./columnLayout.ts";
 import { placeFixedImages } from "./imagePlacement.ts";
 import { pinnedRowCount, pinnedRowsKey, tableRowLines } from "./tableLayout.ts";
@@ -69,6 +70,7 @@ type RenderedSpacer = PageSpacer & {
   spanner?: boolean;
   after?: number;
   fill?: number;
+  endFill?: number;
   repeat?: string;
   end?: boolean;
 };
@@ -225,7 +227,7 @@ function spacerDecorations(doc: Node, spacers: RenderedSpacer[]): DecorationSet 
           // spacer after the content stays after content inserted at the end.
           side: spacer.end ? 1 : -1,
           ignoreSelection: true,
-          key: `page-spacer:${spacer.inline}:${spacer.height}:${spacer.shift}:${spacer.breaks ?? ""}:${spacer.spanner ?? ""}:${spacer.after ?? ""}:${spacer.fill ?? ""}:${spacer.repeat ?? ""}`,
+          key: `page-spacer:${spacer.inline}:${spacer.height}:${spacer.shift}:${spacer.breaks ?? ""}:${spacer.spanner ?? ""}:${spacer.after ?? ""}:${spacer.fill ?? ""}:${spacer.endFill ?? ""}:${spacer.repeat ?? ""}`,
           spacer,
         },
       ),
@@ -256,6 +258,12 @@ function columnSpacerElement(spacer: RenderedSpacer): HTMLElement {
     if (fill > 0) part.style.height = `${fill}px`;
     return part;
   };
+  if (spacer.endFill) {
+    const filler = document.createElement("span");
+    filler.className = "column-filler";
+    filler.style.height = `${spacer.endFill}px`;
+    element.append(filler);
+  }
   const breaks = spacer.breaks ?? 0;
   // The columns these breaks start are empty, but the one a break within a page starts.
   const empty = spacer.spanner ? breaks : breaks - 1;
@@ -328,6 +336,7 @@ function sameRenderedSpacers(a: RenderedSpacer[], b: RenderedSpacer[]): boolean 
         spacer.spanner === other.spanner &&
         spacer.after === other.after &&
         close(spacer.fill, other.fill) &&
+        close(spacer.endFill, other.endFill) &&
         spacer.repeat === other.repeat
       );
     })
@@ -471,7 +480,7 @@ class PaginationView {
       const marginAt = (pos: number, inline = false) => (inline ? 0 : blockMarginTop(view, pos));
       const drawn = drawnColumnHeights(root, toY, contentTop(frame, 0), marginAt);
       pagination = measureColumnsFlat(stack, () => paginate(layoutBoxes(view, toY, footnotes, footnoteHeight, false), frame));
-      rendered = columnSpacers(pagination, frame, drawn, marginAt, currentTab(view.state).to);
+      rendered = columnSpacers(pagination, frame, drawn, marginAt, currentTab(view.state).to, supportsColumnBreaks());
     } else {
       const natural = naturalPositions(view, toY);
       pagination = paginate(layoutBoxes(view, (y) => natural(toY(y)), footnotes, footnoteHeight, true), frame);

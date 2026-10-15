@@ -2156,6 +2156,13 @@ button:disabled {
   pointer-events: none;
 }
 
+/* Without forced column breaks (Firefox): takes a column's content to the height of the tallest. */
+.page-content .column-filler {
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
 .page-content .column-spanner {
   column-span: all;
 }

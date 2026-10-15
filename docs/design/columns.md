@@ -41,15 +41,20 @@ kind of spacer widgets it already used for pages:
 
 The browser balances the columns before a spanner. To leave it no choice, every page gets exactly
 one forced break per column boundary (also for empty columns, for example after a page break in the
-first column), and a break that starts an empty column is as tall as the page's tallest column: an
-empty column of no height would let Firefox spread the columns before it over it. The last page ends
-the same way, with an empty spanner after the content (a widget at the end of the shown tab), so its
-columns are balanced like the others rather than filled in order: Firefox ignores forced column
-breaks in columns filled in order (`column-fill: auto` without a spanner after them).
+first column), and a break that starts an empty column is as tall as the page's tallest column, so
+balancing cannot spread the columns before it over the empty one. The last page ends the same way,
+with an empty spanner after the content (a widget at the end of the shown tab), so its columns are
+balanced like the others rather than filled in order (`column-fill: auto`, which in Firefox, without
+a height, puts everything in the first column).
+
+Firefox has no forced column breaks (`break-before: column` is not supported; `supportsColumnBreaks`
+checks). There the content of every column but the tallest of its page is followed by a filler
+(`.column-filler`) that takes it to 1px under the tallest column, so the only way balancing can fit
+the page is to break the columns where the pagination did.
+
 A spacer is a `display: contents` wrapper with its breaks and spanner, at the line or block where the
-next column starts. Chrome, Firefox and Safari support forced breaks and spanners both between
-blocks and inside a paragraph (between two of its lines), inside lists and inside document tab
-wrappers.
+next column starts. Spacers work both between blocks and inside a paragraph (between two of its
+lines), inside lists and inside document tab wrappers.
 
 In Safari an element inside the multi-column box also has an empty box for each later row of
 columns, at a wrong place, and `getBoundingClientRect` includes them. Code that measures elements in
