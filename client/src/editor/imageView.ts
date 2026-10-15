@@ -601,6 +601,9 @@ function setAttribute(element: HTMLElement, name: string, value: unknown) {
 
 // Crop mode -------------------------------------------------------------------------------------
 
+/** Editors in which an image is being pressed (until the press's task ends). */
+const imagePressed = new WeakSet<EditorView>();
+
 type CropSession = { apply: () => void; cancel: () => void };
 const cropSessions = new WeakMap<EditorView, CropSession>();
 
@@ -609,13 +612,23 @@ type CropMeta = { pos: number | null };
 
 export const imageCropKey = new PluginKey<CropState>("imageCrop");
 
+/** The DOM position at the point: caretPositionFromPoint (standard; Firefox, newer Chrome and Safari), else caretRangeFromPoint. */
+function caretAt(x: number, y: number): { node: globalThis.Node; offset: number } | null {
+  if (typeof document.caretPositionFromPoint === "function") {
+    const position = document.caretPositionFromPoint(x, y);
+    return position ? { node: position.offsetNode, offset: position.offset } : null;
+  }
+  const range = document.caretRangeFromPoint?.(x, y);
+  return range ? { node: range.startContainer, offset: range.startOffset } : null;
+}
+
 /** Whether a character of text is at the point (client coordinates). */
 function onText(x: number, y: number): boolean {
-  const range = document.caretRangeFromPoint?.(x, y);
-  const node = range?.startContainer;
-  if (!range || node?.nodeType !== globalThis.Node.TEXT_NODE) return false;
+  const caret = caretAt(x, y);
+  const node = caret?.node;
+  if (!caret || node?.nodeType !== globalThis.Node.TEXT_NODE) return false;
   const length = (node as Text).length;
-  for (const offset of [range.startOffset - 1, range.startOffset]) {
+  for (const offset of [caret.offset - 1, caret.offset]) {
     if (offset < 0 || offset >= length) continue;
     const character = document.createRange();
     character.setStart(node, offset);
@@ -688,6 +701,10 @@ const ImageCrop = Extension.create({
             // An image behind the text is under the paragraphs: a press on it that is not on a
             // character of the text selects it.
             mousedown(view, event) {
+              if ((event.target as Element | null)?.closest?.(".image-frame")) {
+                imagePressed.add(view);
+                setTimeout(() => imagePressed.delete(view));
+              }
               if (event.button !== 0 || !view.editable) return false;
               const frames = view.dom.querySelectorAll<HTMLElement>('.image-frame[data-wrap="behind"]');
               for (const frame of frames) {
@@ -701,6 +718,13 @@ const ImageCrop = Extension.create({
                 view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
                 return true;
               }
+              return false;
+            },
+            // A press on an image that focuses the editor: Firefox puts the caret at the start of the
+            // document, which the editor would read as the new selection before the click selects
+            // the image. `view.focus()` writes the editor's selection back first.
+            focus(view) {
+              if (imagePressed.has(view)) view.focus();
               return false;
             },
             // The browser's double-click (the editor's own click counting would count a third click).
