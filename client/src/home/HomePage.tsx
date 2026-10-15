@@ -69,7 +69,7 @@ export function HomePage() {
 
   function opened({ document, dropped }: ImportResponse) {
     const state: ImportNotice | undefined =
-      dropped.length > 0 ? { importNotice: `Some content could not be converted and was left out: ${dropped.join(", ")}.` } : undefined;
+      dropped.length > 0 ? { importNotice: `Some content could not be converted exactly: ${dropped.join(", ")}.` } : undefined;
     navigate(`/d/${document.id}`, { state });
   }
 

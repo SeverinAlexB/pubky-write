@@ -21,6 +21,8 @@ import {
   TextRun,
   VerticalMergeType,
 } from "docx";
+import { TableMap } from "@tiptap/pm/tables";
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { toDocx } from "../export/docx.ts";
 import { sniffImageType } from "../uploads.ts";
@@ -556,6 +558,157 @@ describe("docxToDocument", () => {
 
   it("rejects files that are not Word documents", async () => {
     await expect(docxToDocument(Buffer.from("not a zip"), { storeImage: imageStore().storeImage })).rejects.toThrow(ImportError);
+  });
+});
+
+const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+const M = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"';
+const W15 = 'xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+const p = (text: string) => `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
+
+/** A Word file with the given body XML and other parts (path under word/ → XML), linked from the document. */
+async function rawDocx(body: string, parts: Record<string, string> = {}): Promise<Buffer> {
+  const types: Record<string, string> = {
+    "comments.xml": "comments",
+    "commentsExtended.xml": "commentsExtended",
+    "endnotes.xml": "endnotes",
+    "footnotes.xml": "footnotes",
+  };
+  const zip = new JSZip();
+  zip.file("_rels/.rels", `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="r1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  zip.file("word/document.xml", `<w:document ${W} ${M}>${body}</w:document>`);
+  zip.file(
+    "word/_rels/document.xml.rels",
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${Object.keys(parts)
+      .map((name, index) => `<Relationship Id="rp${index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${types[name]}" Target="${name}"/>`)
+      .join("")}</Relationships>`,
+  );
+  for (const [name, xml] of Object.entries(parts)) zip.file(`word/${name}`, xml);
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+describe("docxToDocument: real-world structures", () => {
+  const store = () => ({ storeImage: imageStore().storeImage });
+
+  it("reads comments with their range, replies and resolved state, and comments that only have a reference", async () => {
+    const word = await rawDocx(
+      `<w:body><w:p><w:r><w:t xml:space="preserve">Hello </w:t></w:r><w:commentRangeStart w:id="1"/><w:r><w:t>brave</w:t></w:r><w:commentRangeEnd w:id="1"/><w:r><w:commentReference w:id="1"/></w:r><w:r><w:t xml:space="preserve"> new world</w:t></w:r><w:r><w:commentReference w:id="3"/></w:r></w:p></w:body>`,
+      {
+        "comments.xml": `<w:comments ${W} ${W15}>
+          <w:comment w:id="1" w:author="Ann" w:date="2024-01-02T03:04:05Z"><w:p w14:paraId="00000001"><w:r><w:t>Why brave?</w:t></w:r></w:p></w:comment>
+          <w:comment w:id="2" w:author="Bob" w:date="2024-01-03T03:04:05Z"><w:p w14:paraId="00000002"><w:r><w:t>Because.</w:t></w:r></w:p></w:comment>
+          <w:comment w:id="3" w:author="Ann"><w:p><w:r><w:t>Point comment</w:t></w:r></w:p></w:comment>
+        </w:comments>`,
+        "commentsExtended.xml": `<w15:commentsEx ${W15}><w15:commentEx w15:paraId="00000001" w15:done="1"/><w15:commentEx w15:paraId="00000002" w15:paraIdParent="00000001" w15:done="1"/></w15:commentsEx>`,
+      },
+    );
+    const { doc, comments, dropped } = await docxToDocument(word, store());
+    expect(doc.textContent).toBe("Hello brave new world");
+    expect(dropped).toEqual([]);
+    const quotes = comments.map((comment) => doc.textBetween(comment.from, comment.to));
+    expect(quotes).toEqual(["brave", "world"]);
+    expect(comments[0]).toMatchObject({
+      resolved: true,
+      messages: [
+        { body: "Why brave?", createdAt: Date.parse("2024-01-02T03:04:05Z") },
+        { body: "Because.", createdAt: Date.parse("2024-01-03T03:04:05Z") },
+      ],
+    });
+    expect(comments[1]).toMatchObject({ resolved: false, messages: [{ body: "Point comment", createdAt: null }] });
+  });
+
+  it("writes comments to Word and reads them back", async () => {
+    const original = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "One two three" }] },
+        { type: "paragraph", content: [{ type: "text", text: "Four", marks: [{ type: "link", attrs: { href: "https://example.com" } }] }] },
+      ],
+    });
+    const thread = (from: number, to: number, resolved: boolean, bodies: string[]) => ({
+      id: from,
+      from,
+      to,
+      quote: "",
+      resolved,
+      createdAt: 0,
+      messages: bodies.map((body, index) => ({ id: index, body, createdAt: Date.UTC(2024, 0, index + 1) })),
+    });
+    // "two", and "three" to "Four" across the paragraphs.
+    const word = await toDocx(original, "t", async () => null, [thread(5, 8, true, ["First", "Reply"]), thread(9, 20, false, ["Across\nlines"])]);
+    const { doc, comments } = await docxToDocument(word, store());
+    expect(doc.eq(original)).toBe(true);
+    expect(comments.map((comment) => [doc.textBetween(comment.from, comment.to, "|"), comment.resolved, comment.messages.map((message) => message.body)])).toEqual([
+      ["two", true, ["First", "Reply"]],
+      ["three|Four", false, ["Across\nlines"]],
+    ]);
+    // A resolved thread without replies stays resolved.
+    const single = await toDocx(original, "t", async () => null, [thread(5, 8, true, ["Done"])]);
+    expect((await docxToDocument(single, store())).comments[0]).toMatchObject({ resolved: true, messages: [{ body: "Done" }] });
+  });
+
+  it("keeps equations as linear text", async () => {
+    const run = (text: string) => `<m:r><m:t>${text}</m:t></m:r>`;
+    const word = await rawDocx(
+      `<w:body><w:p><w:r><w:t xml:space="preserve">Area </w:t></w:r><m:oMath><m:f><m:num>${run("a+b")}</m:num><m:den>${run("2")}</m:den></m:f><m:sSup><m:e>${run("x")}</m:e><m:sup>${run("2")}</m:sup></m:sSup><m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>${run("y")}</m:e></m:rad></m:oMath></w:p>
+       <w:p><m:oMathPara><m:oMath><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub>${run("i=1")}</m:sub><m:sup>${run("n")}</m:sup><m:e>${run("i")}</m:e></m:nary><m:d><m:e>${run("1")}</m:e><m:e>${run("2")}</m:e></m:d><m:m><m:mr><m:e>${run("1")}</m:e><m:e>${run("0")}</m:e></m:mr><m:mr><m:e>${run("0")}</m:e><m:e>${run("1")}</m:e></m:mr></m:m></m:oMath></m:oMathPara></w:p></w:body>`,
+    );
+    const { doc, dropped } = await docxToDocument(word, store());
+    expect(doc.child(0).textContent).toBe("Area (a+b)/2x^2√y");
+    expect(doc.child(1).textContent).toBe("∑_(i=1)^n▒i(1|2)■(1&0@0&1)");
+    expect(dropped).toEqual(["Equations (kept as text)"]);
+  });
+
+  it("keeps the text of text boxes and shapes after their paragraph", async () => {
+    const box = (text: string) => `<w:r><w:drawing><wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:txbxContent>${p(text)}</w:txbxContent></wp:anchor></w:drawing></w:r>`;
+    const word = await rawDocx(`<w:body><w:p><w:r><w:t>Before</w:t></w:r>${box("In the box")}<w:r><w:t xml:space="preserve"> after</w:t></w:r></w:p>${p("Next")}</w:body>`);
+    const { doc, dropped } = await docxToDocument(word, store());
+    expect(outline(doc)).toEqual(["p: Before after", "p: In the box", "p: Next"]);
+    expect(dropped).toEqual(["Text boxes and shapes (their text is kept)"]);
+  });
+
+  it("makes ragged tables rectangular, reads cells in content controls and flattens tables nested too deep", async () => {
+    const cell = (text: string) => `<w:tc>${p(text)}</w:tc>`;
+    let nested = p("deepest");
+    for (let level = 0; level < 8; level++) nested = `<w:tbl><w:tr><w:tc>${nested}</w:tc></w:tr></w:tbl>`;
+    const word = await rawDocx(
+      `<w:body><w:tbl><w:tblGrid><w:gridCol w:w="1000"/><w:gridCol w:w="1000"/><w:gridCol w:w="1000"/></w:tblGrid>
+        <w:tr>${cell("a")}${cell("b")}${cell("c")}</w:tr>
+        <w:tr>${cell("d")}<w:sdt><w:sdtContent>${cell("e")}</w:sdtContent></w:sdt></w:tr>
+      </w:tbl>${nested}</w:body>`,
+    );
+    const { doc, dropped } = await docxToDocument(word, store());
+    const table = doc.child(0);
+    expect(TableMap.get(table).problems).toBeFalsy();
+    expect(table.child(1).childCount).toBe(3);
+    expect(table.child(1).textContent).toBe("de");
+    let tables = 0;
+    doc.descendants((node) => void (node.type.name === "table" && tables++));
+    expect(tables).toBe(1 + 5);
+    expect(doc.textContent).toContain("deepest");
+    expect(dropped).toEqual(["Tables nested more than 5 deep (their text is kept)"]);
+  });
+
+  it("reads every body of a file that has several, and endnotes as footnotes", async () => {
+    const word = await rawDocx(
+      `<w:body>${p("First body")}</w:body><w:body><w:p><w:r><w:t>Second body</w:t></w:r><w:r><w:endnoteReference w:id="2"/></w:r></w:p></w:body>`,
+      { "endnotes.xml": `<w:endnotes ${W}><w:endnote w:type="separator" w:id="0">${p("")}</w:endnote><w:endnote w:id="2">${p(" The note")}</w:endnote></w:endnotes>` },
+    );
+    const { doc, dropped } = await docxToDocument(word, store());
+    expect(outline(doc)).toEqual(["p: First body", "p: Second body"]);
+    expect(findNode(doc, "footnote")?.attrs.content).toMatchObject([{ type: "paragraph", content: [{ type: "text", text: "The note" }] }]);
+    expect(dropped).toEqual(["Endnotes (shown as footnotes)"]);
+  });
+
+  it("writes tables nested in cells to Word", async () => {
+    const cellOf = (content: unknown[]) => ({ type: "tableCell", content });
+    const inner = { type: "table", content: [{ type: "tableRow", content: [cellOf([{ type: "paragraph", content: [{ type: "text", text: "inner" }] }])] }] };
+    const original = Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [{ type: "table", content: [{ type: "tableRow", content: [cellOf([{ type: "paragraph", content: [{ type: "text", text: "outer" }] }, inner])] }] }],
+    });
+    const { doc } = await docxToDocument(await toDocx(original, "t", async () => null), store());
+    expect(outline(doc)).toEqual(outline(original));
   });
 });
 

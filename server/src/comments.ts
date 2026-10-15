@@ -72,6 +72,31 @@ export function createComment(
   return getComment(db, documentId, commentId)!;
 }
 
+/**
+ * Adds the threads of an imported file to its new document. Threads without text to quote or
+ * without a message are left out; their dates are kept where the file has them.
+ */
+export function insertImportedComments(
+  db: Database,
+  documentId: string,
+  doc: Node,
+  comments: readonly { from: number; to: number; resolved: boolean; messages: readonly { body: string; createdAt: number | null }[] }[],
+  now = Date.now(),
+): void {
+  const insert = db.prepare("INSERT INTO comments (document_id, anchor_from, anchor_to, quote, resolved, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+  for (const comment of comments) {
+    const messages = comment.messages
+      .map((message) => ({ body: message.body.trim().slice(0, MAX_COMMENT_LENGTH), createdAt: message.createdAt ?? now }))
+      .filter((message) => message.body);
+    const { from, to } = comment;
+    if (messages.length === 0 || !(Number.isInteger(from) && Number.isInteger(to) && from >= 0 && to > from && to <= doc.content.size)) continue;
+    const quote = commentQuote(doc, from, to);
+    if (!quote) continue;
+    const { lastInsertRowid } = insert.run(documentId, from, to, quote, comment.resolved ? 1 : 0, messages[0]!.createdAt);
+    for (const message of messages) insertMessage(db, Number(lastInsertRowid), message.body, message.createdAt);
+  }
+}
+
 export function addReply(db: Database, documentId: string, commentId: number, body: string, now = Date.now()) {
   if (!getComment(db, documentId, commentId)) return null;
   insertMessage(db, commentId, validateBody(body), now);

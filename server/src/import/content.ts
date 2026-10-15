@@ -3,6 +3,8 @@
 import { documentSchema, isPaperSize } from "@docs/shared";
 import type { JSONContent } from "@tiptap/core";
 import { Mark, type Node } from "@tiptap/pm/model";
+import { EditorState } from "@tiptap/pm/state";
+import { fixTables } from "@tiptap/pm/tables";
 
 export type MarkJSON = { type: string; attrs?: Record<string, unknown> };
 
@@ -15,7 +17,10 @@ export type ImportOptions = {
   paperSize?: string;
 };
 
-export type ImportResult = { doc: Node; dropped: string[] };
+/** A comment thread found in an imported file: its anchor in the document, its messages and whether it is resolved. */
+export type ImportedComment = { from: number; to: number; resolved: boolean; messages: { body: string; createdAt: number | null }[] };
+
+export type ImportResult = { doc: Node; dropped: string[]; comments: ImportedComment[] };
 
 export class ImportError extends Error {}
 
@@ -66,7 +71,7 @@ export function finishDocument(blocks: JSONContent[], options: ImportOptions, pa
   const content = blocks.length > 0 ? blocks.map(repair) : [emptyParagraph()];
   let doc: Node;
   try {
-    doc = documentSchema.nodeFromJSON({ type: "doc", attrs, content });
+    doc = withRectangularTables(documentSchema.nodeFromJSON({ type: "doc", attrs, content }));
     doc.check();
   } catch (error) {
     throw new ImportError(`The file could not be converted: ${(error as Error).message}`);
@@ -85,4 +90,20 @@ export class DroppedContent {
   list(): string[] {
     return [...this.kinds];
   }
+}
+
+/**
+ * The document with every table a rectangle of cells, as the table commands need: Word allows rows
+ * of different lengths and spans that reach past the table. Missing cells are added empty and spans
+ * shortened, as the editor itself would on the first change.
+ */
+export function withRectangularTables(doc: Node): Node {
+  let state = EditorState.create({ doc });
+  // A fix can leave a problem in a table nested in the one fixed; a few rounds settle it.
+  for (let round = 0; round < 5; round++) {
+    const tr = fixTables(state);
+    if (!tr) break;
+    state = state.apply(tr);
+  }
+  return state.doc;
 }

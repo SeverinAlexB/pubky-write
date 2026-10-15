@@ -1,7 +1,8 @@
-import { mkdtempSync, readdirSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DocumentSummary, ImportResponse, OpenedDocument } from "@docs/shared";
+import JSZip from "jszip";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.ts";
 import { openDatabase } from "./database.ts";
@@ -37,6 +38,20 @@ describe("POST /api/documents/import", () => {
     const opened = (await (await app.request(`/api/documents/${document.id}`)).json()) as OpenedDocument;
     expect(opened.content.attrs?.paperSize).toBe("Letter");
     expect(opened.content.content?.map((block) => block.type)).toEqual(["heading", "bulletList", "image"]);
+  });
+
+  it("creates the comments of a Word file and exports them again", async () => {
+    const fixture = readFileSync(new URL("import/fixtures/corpus/libreoffice/CommentReply.docx", import.meta.url));
+    const { document } = (await (await upload("Reply.docx", fixture)).json()) as ImportResponse;
+    const opened = (await (await app.request(`/api/documents/${document.id}`)).json()) as OpenedDocument;
+    expect(opened.comments.map((comment) => comment.messages.map((message) => message.body))).toEqual([["Parent", "Child"]]);
+
+    const exported = await app.request(`/api/documents/${document.id}/export/docx`);
+    const zip = await JSZip.loadAsync(await exported.arrayBuffer());
+    const comments = await zip.file("word/comments.xml")!.async("string");
+    expect(comments).toContain("Parent");
+    expect(comments).toContain("Child");
+    expect(await zip.file("word/document.xml")!.async("string")).toContain("commentRangeStart");
   });
 
   it("refuses other file types, broken Word files and files over 20 MB", async () => {

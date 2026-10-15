@@ -1,5 +1,9 @@
 // File > Open > Upload: converts a Word or Markdown file into a new document.
 import { extname } from "node:path";
+import type { DocumentSummary } from "@docs/shared";
+import { insertImportedComments } from "../comments.ts";
+import { inTransaction, type Database } from "../database.ts";
+import { createDocument } from "../documents.ts";
 import { ImportError, type ImportOptions, type ImportResult } from "./content.ts";
 import { docxToDocument } from "./docx.ts";
 import { markdownToDocument } from "./markdown.ts";
@@ -27,4 +31,13 @@ export async function importFile(fileName: string, data: Uint8Array, options: Im
   const importer = importers[extname(fileName).toLowerCase()];
   if (!importer) throw new ImportError("Only Word (.docx) and Markdown (.md) files can be opened");
   return importer(data, options);
+}
+
+/** Creates the document an import made, with the comment threads found in the file. */
+export function createImportedDocument(db: Database, fileName: string, result: ImportResult, now = Date.now()): DocumentSummary {
+  return inTransaction(db, () => {
+    const summary = createDocument(db, importedTitle(fileName), now, result.doc);
+    insertImportedComments(db, summary.id, result.doc, result.comments, now);
+    return summary;
+  });
 }

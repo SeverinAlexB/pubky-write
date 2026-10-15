@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { extname } from "node:path";
-import { firstTab, tabsDocument, toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type ImportResponse, type SubmitStepsRequest } from "@docs/shared";
+import { firstTab, rangeInTabsDocument, tabsDocument, toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type ImportResponse, type SubmitStepsRequest } from "@docs/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
@@ -15,6 +15,7 @@ import {
   editMessage,
   getComment,
   InvalidCommentError,
+  listComments,
   setResolved,
 } from "./comments.ts";
 import { inTransaction, type Database } from "./database.ts";
@@ -37,7 +38,7 @@ import {
   templateDocument,
 } from "./documents.ts";
 import { toDocx } from "./export/docx.ts";
-import { ImportError, importedTitle, importFile, isImportable, MAX_IMPORT_BYTES } from "./import/index.ts";
+import { createImportedDocument, ImportError, importFile, isImportable, MAX_IMPORT_BYTES } from "./import/index.ts";
 import { createRemoteFetcher, LinkTitles, RemoteFetchError, type RemoteFetcher } from "./remote.ts";
 import { getRevision, listRevisions, nameRevision } from "./revisions.ts";
 import { imageTypes, readUpload, sniffImageType, storeUpload } from "./uploads.ts";
@@ -107,14 +108,14 @@ export function createApp({
       }
       if (file.size > MAX_IMPORT_BYTES) throw new HTTPException(413, { message: "Files can be at most 20 MB" });
       const paperSize = form.get("paperSize");
-      const { doc, dropped } = await importFile(file.name, new Uint8Array(await file.arrayBuffer()), {
+      const result = await importFile(file.name, new Uint8Array(await file.arrayBuffer()), {
         paperSize: typeof paperSize === "string" ? paperSize : undefined,
         storeImage: async (data) => {
           const type = sniffImageType(data);
           return type ? storeUpload(uploadsDir, data, type) : null;
         },
       });
-      return c.json({ document: createDocument(db, importedTitle(file.name), Date.now(), doc), dropped } satisfies ImportResponse, 201);
+      return c.json({ document: createImportedDocument(db, file.name, result), dropped: result.dropped } satisfies ImportResponse, 201);
     },
   );
 
@@ -256,13 +257,18 @@ export function createApp({
   // ?tab=<id> exports one tab, ?tab=all every tab; without it the first tab.
   app.get("/api/documents/:id/export/:format", async (c) => {
     const { title, doc: content } = found(getDocumentContent(db, c.req.param("id")));
-    const doc = tabsDocument(content, c.req.query("tab") ?? firstTab(content).id);
+    const which = c.req.query("tab") ?? firstTab(content).id;
+    const doc = tabsDocument(content, which);
     const format = c.req.param("format");
     if (format === "md") {
       return download(toMarkdown(doc), `${title}.md`, "text/markdown; charset=utf-8");
     }
     if (format === "docx") {
-      const buffer = await toDocx(doc, title, (src) => readUpload(uploadsDir, src));
+      const comments = listComments(db, c.req.param("id")).flatMap((comment) => {
+        const range = rangeInTabsDocument(content, which, comment);
+        return range ? [{ ...comment, ...range }] : [];
+      });
+      const buffer = await toDocx(doc, title, (src) => readUpload(uploadsDir, src), comments);
       return download(
         new Uint8Array(buffer),
         `${title}.docx`,

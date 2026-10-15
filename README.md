@@ -297,7 +297,8 @@ To restore a backup:
   and footers (with a different first page), page number fields and the page
   number start, real Word footnotes, and the table of contents as paragraphs
   with right-aligned page numbers (and dotted leaders) or links to bookmarks on
-  the headings. Suggestions become tracked changes (insertions, deletions,
+  the headings, and comments (Word comments on the same text, replies threaded under the first
+  message, resolved threads marked done). Suggestions become tracked changes (insertions, deletions,
   format changes and paragraph marks, inserted and deleted table rows and cells,
   images, breaks and footnotes, also in headers, footers and footnotes);
   Markdown and plain text are written as if every suggestion were accepted.
@@ -407,7 +408,9 @@ checks the result against it before creating the document.
   images (stored in `uploads/`) with their size, rotation and crop, and for anchored ones their
   text wrapping, margin and position; line, page and column breaks; columns; page size, orientation,
   margins and page colour; the default and first-page header and footer, the page number
-  start, PAGE and NUMPAGES fields and footnotes. Tracked changes become
+  start, PAGE and NUMPAGES fields, footnotes and endnotes (as footnotes); comments with their
+  replies and whether they are resolved (a comment with only a reference mark is attached to the
+  word before it; authors are not kept, as every comment here is by "You"). Tracked changes become
   suggestions, also in headers, footers and footnotes (insertions, deletions,
   run format changes, inserted or deleted paragraph marks, table rows and
   cells, and images, breaks and footnote references inside insertions or
@@ -419,10 +422,25 @@ checks the result against it before creating the document.
   `<!-- page break -->`. A `#` heading becomes Heading 1, since Markdown cannot
   tell it apart from a Title.
 
-Everything else is dropped, and the editor shows which kinds of content were
-left out: endnotes, even-page headers and footers, comments, equations, text
-boxes, charts and shapes, embedded objects, images in other formats or from
-local paths, and other HTML.
+Content the editor cannot represent keeps its text where it can, and the editor lists what was
+changed or left out after importing:
+
+- equations become linear text in the style of UnicodeMath (`(a+b)/2`, `x^2`, `√(x)`,
+  `∑_(i=1)^n▒i`, `■(1&0@0&1)` for a matrix);
+- the text of text boxes and shapes follows the paragraph they are anchored in;
+- tables nested more than five deep become their paragraphs; rows of different lengths are filled
+  up with empty cells;
+- embedded objects show their preview picture when it is PNG, JPEG, GIF or WebP;
+- right-to-left paragraphs keep their text in its order but are laid out left to right;
+- even-page headers and footers, footnotes inside headers or footnotes, comments on header or
+  footnote text, links to places inside the document (their text stays), charts, shapes without
+  text, images in other formats or from local paths, and other HTML are left out.
+
+`server/src/import/corpus.test.ts` checks 40 real-world Word files from other projects' test suites
+(`server/src/import/fixtures/corpus/`, with their sources and licences): each one imports into a
+valid document without losing any word of its body or notes, reopens unchanged, can be built as
+steps the server accepts, and keeps its text, headings, list items, tables, rows, images,
+footnotes, page breaks, links and comments through a Word export and a second import.
 
 ## How the comment margin works
 
@@ -520,8 +538,8 @@ not report long tasks, and throttling and profiles need Chrome.
   is not available yet. Footnotes are paragraphs of text (no images or tables)
   and comments cannot be attached to header, footer or footnote text. Version
   history does not highlight changes in headers, footers or footnotes.
-- Comments are not included in exports. The author is always "You"; emoji
-  reactions are not available yet.
+- Comments are exported only to Word (with replies and the resolved state), and comment authors
+  are not imported from Word. The author is always "You"; emoji reactions are not available yet.
 - Find searches the shown tab only (no "All tabs" option), tabs cannot be
   reordered by dragging (use Move up, Move down and Move into), and undo is shared
   by all tabs (undoing a change in another tab shows that tab).

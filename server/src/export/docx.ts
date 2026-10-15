@@ -8,6 +8,9 @@ import {
   Bookmark,
   BorderStyle,
   ColumnBreak,
+  CommentRangeEnd,
+  CommentRangeStart,
+  CommentReference,
   DeletedTableRow,
   DeletedTextRun,
   Document,
@@ -41,6 +44,7 @@ import {
   TextWrappingType,
   VerticalPositionRelativeFrom,
   WidthType,
+  type ICommentOptions,
   type IFloating,
   type INumberingOptions,
   type IParagraphOptions,
@@ -49,7 +53,8 @@ import {
   type ParagraphChild,
 } from "docx";
 import { imageSize } from "image-size";
-import { Mark, type Node } from "@tiptap/pm/model";
+import JSZip from "jszip";
+import { Fragment, Mark, type Node } from "@tiptap/pm/model";
 import { TableMap } from "@tiptap/pm/tables";
 import {
   bulletPresets,
@@ -75,6 +80,7 @@ import {
   tocHeadings,
   tocTarget,
   type BreakSuggestion,
+  type CommentThread,
   type MarkJSON,
   type SuggestionMeta,
   type NumberFormat,
@@ -107,6 +113,8 @@ const TWIPS_PER_POINT = 20;
 const TWIPS_PER_PX = 15;
 const LIST_LEVELS = 9;
 const SUBTITLE_STYLE = "Subtitle";
+/** Word's default left and right cell margin (0.08 in). */
+const CELL_MARGIN_TWIPS = 108;
 
 const alignments = {
   left: AlignmentType.LEFT,
@@ -133,8 +141,13 @@ const numberFormats: Record<NumberFormat, (typeof LevelFormat)[keyof typeof Leve
   "upper-roman": LevelFormat.UPPER_ROMAN,
 };
 
-export async function toDocx(doc: Node, title: string, readImage: ImageReader): Promise<Buffer> {
-  const converter = new DocxConverter(readImage, contentWidthTwips(doc), doc);
+/**
+ * `comments` are the threads to include, with ranges in `doc`: Word comments on the same text, the
+ * replies threaded under the first message and resolved threads marked done.
+ */
+export async function toDocx(doc: Node, title: string, readImage: ImageReader, comments: readonly CommentThread[] = []): Promise<Buffer> {
+  const wordComments = commentDefinitions(comments, doc);
+  const converter = new DocxConverter(readImage, contentWidthTwips(doc), doc, wordComments.events);
   const children = await converter.blocks(doc);
   const settings = pageElementsOf(doc);
   const region = async (key: RegionKey, Kind: typeof Header | typeof Footer, always: boolean) => {
@@ -155,6 +168,7 @@ export async function toDocx(doc: Node, title: string, readImage: ImageReader): 
     styles,
     numbering,
     footnotes: converter.footnotes,
+    ...(wordComments.children.length > 0 && { comments: { children: wordComments.children } }),
     sections: [
       {
         properties: {
@@ -168,7 +182,79 @@ export async function toDocx(doc: Node, title: string, readImage: ImageReader): 
       },
     ],
   });
-  return Packer.toBuffer(file);
+  const buffer = await Packer.toBuffer(file);
+  return wordComments.resolvedWithoutReplies ? withResolvedComments(buffer, wordComments.children) : buffer;
+}
+
+/** Where a comment's range starts or ends in the document, with the Word comments of its thread. */
+type CommentEvent = { pos: number; kind: "start" | "end"; ids: number[] };
+
+/** The Word comments of the threads (each message a comment, replies under the first) and their range events. */
+function commentDefinitions(threads: readonly CommentThread[], doc: Node) {
+  const children: ICommentOptions[] = [];
+  const events: CommentEvent[] = [];
+  // Ranges are kept inside the document's text, so every range is written.
+  let lastText = 0;
+  doc.descendants((node, pos) => {
+    if (node.isTextblock) lastText = pos + node.nodeSize - 1;
+    return !node.isTextblock;
+  });
+  const anchored = threads.filter((thread) => thread.to > thread.from && thread.messages.length > 0).sort((a, b) => a.from - b.from);
+  for (const thread of anchored) {
+    const ids = thread.messages.map((_, index) => children.length + index);
+    thread.messages.forEach((message, index) => {
+      children.push({
+        id: ids[index]!,
+        author: COMMENT_AUTHOR,
+        initials: COMMENT_AUTHOR.slice(0, 1),
+        date: new Date(message.createdAt),
+        children: message.body.split("\n").map((line) => new Paragraph(line)),
+        ...(index > 0 && { parentId: ids[0] }),
+        ...(thread.resolved && { resolved: true }),
+      });
+    });
+    events.push({ pos: Math.min(thread.from, lastText), kind: "start", ids }, { pos: Math.min(thread.to, lastText), kind: "end", ids });
+  }
+  // Ends before starts at the same position, so touching ranges do not overlap.
+  events.sort((a, b) => a.pos - b.pos || (a.kind === b.kind ? 0 : a.kind === "end" ? -1 : 1));
+  const resolvedWithoutReplies = anchored.some((thread) => thread.resolved) && !children.some((child) => child.parentId !== undefined);
+  // Without replies the library writes no commentsExtended part: durable ids give the comments the
+  // paragraph ids withResolvedComments refers to.
+  return { children: resolvedWithoutReplies ? children.map((child) => ({ ...child, durableId: paraIdOf(child.id) })) : children, events, resolvedWithoutReplies };
+}
+
+/** The comments' author: comments are always by "You" in the editor. */
+const COMMENT_AUTHOR = "You";
+
+/** The paragraph id the library gives a comment's last paragraph. */
+const paraIdOf = (id: number) => (id + 1).toString(16).toUpperCase().padStart(8, "0");
+
+/** Adds the commentsExtended part that marks resolved comments as done (the library writes it only for replies). */
+async function withResolvedComments(buffer: Buffer, comments: readonly ICommentOptions[]): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  const entries = comments.map((comment) => `<w15:commentEx w15:paraId="${paraIdOf(comment.id)}" w15:done="${comment.resolved ? 1 : 0}"/>`);
+  zip.file(
+    "word/commentsExtended.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w15:commentsEx xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" mc:Ignorable="w15">${entries.join("")}</w15:commentsEx>`,
+  );
+  const types = await zip.file("[Content_Types].xml")!.async("string");
+  zip.file(
+    "[Content_Types].xml",
+    types.replace(
+      "</Types>",
+      `<Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/></Types>`,
+    ),
+  );
+  const relsPath = "word/_rels/document.xml.rels";
+  const rels = await zip.file(relsPath)!.async("string");
+  zip.file(
+    relsPath,
+    rels.replace(
+      "</Relationships>",
+      `<Relationship Id="rIdCommentsExtended" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/></Relationships>`,
+    ),
+  );
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
 /** Header, footer or footnote content as a document node. */
@@ -298,11 +384,23 @@ class DocxConverter {
   /** Word needs a unique id on every revision element. */
   private revisionCount = 0;
 
+  /** Where each of the document's textblocks starts, in document order (a node can occur more than once). */
+  private readonly textblockPositions = new Map<Node, number[]>();
+
   constructor(
     private readonly readImage: ImageReader,
-    private readonly contentWidth: number,
+    private contentWidth: number,
     private readonly doc: Node,
+    /** Comment range starts and ends, by position; written as they are reached. */
+    private readonly commentEvents: CommentEvent[] = [],
   ) {
+    if (commentEvents.length > 0) {
+      doc.descendants((node, pos) => {
+        if (!node.isTextblock) return true;
+        this.textblockPositions.set(node, [...(this.textblockPositions.get(node) ?? []), pos]);
+        return false;
+      });
+    }
     let linked = false;
     doc.descendants((node) => {
       if (node.type.name === "tableOfContents" && node.attrs.style === "links") linked = true;
@@ -618,11 +716,14 @@ class DocxConverter {
       const rowTracked = trackedObject(row) ?? this.tracked;
       for (const cell of children(row)) {
         const cellTracked = trackedObject(cell);
-        const content = (await this.within(rowTracked ?? cellTracked, () => this.blocks(cell))).filter(
-          (block): block is Paragraph => block instanceof Paragraph,
-        );
         const start = map.colCount(cellOffset);
         const width = columnWidths.slice(start, start + cell.attrs.colspan).reduce((sum, value) => sum + value, 0);
+        // A table nested in the cell fills the cell (less Word's default cell margins).
+        const pageWidth = this.contentWidth;
+        this.contentWidth = Math.max(width - 2 * CELL_MARGIN_TWIPS, TWIPS_PER_INDENT);
+        const content = await this.within(rowTracked ?? cellTracked, () => this.blocks(cell)).finally(() => (this.contentWidth = pageWidth));
+        // Word needs a paragraph at the end of every cell, also after a table nested in it.
+        if (content.at(-1) instanceof Table) content.push(new Paragraph(""));
         cells.push(
           new TableCell({
             children: content.length > 0 ? content : [new Paragraph("")],
@@ -709,7 +810,48 @@ class DocxConverter {
     });
   }
 
+  /** The comment range starts and ends up to `pos` not written yet. */
+  private commentMarks(pos: number): ParagraphChild[] {
+    const result: ParagraphChild[] = [];
+    while (this.commentEvents.length > 0 && this.commentEvents[0]!.pos <= pos) {
+      const { kind, ids } = this.commentEvents.shift()!;
+      for (const id of ids) {
+        if (kind === "start") result.push(new CommentRangeStart(id));
+        else result.push(new CommentRangeEnd(id), new TextRun({ children: [new CommentReference(id)] }));
+      }
+    }
+    return result;
+  }
+
+  /**
+   * The runs of a textblock, with the comment ranges in it. Text is split where a range starts or
+   * ends; ranges that start or end between textblocks start or end at the next one.
+   */
   private async inline(parent: Node, strike = false): Promise<ParagraphChild[]> {
+    const start = this.commentEvents.length > 0 ? this.textblockPositions.get(parent)?.shift() : undefined;
+    if (start === undefined) return this.inlineRuns(parent, strike);
+    const runs: ParagraphChild[] = [...this.commentMarks(start + 1)];
+    let pos = start + 1;
+    for (const node of children(parent)) {
+      if (node.isText) {
+        // Split where a comment range starts or ends inside the text.
+        let offset = 0;
+        while (offset < node.text!.length) {
+          const next = this.commentEvents[0]?.pos;
+          const end = next !== undefined && next > pos + offset && next < pos + node.text!.length ? next - pos : node.text!.length;
+          runs.push(...(await this.inlineRuns(parent.copy(Fragment.from(node.cut(offset, end))), strike)));
+          offset = end;
+          runs.push(...this.commentMarks(pos + offset));
+        }
+      } else {
+        runs.push(...(await this.inlineRuns(parent.copy(Fragment.from(node)), strike)), ...this.commentMarks(pos + node.nodeSize));
+      }
+      pos += node.nodeSize;
+    }
+    return [...runs, ...this.commentMarks(pos)];
+  }
+
+  private async inlineRuns(parent: Node, strike = false): Promise<ParagraphChild[]> {
     const runs: ParagraphChild[] = [];
     for (const node of children(parent)) {
       if (node.type.name === "hardBreak") {

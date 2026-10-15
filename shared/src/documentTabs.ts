@@ -239,6 +239,23 @@ export function tabsDocument(doc: Node, which: string | "all"): Node {
 }
 
 /**
+ * Moves a range of the document to where it is in `tabsDocument(doc, which)`, for comments in
+ * exports; null when the range is not (wholly) in the exported tabs.
+ */
+export function rangeInTabsDocument(doc: Node, which: string | "all", range: { from: number; to: number }): { from: number; to: number } | null {
+  const tabs = tabTree(doc);
+  const chosen = which === "all" ? tabs : [tabs.find((candidate) => candidate.id === which) ?? firstTab(doc)];
+  let start = 0;
+  for (const [index, tab] of chosen.entries()) {
+    // All tabs: a page break before each tab after the first, then the tab's name as a heading.
+    if (which === "all") start += (index > 0 ? 1 : 0) + tab.name.length + 2;
+    if (range.from >= tab.from && range.to <= tab.to) return { from: range.from - tab.from + start, to: range.to - tab.from + start };
+    start += tab.to - tab.from;
+  }
+  return null;
+}
+
+/**
  * A copy of a tab's content for Duplicate, with new ids for the suggestions in it: one
  * suggestion's parts share an id, so the copy's must not be joined with the original's.
  */

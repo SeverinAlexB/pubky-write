@@ -10,10 +10,14 @@
 // - Tables with merged cells, images (PNG, JPEG, GIF, WebP), line and page breaks, and the page
 //   size, orientation and margins.
 // - The default and first-page header and footer of the last section ("different first page"),
-//   the page number start, PAGE and NUMPAGES fields, and footnotes.
+//   the page number start, PAGE and NUMPAGES fields, footnotes, and endnotes as footnotes.
+// - Comments with their range (or the word at their reference mark), replies and resolved state.
 //
-// Endnotes, even-page headers, comments, equations, text boxes, charts and embedded objects are
-// dropped and reported. Tracked changes in the body, headers, footers and footnotes become
+// What the editor cannot show keeps its text: equations become linear text ("(a)/(b)"), text in
+// text boxes and shapes follows its paragraph, tables nested more than five deep become their
+// paragraphs, embedded objects show their preview picture. Even-page headers, charts, shapes
+// without text and pictures in other formats are dropped. All of these are reported. Rows of
+// different lengths are filled up to rectangles. Tracked changes in the body, headers, footers and footnotes become
 // suggestions: insertions (w:ins, w:moveTo), deletions (w:del, w:moveFrom), run format changes
 // (w:rPrChange), inserted or deleted paragraph marks (suggested paragraph breaks), inserted or
 // deleted table rows (w:trPr) and cells (w:cellIns, w:cellDel), and images, breaks and footnote
@@ -40,6 +44,8 @@ import {
   type RegionContent,
 } from "@docs/shared";
 import type { JSONContent } from "@tiptap/core";
+import type { Node } from "@tiptap/pm/model";
+import { Transform } from "@tiptap/pm/transform";
 import type { TabStopKind } from "@docs/shared";
 import JSZip from "jszip";
 import { xml2js } from "xml-js";
@@ -51,7 +57,9 @@ import {
   leafNode,
   repair,
   textNode,
+  withRectangularTables,
   type ImageStore,
+  type ImportedComment,
   type ImportOptions,
   type ImportResult,
   type MarkJSON,
@@ -72,6 +80,8 @@ const TWIPS_PER_POINT = 20;
 const TWIPS_PER_INDENT = 720;
 const EMU_PER_PX = 9525;
 const MAX_INDENT = 8;
+/** Tables inside tables up to this depth are kept as tables. */
+const MAX_TABLE_DEPTH = 5;
 /** Word files are zip archives; a larger main part is very likely not a real document. */
 const MAX_PART_BYTES = 100 * 1024 * 1024;
 
@@ -124,22 +134,26 @@ export async function docxToDocument(data: Uint8Array, options: ImportOptions): 
     storeImage: options.storeImage,
     dropped: new DroppedContent(),
     footnotes: new Map(),
+    endnotes: new Map(),
     margins: { left: 96, top: 96 },
   };
-  const footnotesRel = [...rels.values()].find((rel) => rel.type.endsWith("/footnotes") && !rel.external);
-  if (footnotesRel) {
-    const path = resolvePath(directory, footnotesRel.target);
-    const footnotesPart = await readPart(zip, path);
-    const footnoteRels = parseRelationships(await readPart(zip, relationshipsPath(path)));
-    for (const footnote of find(footnotesPart, "footnotes")?.children ?? []) {
-      // Separators and continuation notices have a type; real footnotes have none.
-      if (footnote.name === "footnote" && !footnote.attributes.type && footnote.attributes.id) {
-        parts.footnotes.set(footnote.attributes.id, { element: footnote, rels: footnoteRels });
+  for (const kind of ["footnote", "endnote"] as const) {
+    const notesRel = [...rels.values()].find((rel) => rel.type.endsWith(`/${kind}s`) && !rel.external);
+    if (!notesRel) continue;
+    const path = resolvePath(directory, notesRel.target);
+    const notesPart = await readPart(zip, path);
+    const notesRels = parseRelationships(await readPart(zip, relationshipsPath(path)));
+    for (const note of find(notesPart, `${kind}s`)?.children ?? []) {
+      // Separators and continuation notices have a type; real notes have none.
+      if (note.name === kind && !note.attributes.type && note.attributes.id) {
+        parts[`${kind}s`].set(note.attributes.id, { element: note, rels: notesRels });
       }
     }
   }
-  const body = find(document, "body");
-  if (!body) throw new ImportError("The Word document has no body");
+  // Some writers split the body into several (Word reads them one after the other).
+  const bodies = (child(document, "document")?.children ?? []).filter((candidate) => candidate.name === "body");
+  if (bodies.length === 0) throw new ImportError("The Word document has no body");
+  const body: Element = { name: "body", attributes: {}, text: "", children: bodies.flatMap((candidate) => candidate.children) };
   const section = body.children.findLast((child) => child.name === "sectPr");
   const setup = section ? pageSetup(section) : {};
   parts.margins = {
@@ -148,11 +162,25 @@ export async function docxToDocument(data: Uint8Array, options: ImportOptions): 
   };
   const converter = new DocxConverter(parts, rels);
   const blocks = await converter.blocks(body.children);
+  // Ranges that end after the last paragraph end with it.
+  if (converter.pendingMarkers.length > 0) appendToLastTextblock(blocks, converter.pendingMarkers);
   const attrs = section ? { ...setup, ...columnSettings(section), ...(await headersAndFooters(section, rels, parts)) } : {};
   // The page colour (w:background, shown by Word with w:displayBackgroundShape).
   const background = val(child(child(document, "document"), "background"), "color")?.toLowerCase();
   if (background && isPageColor(`#${background}`) && background !== "ffffff") attrs.pageColor = `#${background}`;
-  return { doc: finishDocument(blocks, options, attrs), dropped: parts.dropped.list() };
+  const { doc, ranges } = commentRanges(finishDocument(blocks, options, attrs));
+  const commentsRel = [...rels.values()].find((rel) => rel.type.endsWith("/comments") && !rel.external);
+  const extendedRel = [...rels.values()].find((rel) => rel.type.endsWith("/commentsExtended") && !rel.external);
+  const comments = commentsRel
+    ? commentThreads(
+        doc,
+        await readPart(zip, resolvePath(directory, commentsRel.target)),
+        extendedRel ? await readPart(zip, resolvePath(directory, extendedRel.target)) : null,
+        ranges,
+        parts.dropped,
+      )
+    : [];
+  return { doc, dropped: parts.dropped.list(), comments };
 }
 
 /** What every converter of a file shares: the zip, styles, numbering and footnotes. */
@@ -164,6 +192,8 @@ type Parts = {
   storeImage: ImageStore;
   dropped: DroppedContent;
   footnotes: Map<string, { element: Element; rels: Map<string, Relationship> }>;
+  /** Endnotes, which become footnotes (the editor has no endnotes). */
+  endnotes: Map<string, { element: Element; rels: Map<string, Relationship> }>;
   /** The page's left and top margin in CSS pixels, for images positioned from the page's margins. */
   margins: { left: number; top: number };
 };
@@ -218,7 +248,7 @@ function regionContent(blocks: JSONContent[], kind: "header" | "footnote"): Regi
   if (kind === "footnote") result = result.flatMap(paragraphsOf);
   if (result.length === 0 || result.every((block) => block.type === "paragraph" && !block.content?.length)) return null;
   try {
-    const doc = documentSchema.nodeFromJSON({ type: "doc", content: result.map(repair) });
+    const doc = withRectangularTables(documentSchema.nodeFromJSON({ type: "doc", content: result.map(repair) }));
     doc.check();
     if (regionProblem(doc, kind)) return null;
     return doc.content.toJSON() as RegionContent;
@@ -258,18 +288,30 @@ async function readPart(zip: JSZip, path: string): Promise<Element | null> {
 
 const localName = (name: string) => name.slice(name.indexOf(":") + 1);
 
-function toElement(node: XmlNode): Element {
-  const attributes: Record<string, string> = {};
-  for (const [name, value] of Object.entries(node.attributes ?? {})) {
-    if (value !== undefined) attributes[localName(name)] = String(value);
+/** Without recursion: fuzzed and machine-made files nest elements tens of thousands deep. */
+function toElement(root: XmlNode): Element {
+  const convert = (node: XmlNode): Element => {
+    const attributes: Record<string, string> = {};
+    for (const [name, value] of Object.entries(node.attributes ?? {})) {
+      if (value !== undefined) attributes[localName(name)] = String(value);
+    }
+    return { name: localName(node.name ?? ""), attributes, children: [], text: "" };
+  };
+  const result = convert(root);
+  const stack: [XmlNode, Element][] = [[root, result]];
+  while (stack.length > 0) {
+    const [node, element] = stack.pop()!;
+    for (const child of node.elements ?? []) {
+      if (child.type === "element") {
+        const converted = convert(child);
+        element.children.push(converted);
+        stack.push([child, converted]);
+      } else if (child.type === "text" || child.type === "cdata") {
+        element.text += String(child.text ?? (child as { cdata?: string }).cdata ?? "");
+      }
+    }
   }
-  const children: Element[] = [];
-  let text = "";
-  for (const child of node.elements ?? []) {
-    if (child.type === "element") children.push(toElement(child));
-    else if (child.type === "text" || child.type === "cdata") text += String(child.text ?? (child as { cdata?: string }).cdata ?? "");
-  }
-  return { name: localName(node.name ?? ""), attributes, children, text };
+  return result;
 }
 
 function child(element: Element | undefined, name: string): Element | undefined {
@@ -279,12 +321,109 @@ function child(element: Element | undefined, name: string): Element | undefined 
 /** The first descendant named `name`, depth first. */
 function find(element: Element | undefined | null, name: string): Element | undefined {
   if (!element) return undefined;
-  for (const candidate of element.children) {
+  const stack = [...element.children].reverse();
+  while (stack.length > 0) {
+    const candidate = stack.pop()!;
     if (candidate.name === name) return candidate;
-    const found = find(candidate, name);
-    if (found) return found;
+    for (let index = candidate.children.length - 1; index >= 0; index--) stack.push(candidate.children[index]!);
   }
   return undefined;
+}
+
+/** Groups a part of an equation in brackets unless it is a single character. */
+const grouped = (text: string) => ([...text].length <= 1 ? text : `(${text})`);
+
+/**
+ * An Office Math equation as linear text in the style of UnicodeMath: fractions as `(a)/(b)`,
+ * scripts as `x^2` and `x_i`, roots as `√(x)`, large operators as `∑_(i=1)^n`, matrices as
+ * `■(a&b@c&d)`. The text of every part stays in its order.
+ */
+function linearMath(element: Element): string {
+  const part = (name: string, of = element) => {
+    const found = child(of, name);
+    return found ? linearMath(found) : "";
+  };
+  const property = (properties: string, name: string, fallback: string) => {
+    const value = val(child(child(element, properties), name));
+    return value === undefined ? fallback : value;
+  };
+  const all = (elements = element.children) => elements.map(linearMath).join("");
+  switch (element.name) {
+    case "t":
+      return element.text;
+    case "f":
+      return `${grouped(part("num"))}/${grouped(part("den"))}`;
+    case "sSup":
+      return `${part("e")}^${grouped(part("sup"))}`;
+    case "sSub":
+      return `${part("e")}_${grouped(part("sub"))}`;
+    case "sSubSup":
+      return `${part("e")}_${grouped(part("sub"))}^${grouped(part("sup"))}`;
+    case "sPre":
+      return `_${grouped(part("sub"))}^${grouped(part("sup"))}${part("e")}`;
+    case "rad": {
+      const degree = part("deg");
+      return `${degree ? `${grouped(degree)}` : ""}√${grouped(part("e"))}`;
+    }
+    case "nary": {
+      const sub = part("sub");
+      const sup = part("sup");
+      return `${property("naryPr", "chr", "∫")}${sub ? `_${grouped(sub)}` : ""}${sup ? `^${grouped(sup)}` : ""}▒${part("e")}`;
+    }
+    case "d": {
+      const parts = element.children.filter((candidate) => candidate.name === "e").map(linearMath);
+      return `${property("dPr", "begChr", "(")}${parts.join(property("dPr", "sepChr", "|"))}${property("dPr", "endChr", ")")}`;
+    }
+    case "m":
+      return `■(${element.children
+        .filter((row) => row.name === "mr")
+        .map((row) => row.children.filter((cell) => cell.name === "e").map(linearMath).join("&"))
+        .join("@")})`;
+    case "eqArr":
+      return `█(${element.children.filter((row) => row.name === "e").map(linearMath).join("@")})`;
+    case "func":
+      return `${part("fName")}${grouped(part("e"))}`;
+    case "limLow":
+      return `${part("e")}_${grouped(part("lim"))}`;
+    case "limUpp":
+      return `${part("e")}^${grouped(part("lim"))}`;
+    case "acc":
+      return `${part("e")}${property("accPr", "chr", "\u0302")}`;
+    case "groupChr":
+      return `${part("e")}${property("groupChrPr", "chr", "\u23df")}`;
+    case "bar":
+      return `${part("e")}\u0305`;
+    case "oMath":
+    case "oMathPara":
+    case "e":
+    case "num":
+    case "den":
+    case "sub":
+    case "sup":
+    case "deg":
+    case "lim":
+    case "fName":
+    case "box":
+    case "borderBox":
+    case "phant":
+    case "r":
+      return all();
+    default:
+      // Properties (…Pr) and anything unknown hold no text of their own.
+      return element.name.endsWith("Pr") ? "" : all();
+  }
+}
+
+/** The descendants named `name`, in document order, not looking inside the ones found. */
+function findAll(element: Element, name: string): Element[] {
+  const result: Element[] = [];
+  const stack = [...element.children].reverse();
+  while (stack.length > 0) {
+    const candidate = stack.pop()!;
+    if (candidate.name === name) result.push(candidate);
+    else for (let index = candidate.children.length - 1; index >= 0; index--) stack.push(candidate.children[index]!);
+  }
+  return result;
 }
 
 function val(element: Element | undefined, attribute = "val"): string | undefined {
@@ -448,8 +587,14 @@ class DocxConverter {
         return this.paragraph(element);
       case "tbl": {
         this.pendingBreak = null;
-        const table = await this.table(element);
-        return table ? [{ kind: "block", node: table }] : [];
+        if (this.tableDepth >= MAX_TABLE_DEPTH) return this.flattenedTable(element);
+        this.tableDepth++;
+        try {
+          const table = await this.table(element);
+          return table ? [{ kind: "block", node: table }] : [];
+        } finally {
+          this.tableDepth--;
+        }
       }
       case "sdt":
       case "customXml":
@@ -462,6 +607,11 @@ class DocxConverter {
       }
       case "AlternateContent":
         return this.element(child(element, "Choice") ?? child(element, "Fallback") ?? element);
+      case "commentRangeStart":
+      case "commentRangeEnd":
+        // Between paragraphs: the range starts or ends at the start of the next paragraph.
+        this.pendingMarkers.push(...this.commentMarker(element));
+        return [];
       default:
         return [];
     }
@@ -469,11 +619,39 @@ class DocxConverter {
 
   // Paragraphs ---------------------------------------------------------------------------------
 
+  /** Comment range markers met between paragraphs, for the start of the next one. */
+  pendingMarkers: JSONContent[] = [];
+
+  /** Marks where a comment's range starts or ends (see commentRanges); comments only belong to the body. */
+  private commentMarker(element: Element): JSONContent[] {
+    const id = element.attributes.id;
+    if (id === undefined) return [];
+    if (this.part !== "body") {
+      this.dropped.add("Comments on headers, footers and footnotes");
+      return [];
+    }
+    return textNode(commentMarker(element.name === "commentRangeStart" ? "start" : "end", id), []);
+  }
+
+  /** The text of text boxes and shapes in the paragraph being converted, as paragraphs to follow it. */
+  private boxBlocks: JSONContent[] = [];
+
   private async paragraph(element: Element): Promise<Entry[]> {
+    const outer = this.boxBlocks;
+    this.boxBlocks = [];
+    try {
+      const entries = await this.paragraphEntries(element);
+      return [...entries, ...this.boxBlocks.map((node) => ({ kind: "block" as const, node }))];
+    } finally {
+      this.boxBlocks = outer;
+    }
+  }
+
+  private async paragraphEntries(element: Element): Promise<Entry[]> {
     const properties = child(element, "pPr");
     const styleId = val(child(properties, "pStyle"));
     const style = paragraphStyleId(this.styles, styleId);
-    const inline = await this.inlineContent(element.children, { marks: [], inHyperlink: false }, style);
+    const inline = [...this.pendingMarkers.splice(0), ...(await this.inlineContent(element.children, { marks: [], inHyperlink: false }, style))];
 
     const list = style.startsWith("h") ? null : this.listOf(properties, styleId);
     const level = list ? (number(val(child(child(properties, "numPr") ?? this.styleNumbering(styleId), "ilvl"))) ?? 0) : 0;
@@ -582,6 +760,10 @@ class DocxConverter {
         case "customXml":
           result.push(...(await this.inlineContent(element.children, context, style)));
           break;
+        case "commentRangeStart":
+        case "commentRangeEnd":
+          result.push(...this.commentMarker(element));
+          break;
         case "sdt":
           result.push(...(await this.inlineContent(child(element, "sdtContent")?.children ?? [], context, style)));
           break;
@@ -590,7 +772,9 @@ class DocxConverter {
           break;
         case "oMath":
         case "oMathPara":
-          this.dropped.add("Equations");
+          // The editor has no equations: they are kept as linear text, "(a+b)/2", "x^2", "√(x)".
+          this.dropped.add("Equations (kept as text)");
+          result.push(...textNode(linearMath(element), this.runMarks(undefined, context, style)));
           break;
         // Bookmarks, proofing marks and paragraph properties are left out.
       }
@@ -616,7 +800,7 @@ class DocxConverter {
           // Text between a field's begin and separate characters is its instruction, not shown text.
           // A page number field's result is drawn by the editor instead.
           if (!hidden && (!field || field.result) && !this.fields.some((open) => open.pageField)) {
-            result.push(...textNode(element.text, marks));
+            result.push(...textNode(element.text.replace(COMMENT_MARKER_CHARACTERS, ""), marks));
           }
           break;
         case "instrText":
@@ -663,13 +847,23 @@ class DocxConverter {
           if (drawing) result.push(...this.withObjectRevision(await this.drawing(drawing), context));
           break;
         }
-        case "object":
-          this.dropped.add("Embedded objects");
+        case "object": {
+          // An embedded object shows its preview picture, when it has one in a format the editor reads.
+          const preview = find(element, "imagedata") ? await this.drawing(element) : [];
+          if (preview.length === 0) this.dropped.add("Embedded objects");
+          result.push(...this.withObjectRevision(preview, context));
           break;
-        case "footnoteReference": {
+        }
+        case "commentReference":
+          if (element.attributes.id !== undefined && this.part === "body") {
+            result.push(...textNode(commentMarker("reference", element.attributes.id), []));
+          }
+          break;
+        case "footnoteReference":
+        case "endnoteReference": {
           // An inserted or deleted footnote keeps the suggestion on its reference.
           const tracked = context.marks.filter((mark) => mark.type === "suggestionInsert" || mark.type === "suggestionDelete");
-          const references = await this.footnoteReference(element.attributes.id);
+          const references = await this.footnoteReference(element.attributes.id, element.name === "endnoteReference");
           // Its text was inserted or deleted with it (as the export writes it): part of the same suggestion.
           const kind = tracked[0]?.type;
           result.push(
@@ -679,24 +873,23 @@ class DocxConverter {
           );
           break;
         }
-        case "endnoteReference":
-          this.dropped.add("Endnotes");
-          break;
-        case "commentReference":
-          this.dropped.add("Comments");
-          break;
       }
     }
     return result;
   }
 
-  /** A footnote reference with the footnote's text; footnotes inside headers or footnotes are dropped. */
-  private async footnoteReference(id: string | undefined): Promise<JSONContent[]> {
-    const footnote = id ? this.parts.footnotes.get(id) : undefined;
+  /**
+   * A footnote reference with the footnote's text; an endnote becomes a footnote. Notes inside
+   * headers or footnotes are dropped.
+   */
+  private async footnoteReference(id: string | undefined, endnote = false): Promise<JSONContent[]> {
+    const footnote = id ? this.parts[endnote ? "endnotes" : "footnotes"].get(id) : undefined;
+    const kind = endnote ? "Endnotes" : "Footnotes";
     if (!footnote || this.part !== "body") {
-      this.dropped.add(this.part === "body" ? "Footnotes" : "Footnotes in headers, footers or footnotes");
+      this.dropped.add(this.part === "body" ? kind : `${kind} in headers, footers or footnotes`);
       return [];
     }
+    if (endnote) this.dropped.add("Endnotes (shown as footnotes)");
     const converter = new DocxConverter(this.parts, footnote.rels, "footnote");
     const content = regionContent(await converter.blocks(footnote.element.children), "footnote") ?? [{ type: "paragraph" }];
     // The text usually starts with a space after the footnote's number.
@@ -810,8 +1003,12 @@ class DocxConverter {
 
   /** An image from a drawing; shapes, charts and text boxes have none and are reported. */
   private async drawing(element: Element): Promise<JSONContent[]> {
-    if (find(element, "txbxContent")) {
-      this.dropped.add("Text boxes");
+    const boxes = findAll(element, "txbxContent");
+    if (boxes.length > 0) {
+      // The editor has no text boxes or shapes: their text follows the paragraph they are anchored in.
+      this.dropped.add("Text boxes and shapes (their text is kept)");
+      const converter = new DocxConverter(this.parts, this.rels, this.part);
+      for (const box of boxes) this.boxBlocks.push(...(await converter.blocks(box.children)));
       return [];
     }
     const blip = find(element, "blip") ?? find(element, "imagedata");
@@ -850,6 +1047,30 @@ class DocxConverter {
 
   // Tables -------------------------------------------------------------------------------------
 
+  /** Tables the table being converted is nested in. */
+  private tableDepth = 0;
+
+  /**
+   * A table nested deeper than the editor shows sensibly: its paragraphs (and those of the tables
+   * in it), one after the other, found without recursion since such files nest thousands deep.
+   */
+  private async flattenedTable(element: Element): Promise<Entry[]> {
+    this.dropped.add("Tables nested more than 5 deep (their text is kept)");
+    const entries: Entry[] = [];
+    const stack = [element];
+    while (stack.length > 0) {
+      const next = stack.pop()!;
+      if (next.name === "p") {
+        for (const entry of await this.paragraph(next)) {
+          entries.push(...(entry.kind === "block" ? [entry] : entry.blocks.map((node) => ({ kind: "block" as const, node }))));
+        }
+        continue;
+      }
+      for (let index = next.children.length - 1; index >= 0; index--) stack.push(next.children[index]!);
+    }
+    return entries;
+  }
+
   private async table(element: Element): Promise<JSONContent | null> {
     const rows: JSONContent[] = [];
     /** The cell that a vertically merged cell continues, by grid column. */
@@ -859,14 +1080,14 @@ class DocxConverter {
       .filter((candidate) => candidate.name === "gridCol")
       .map((column) => number(val(column, "w")));
     const hasGrid = grid.length > 0 && grid.every((width) => width !== undefined && width > 0);
-    for (const row of element.children.filter((candidate) => candidate.name === "tr")) {
+    for (const row of unwrapped(element.children, "tr")) {
       const rowProperties = child(row, "trPr");
       const header = toggle(child(rowProperties, "tblHeader")) === true;
       // An inserted or deleted row (w:trPr/w:ins, w:del).
       const rowRevision = this.objectRevision(child(rowProperties, "ins"), child(rowProperties, "del"));
       let column = number(val(child(rowProperties, "gridBefore"))) ?? 0;
       const cells: JSONContent[] = [];
-      for (const cell of row.children.filter((candidate) => candidate.name === "tc")) {
+      for (const cell of unwrapped(row.children, "tc")) {
         const properties = child(cell, "tcPr");
         const colspan = Math.max(1, number(val(child(properties, "gridSpan"))) ?? 1);
         const merge = child(properties, "vMerge");
@@ -877,6 +1098,9 @@ class DocxConverter {
           // An inserted or deleted cell (a column), read before its text so they share a suggestion.
           const cellRevision = rowRevision ? {} : this.objectRevision(child(properties, "cellIns"), child(properties, "cellDel"));
           const content = await this.blocks(cell.children);
+          // The empty paragraph Word requires after a table at the end of a cell.
+          const last = content.at(-1);
+          if (content.at(-2)?.type === "table" && last?.type === "paragraph" && !last.content?.length) content.pop();
           const widths = grid.slice(column, column + colspan) as number[];
           const node: JSONContent = {
             type: header ? "tableHeader" : "tableCell",
@@ -948,6 +1172,16 @@ class DocxConverter {
     }
     return { type: list.type, attrs, content: [] };
   }
+}
+
+/** The elements named `name`, also those inside content controls and custom XML (rows and cells can be in them). */
+function unwrapped(elements: Element[], name: string): Element[] {
+  return elements.flatMap((element) => {
+    if (element.name === name) return [element];
+    if (element.name === "sdt") return unwrapped(child(element, "sdtContent")?.children ?? [], name);
+    if (element.name === "customXml") return unwrapped(element.children, name);
+    return [];
+  });
 }
 
 function listItem(list: JSONContent, blocks: JSONContent[], checked?: boolean): JSONContent {
@@ -1190,4 +1424,172 @@ function pageSetup(section: Element): Record<string, unknown> {
     if (isMargin(points)) attrs[key] = points;
   }
   return attrs;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Comments
+//
+// While the document is built, the start and end of every comment's range are private-use
+// characters with the comment's id in the text. Once the document is complete their positions are
+// read and the characters removed, so the ranges are positions in the final document.
+
+type MarkerKind = "start" | "end" | "reference";
+const markerCharacters: Record<MarkerKind, string> = { start: "\u{10FFF0}", end: "\u{10FFF1}", reference: "\u{10FFF3}" };
+const COMMENT_CLOSE = "\u{10FFF2}";
+const COMMENT_MARKER_CHARACTERS = /[\u{10FFF0}-\u{10FFF3}]/gu;
+const COMMENT_MARKER = /([\u{10FFF0}\u{10FFF1}\u{10FFF3}])([^\u{10FFF2}]*)\u{10FFF2}/gu;
+
+function commentMarker(kind: MarkerKind, id: string): string {
+  return `${markerCharacters[kind]}${id.replace(COMMENT_MARKER_CHARACTERS, "")}${COMMENT_CLOSE}`;
+}
+
+/** Appends inline content to the last paragraph or heading of `blocks` (or a new paragraph). */
+function appendToLastTextblock(blocks: JSONContent[], inline: JSONContent[]): void {
+  for (let index = blocks.length - 1; index >= 0; index--) {
+    const block = blocks[index]!;
+    if (block.type === "paragraph" || block.type === "heading") {
+      block.content = [...(block.content ?? []), ...inline];
+      return;
+    }
+    if (block.content && block.type !== "image") {
+      const before = block.content.length;
+      appendToLastTextblock(block.content, inline);
+      if (block.content.length === before) return;
+      block.content.pop();
+    }
+  }
+  blocks.push({ type: "paragraph", content: inline });
+}
+
+/** A comment's range, and where its reference mark is (the only place a comment without a range has). */
+type CommentRange = { from?: number; to?: number; reference?: number };
+
+/** The document without its comment markers, and the range of every comment by id. */
+function commentRanges(doc: Node): { doc: Node; ranges: Map<string, CommentRange> } {
+  const markers: { pos: number; length: number; id: string; kind: MarkerKind }[] = [];
+  doc.descendants((node, pos) => {
+    if (!node.isText) return true;
+    for (const match of node.text!.matchAll(COMMENT_MARKER)) {
+      const kind = (Object.keys(markerCharacters) as MarkerKind[]).find((candidate) => markerCharacters[candidate] === match[1])!;
+      markers.push({ pos: pos + match.index, length: match[0].length, id: match[2]!, kind });
+    }
+    return false;
+  });
+  const ranges = new Map<string, CommentRange>();
+  if (markers.length === 0) return { doc, ranges };
+  const transform = new Transform(doc);
+  for (const marker of [...markers].reverse()) transform.delete(marker.pos, marker.pos + marker.length);
+  let removed = 0;
+  for (const marker of markers) {
+    const range = ranges.get(marker.id) ?? {};
+    const pos = marker.pos - removed;
+    if (marker.kind === "start") range.from ??= pos;
+    else if (marker.kind === "end") range.to = pos;
+    else range.reference ??= pos;
+    ranges.set(marker.id, range);
+    removed += marker.length;
+  }
+  return { doc: transform.doc, ranges };
+}
+
+/**
+ * The range a comment is attached to: its own, or for a comment that only has a reference mark,
+ * the word before the mark (or else after it) in its paragraph. Null when there is no text.
+ */
+function anchorOf(doc: Node, range: CommentRange | undefined): { from: number; to: number } | null {
+  if (range?.from !== undefined && range.to !== undefined && range.to > range.from) return { from: range.from, to: range.to };
+  const at = range?.reference ?? range?.from ?? range?.to;
+  if (at === undefined) return null;
+  const $at = doc.resolve(at);
+  if (!$at.parent.isTextblock) return null;
+  const start = $at.start();
+  const before = $at.parent.textBetween(0, $at.parentOffset, undefined, "\ufffc");
+  const after = $at.parent.textBetween($at.parentOffset, $at.parent.content.size, undefined, "\ufffc");
+  const previous = /(\S+)\s*$/.exec(before);
+  if (previous) return { from: start + previous.index, to: start + previous.index + previous[1]!.length };
+  const next = /^\s*(\S+)/.exec(after);
+  if (next) return { from: at + next[0].length - next[1]!.length, to: at + next[0].length };
+  return null;
+}
+
+/** The text of a comment's paragraphs, one line each. */
+function commentText(comment: Element): string {
+  const lines: string[] = [];
+  for (const paragraph of findAll(comment, "p")) {
+    let line = "";
+    const stack = [...paragraph.children].reverse();
+    while (stack.length > 0) {
+      const next = stack.pop()!;
+      if (next.name === "t") line += next.text;
+      else if (next.name === "tab") line += "\t";
+      else if (next.name === "br" || next.name === "cr") line += "\n";
+      // The annotation reference is Word's own mark for the comment, not text.
+      else if (next.name !== "rPr" && next.name !== "pPr") for (let index = next.children.length - 1; index >= 0; index--) stack.push(next.children[index]!);
+    }
+    lines.push(line);
+  }
+  return lines.join("\n").trim();
+}
+
+/**
+ * Comment threads from the comments part, with replies (commentsExtended's parent paragraph) after
+ * their comment and whether the thread is resolved. A thread is anchored at its first comment's
+ * range; comments without a range in the body are left out (and reported).
+ */
+function commentThreads(
+  doc: Node,
+  part: Element | null,
+  extended: Element | null,
+  ranges: Map<string, CommentRange>,
+  dropped: DroppedContent,
+): ImportedComment[] {
+  type Entry = { id: string; paraIds: string[]; body: string; createdAt: number | null; parent?: string; done: boolean };
+  const entries: Entry[] = [];
+  for (const comment of find(part, "comments")?.children ?? []) {
+    if (comment.name !== "comment" || comment.attributes.id === undefined) continue;
+    const date = Date.parse(comment.attributes.date ?? "");
+    entries.push({
+      id: comment.attributes.id,
+      paraIds: findAll(comment, "p").map((paragraph) => paragraph.attributes.paraId).filter((id): id is string => id !== undefined),
+      body: commentText(comment),
+      createdAt: Number.isFinite(date) ? date : null,
+      done: false,
+    });
+  }
+  // Each comment's last paragraph identifies it in commentsExtended.
+  const byParaId = new Map(entries.flatMap((entry) => (entry.paraIds.length > 0 ? [[entry.paraIds.at(-1)!, entry] as const] : [])));
+  for (const extra of find(extended, "commentsEx")?.children ?? []) {
+    const entry = byParaId.get(extra.attributes.paraId ?? "");
+    if (!entry) continue;
+    entry.parent = byParaId.get(extra.attributes.paraIdParent ?? "")?.id;
+    entry.done = ["1", "true"].includes(extra.attributes.done ?? "");
+  }
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const rootOf = (entry: Entry) => {
+    let root = entry;
+    for (let depth = 0; root.parent !== undefined && byId.has(root.parent) && depth < 100; depth++) root = byId.get(root.parent)!;
+    return root;
+  };
+  const threads = new Map<string, Entry[]>();
+  for (const entry of entries) {
+    const root = rootOf(entry);
+    threads.set(root.id, [...(threads.get(root.id) ?? []), entry]);
+  }
+  const result: ImportedComment[] = [];
+  for (const [rootId, thread] of threads) {
+    const range = anchorOf(doc, ranges.get(rootId));
+    if (!range) {
+      dropped.add("Comments without text to attach them to");
+      continue;
+    }
+    const [root, ...replies] = thread;
+    replies.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+    result.push({
+      from: range.from,
+      to: range.to,
+      resolved: thread.some((entry) => entry.done),
+      messages: [root!, ...replies].filter((entry) => entry.body).map((entry) => ({ body: entry.body, createdAt: entry.createdAt })),
+    });
+  }
+  return result.sort((a, b) => a.from - b.from);
 }

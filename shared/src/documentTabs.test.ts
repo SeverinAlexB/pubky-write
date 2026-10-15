@@ -10,6 +10,7 @@ import {
   firstTab,
   subtreeIds,
   tabAtPos,
+  rangeInTabsDocument,
   tabsDocument,
   tabTree,
   wrapInTab,
@@ -153,6 +154,27 @@ describe("tabsDocument", () => {
   it("keeps the page setup", () => {
     const transform = new Transform(tabbed).setDocAttribute("orientation", "landscape");
     expect(tabsDocument(transform.doc, "a").attrs.orientation).toBe("landscape");
+  });
+
+  it("moves comment ranges to where their text is in the exported tabs", () => {
+    const rangeOf = (source: Node, text: string) => {
+      let found = { from: 0, to: 0 };
+      source.descendants((node, pos) => {
+        if (node.isText && node.text!.includes(text)) found = { from: pos + node.text!.indexOf(text), to: pos + node.text!.indexOf(text) + text.length };
+      });
+      return found;
+    };
+    for (const which of ["a", "b", "all"]) {
+      const exported = tabsDocument(tabbed, which);
+      for (const text of ["one", "two"]) {
+        const range = rangeInTabsDocument(tabbed, which, rangeOf(tabbed, text));
+        if (which !== "all" && text !== { a: "one", b: "two" }[which]) expect(range).toBeNull();
+        else expect(exported.textBetween(range!.from, range!.to)).toBe(text);
+      }
+    }
+    const plain = doc(paragraph("solo"));
+    expect(rangeInTabsDocument(plain, "all", { from: 1, to: 5 })).toEqual({ from: 1 + "Tab 1".length + 2, to: 5 + "Tab 1".length + 2 });
+    expect(tabsDocument(plain, "all").textBetween(8, 12)).toBe("solo");
   });
 });
 

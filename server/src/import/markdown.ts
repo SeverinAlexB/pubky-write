@@ -46,7 +46,7 @@ const TASK_MARKER = /^\[([ xX])\]\s+/;
 export async function markdownToDocument(source: string, options: ImportOptions): Promise<ImportResult> {
   const converter = new MarkdownConverter(options.storeImage);
   const blocks = await converter.convert(markdown.parse(source, {}));
-  return { doc: finishDocument(blocks, options), dropped: converter.dropped.list() };
+  return { doc: finishDocument(blocks, options), dropped: converter.dropped.list(), comments: [] };
 }
 
 /** An open block; `hadInline` notes inline content that may all have been dropped (an unreadable image). */
