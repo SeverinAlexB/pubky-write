@@ -440,7 +440,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   }, [printLayout]);
 
   useEffect(() => {
-    const idle = requestIdleCallback(() => onDemand.forEach((component) => void component.preload()));
+    const preload = () => onDemand.forEach((component) => void component.preload());
+    // Safari has no requestIdleCallback.
+    if (typeof requestIdleCallback !== "function") {
+      const timer = setTimeout(preload, 1000);
+      return () => clearTimeout(timer);
+    }
+    const idle = requestIdleCallback(preload);
     return () => cancelIdleCallback(idle);
   }, []);
 

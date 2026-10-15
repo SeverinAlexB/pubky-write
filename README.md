@@ -11,7 +11,28 @@ later without changing the storage model.
 ## Requirements
 
 - Node.js 24 or later
-- Chrome, for the end-to-end tests only
+- Chrome, for the end-to-end tests only (and Playwright's Firefox and WebKit for
+  `npm run e2e:all`: `npx playwright install firefox webkit`)
+
+## Browser support
+
+The editor works in current Chrome, Firefox and Safari; the end-to-end tests run in Chrome,
+Firefox and WebKit (Safari's engine). Where the browsers differ:
+
+- **Edit > Paste** reads the clipboard itself. Firefox and Safari ask each time (a Paste button
+  next to the pointer), and if the browser refuses, a message says to use ⌘V instead, which always
+  works.
+- **Copy link** (comments, tabs, links) writes to the clipboard when you click it; this works in
+  all three without a prompt.
+- **Shift+right-click** shows the browser's own menu. Firefox always shows its menu for it, even
+  where a page could ask for something else.
+- **Tab in Safari** skips buttons unless "Press Tab to highlight each item" is on (Safari settings,
+  Advanced). The menu bar and the toolbar are still reached with Tab (they take part in the Tab
+  order on purpose), and Alt+F10 always moves to the toolbar.
+- **Unsaved edits** are kept in IndexedDB in every browser. Where Web Locks are missing (older
+  Safari), an editor restores kept edits without checking whether another tab still owns them.
+- Safari has no `requestIdleCallback`: the dialogs that load on demand are preloaded a second after
+  the editor opens instead of when the browser is idle.
 
 ## Run it
 
@@ -471,7 +492,8 @@ removed text, struck through, where it was.
 
 ```bash
 npm test             # unit tests: step authority, revisions, comments, exports, imports, sync, search
-npm run e2e          # browser tests against a throwaway server and data directory
+npm run e2e          # browser tests in Chrome against a throwaway server and data directory
+npm run e2e:all      # the same in Chrome, Firefox and WebKit (see e2e/README.md)
 npm run typecheck
 npm run perf         # performance with a 60-page document, against the production build
 ```
@@ -481,7 +503,9 @@ outline and the live word count, and prints the time to open it, the time until
 the pages settle and frame times while typing on pages 1 and 50. Set
 `PERF_CPU_THROTTLE=4` to emulate a slower computer and
 `PERF_PROFILE=<file>.cpuprofile` to record a CPU profile of typing on page 50.
-`PERF_MODE=suggesting` types in Suggesting mode.
+`PERF_MODE=suggesting` types in Suggesting mode. `npx playwright test --config
+playwright.perf.config.ts --project=firefox` (or `webkit`) measures in the other browsers; they do
+not report long tasks, and throttling and profiles need Chrome.
 
 ## Limitations
 

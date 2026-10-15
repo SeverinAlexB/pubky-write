@@ -15,11 +15,17 @@ export default defineConfig({
   timeout: 300_000,
   use: {
     baseURL: `http://localhost:${port}`,
-    channel: "chrome",
     locale: "en-GB",
     headless: true,
     viewport: { width: 1440, height: 900 },
   },
+  // npm run perf measures in Chrome; npx playwright test --config playwright.perf.config.ts
+  // --project=firefox (or webkit) in the others.
+  projects: [
+    { name: "chrome", use: { browserName: "chromium", channel: "chrome" } },
+    { name: "firefox", use: { browserName: "firefox" } },
+    { name: "webkit", use: { browserName: "webkit" } },
+  ],
   webServer: {
     command: `npm run build && NODE_ENV=production DATA_DIR=${dataDir} PORT=${port} npx tsx server/src/index.ts`,
     url: `http://localhost:${port}/api/documents`,

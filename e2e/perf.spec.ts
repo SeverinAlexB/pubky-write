@@ -52,11 +52,15 @@ function largeDocument(sections: number): Block[] {
 /** Records page count changes and long tasks from the start of every page load. */
 async function instrument(page: Page) {
   await page.addInitScript(() => {
-    const perf = { pageCountChanges: [] as { at: number; count: number }[], longTasks: [] as { at: number; duration: number }[] };
+    // Firefox and Safari do not report long tasks.
+    const longTasksSupported = PerformanceObserver.supportedEntryTypes.includes("longtask");
+    const perf = { pageCountChanges: [] as { at: number; count: number }[], longTasks: [] as { at: number; duration: number }[], longTasksSupported };
     (window as unknown as { __perf: typeof perf }).__perf = perf;
-    new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) perf.longTasks.push({ at: entry.startTime, duration: entry.duration });
-    }).observe({ type: "longtask", buffered: true });
+    if (longTasksSupported) {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) perf.longTasks.push({ at: entry.startTime, duration: entry.duration });
+      }).observe({ type: "longtask", buffered: true });
+    }
     new MutationObserver((records) => {
       for (const record of records) {
         const target = record.target as HTMLElement;
@@ -68,7 +72,7 @@ async function instrument(page: Page) {
   });
 }
 
-type PerfData = { pageCountChanges: { at: number; count: number }[]; longTasks: { at: number; duration: number }[] };
+type PerfData = { pageCountChanges: { at: number; count: number }[]; longTasks: { at: number; duration: number }[]; longTasksSupported: boolean };
 const perfData = (page: Page) => page.evaluate(() => (window as unknown as { __perf: PerfData }).__perf);
 
 /** Puts the caret at the end of the first paragraph on `pageNumber` and scrolls it into view. */
@@ -131,7 +135,7 @@ async function measureTyping(page: Page, count: number) {
     const perf = (window as unknown as { __perf: PerfData }).__perf;
     return {
       samples: (window as unknown as { __keySamples: number[] }).__keySamples,
-      longTasks: perf.longTasks.filter((task) => task.at >= since).map((task) => task.duration),
+      longTasks: perf.longTasksSupported ? perf.longTasks.filter((task) => task.at >= since).map((task) => task.duration) : null,
     };
   }, before);
   const sorted = [...result.samples].sort((a, b) => a - b);
@@ -141,8 +145,9 @@ async function measureTyping(page: Page, count: number) {
     p50: percentile(0.5),
     p95: percentile(0.95),
     max: Math.round(sorted.at(-1)!),
-    longTasks: result.longTasks.length,
-    longestTask: Math.round(Math.max(0, ...result.longTasks)),
+    // null where the browser does not report long tasks.
+    longTasks: result.longTasks?.length ?? null,
+    longestTask: result.longTasks ? Math.round(Math.max(0, ...result.longTasks)) : null,
   };
 }
 
@@ -150,7 +155,9 @@ async function measureTyping(page: Page, count: number) {
 const cpuThrottle = Number(process.env.PERF_CPU_THROTTLE ?? 1);
 const editorMode = process.env.PERF_MODE || null;
 
-test("@perf a 60-page document opens, paginates and types quickly", async ({ page, request }) => {
+test("@perf a 60-page document opens, paginates and types quickly", async ({ page, request, browserName }) => {
+  // CPU throttling and CPU profiles use the Chrome DevTools protocol.
+  if (browserName !== "chromium" && (cpuThrottle > 1 || process.env.PERF_PROFILE)) throw new Error("PERF_CPU_THROTTLE and PERF_PROFILE need Chrome");
   const created = await (await request.post("/api/documents", { data: {} })).json();
   const content = largeDocument(80);
   const response = await request.post(`/api/documents/${created.id}/steps`, {
@@ -193,7 +200,7 @@ test("@perf a 60-page document opens, paginates and types quickly", async ({ pag
   await page.goto(`/d/${created.id}`);
   await expect(page.locator(".page-stack[data-page-count]")).toBeVisible();
 
-  const runs: { open: number; settled: number; pages: number; longestTask: number }[] = [];
+  const runs: { open: number; settled: number; pages: number; longestTask: number | null }[] = [];
   for (let run = 0; run < 3; run++) {
     await page.goto(`/d/${created.id}`);
     await expect(page.getByLabel("Document content")).toBeVisible();
@@ -211,7 +218,7 @@ test("@perf a 60-page document opens, paginates and types quickly", async ({ pag
       open: Math.round(data.pageCountChanges[0]!.at),
       settled: Math.round(data.pageCountChanges.at(-1)!.at),
       pages: data.pageCountChanges.at(-1)!.count,
-      longestTask: Math.round(Math.max(0, ...data.longTasks.map((task) => task.duration))),
+      longestTask: data.longTasksSupported ? Math.round(Math.max(0, ...data.longTasks.map((task) => task.duration))) : null,
     });
   }
   const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
@@ -219,7 +226,7 @@ test("@perf a 60-page document opens, paginates and types quickly", async ({ pag
     pages: runs[0]!.pages,
     openMs: median(runs.map((run) => run.open)),
     settledMs: median(runs.map((run) => run.settled)),
-    longestTaskMs: median(runs.map((run) => run.longestTask)),
+    longestTaskMs: runs[0]!.longestTask === null ? null : median(runs.map((run) => run.longestTask!)),
   };
 
   expect(opening.pages).toBeGreaterThanOrEqual(60);
@@ -237,7 +244,7 @@ test("@perf a 60-page document opens, paginates and types quickly", async ({ pag
     writeFileSync(process.env.PERF_PROFILE!, JSON.stringify(profile));
   }
 
-  const report = { cpuThrottle, mode: editorMode ?? "editing", comments: commentRanges.length, opening, typingOnPage1: page1, typingOnPage50: page50 };
+  const report = { browser: browserName, cpuThrottle, mode: editorMode ?? "editing", comments: commentRanges.length, opening, typingOnPage1: page1, typingOnPage50: page50 };
   console.log(JSON.stringify(report, null, 2));
   test.info().annotations.push({ type: "perf", description: JSON.stringify(report) });
 });

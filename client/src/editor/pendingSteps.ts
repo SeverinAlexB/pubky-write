@@ -33,7 +33,13 @@ let database: Promise<IDBDatabase | null> | null = null;
 function openDatabase(): Promise<IDBDatabase | null> {
   database ??= new Promise((resolve) => {
     if (typeof indexedDB === "undefined") return resolve(null);
-    const request = indexedDB.open(DATABASE, 1);
+    let request: IDBOpenDBRequest;
+    try {
+      request = indexedDB.open(DATABASE, 1);
+    } catch {
+      // Some private browsing modes throw instead of failing the request.
+      return resolve(null);
+    }
     request.onupgradeneeded = () => {
       request.result.createObjectStore(STORE, { keyPath: "key" }).createIndex("documentId", "documentId");
     };
