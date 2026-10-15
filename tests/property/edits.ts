@@ -121,10 +121,14 @@ const pick = <T>(list: readonly T[], at: number): T | undefined => list[Math.min
 function command(state: EditorState, selection: Selection | null, run: Command): Transaction | null {
   const start = selection ? state.apply(state.tr.setSelection(selection)) : state;
   let result: Transaction | null = null;
-  // The transaction starts from the same document, so it applies to `state` too.
+  // The transaction starts from the same document, so it applies to `state` too. The selection is
+  // made first, as a user selects and then edits (dispatchTo applies it on its own).
   run(start, (tr) => (result = tr));
-  return result;
+  return result && selection ? (result as Transaction).setMeta(SELECT_FIRST, selection) : result;
 }
+
+/** Meta of a transaction made with a selection: dispatchTo makes the selection first. */
+export const SELECT_FIRST = "propertySelectFirst";
 
 /** A short JSON header, for page setup edits. */
 const header = (text: string): RegionContent => [{ type: "paragraph", content: [{ type: "text", text }] }] as RegionContent;

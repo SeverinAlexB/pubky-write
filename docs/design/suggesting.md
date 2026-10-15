@@ -13,7 +13,7 @@ like any other content. Every suggestion has an `id` (a short random string), an
 | Inserted text | Mark `suggestionInsert` `{ id, author, createdAt }` on the inserted inline content (text, tabs, line breaks, footnote references, page fields). |
 | Deleted text | Mark `suggestionDelete` `{ id, author, createdAt }`. The text stays in the document until the suggestion is accepted. |
 | Text format change | Mark `suggestionFormat` `{ id, author, createdAt, before }`. The new formatting is applied normally; `before` is the list of formatting marks (as JSON) the text had before the first suggested change, so rejecting can restore it. |
-| Paragraph format change (style, alignment, spacing, indents, lists) | Attribute `suggestionFormat` of paragraphs and headings: `null` or `{ id, author, createdAt, before: { type, attrs, list } }` with the block's node type, its attributes and the list it was in (`{ type, preset }` or `null`) before the first suggested change. |
+| Paragraph format change (style, alignment, spacing, indents, lists) | Attribute `suggestionFormat` of paragraphs and headings: `null` or `{ id, author, createdAt, before: { type, attrs, list } }` with the block's node type, its attributes and the list it was in (`{ type, preset, level? }`, `level` for an item nested in that many lists, or `null`) before the first suggested change. |
 | Paragraph break inserted (Enter) or deleted (Backspace at the start of a paragraph) | Attribute `suggestionBreak` of paragraphs and headings: `null` or `{ kind: "insert" \| "delete", id, author, createdAt }`. It describes the boundary between this textblock and the previous one. |
 | Object inserted or deleted (image, table, table row, table cell, page break, column break, horizontal line, table of contents) | Attributes `suggestionInsert` and `suggestionDelete` of those node types: `null` or `{ id, author, createdAt }`. The object stays in the document until the suggestion is accepted or rejected. A suggested column is the cells of that column, one suggestion. |
 | Footnote inserted or deleted | The `suggestionInsert` / `suggestionDelete` mark on the reference, like text. |
@@ -76,6 +76,20 @@ commands (accept/reject) or only change document attributes.
    Dragging an image to another paragraph (one step deleting it, one inserting the same picture) is
    applied directly. Transactions with the meta `suggestionDirect` (`applyDirectly`) are applied
    directly too: merging and splitting cells (the spec applies them directly) and sorting a table.
+   Some edits are not changes the diff can express one by one, and are rewritten as a whole:
+   - **Deleting a selection** marks the selected text, the objects wholly in it and the paragraph
+     breaks in it as deleted, and changes nothing else (`deleteSelectionSuggestion`). ProseMirror's
+     own deletion also fits the structure around it (it ends a list early, reshapes a table where
+     the selection ends), which rejecting the suggestion could not undo. A whole first paragraph
+     deleted with nothing before it to join with takes the break after it instead.
+   - **Content and format steps in one transaction** (Enter at the start of a heading splits it and
+     makes the new empty block a paragraph) are split into runs, each rewritten on the result of
+     the runs before (`rewriteInRuns`).
+   - A `ReplaceAroundStep` that removes text or a paragraph boundary is a content change, not a
+     wrap. Backspace joining a paragraph into an empty list item, when the diff cannot express it,
+     becomes a deleted paragraph break on that paragraph (`joinSuggestion`).
+   - Inside a table that is itself a pending insertion, a cell of a new column is never removed on
+     its own (its row would be a cell short); its text is.
 2. **Format changes** (only mark, attribute and `ReplaceAroundStep` steps): the transaction is
    applied as it is, then, for the text and the textblocks it touched, the formatting before (read
    from the old document, or the `before` of an existing format suggestion) is compared with the
@@ -250,6 +264,12 @@ again when the display state changes, because hidden text changes line breaks.
 
 ## Known limits
 
+- Rejecting a change of list restores the paragraph's list kind, preset and nesting depth, and joins
+  it with lists of the same kind around it; it does not restore what else its list item held (a
+  second paragraph, a table) or nesting under a list of another kind.
+- Accepting a deleted paragraph break keeps the first paragraph's style; in Editing mode the same
+  deletion keeps one or the other depending on how the selection lies.
+
 - Moving an image by dragging, updating a table of contents, merging, splitting and sorting cells,
   removing a header or footer (Options > Remove header), and page setup, columns, headers' Different
   first page and page numbering are applied directly in Suggesting mode.
@@ -262,3 +282,10 @@ again when the display state changes, because hidden text changes line breaks.
   deletion, until the suggestion is accepted (it then goes) or rejected (it stays).
 - Image format changes are not shown in Preview reject all (as for text formatting, the preview
   hides and shows content but cannot restore earlier attributes).
+
+## Property tests
+
+`tests/property/editing.property.test.ts` checks, over random edits in Suggesting mode, that
+rejecting all suggestions gives back the document from before, that accepting all gives the text
+the same edits make in Editing mode, and that undo returns to the start. The cases it found are
+kept as plain tests in `tests/property/suggestionRegressions.test.ts`.

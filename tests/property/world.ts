@@ -4,7 +4,8 @@
 import { documentSchema, type CommentThread } from "@docs/shared";
 import { history } from "@tiptap/pm/history";
 import { Node } from "@tiptap/pm/model";
-import { EditorState, type Plugin, type Transaction } from "@tiptap/pm/state";
+import { EditorState, type Plugin, type Selection, type Transaction } from "@tiptap/pm/state";
+import { SELECT_FIRST } from "./edits.ts";
 import { tableEditing } from "@tiptap/pm/tables";
 import { Step } from "@tiptap/pm/transform";
 import { collab, getVersion, receiveTransaction, sendableSteps } from "../../client/src/editor/collab.ts";
@@ -16,6 +17,27 @@ import { DocumentSync, RejectedError, type CollabTarget, type StepsTransport, ty
 import { listComments } from "../../server/src/comments.ts";
 import { openDatabase, type Database } from "../../server/src/database.ts";
 import { applySteps, createDocument, endSession, getStepsSince, InvalidStepsError, openDocument } from "../../server/src/documents.ts";
+
+const text = (value: string) => ({ type: "text", text: value });
+const paragraph = (value: string) => ({ type: "paragraph", content: value ? [text(value)] : [] });
+
+/** A document with paragraphs, a heading, a list and a table to start from. */
+export const startDocument = Node.fromJSON(documentSchema, {
+  type: "doc",
+  content: [
+    { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+    paragraph("The quick brown fox"),
+    { type: "bulletList", content: [{ type: "listItem", content: [paragraph("one")] }, { type: "listItem", content: [paragraph("two")] }] },
+    {
+      type: "table",
+      content: [
+        { type: "tableRow", content: [{ type: "tableCell", content: [paragraph("a")] }, { type: "tableCell", content: [paragraph("b")] }] },
+        { type: "tableRow", content: [{ type: "tableCell", content: [paragraph("c")] }, { type: "tableCell", content: [paragraph("d")] }] },
+      ],
+    },
+    paragraph("jumps over the lazy dog"),
+  ],
+});
 
 /** A seeded random number generator (mulberry32), so a failing case can be replayed. */
 export function random(seed: number): () => number {
@@ -55,6 +77,8 @@ export function editorState(doc: Node, options: Parameters<typeof editorPlugins>
  * suggestions first; then the view applies it with the plugins' appended transactions.
  */
 export function dispatchTo(state: EditorState, tr: Transaction, now: number): EditorState {
+  const selection = tr.getMeta(SELECT_FIRST) as Selection | undefined;
+  if (selection) state = state.applyTransaction(state.tr.setSelection(selection)).state;
   const suggesting = getSuggesting(state);
   let applied = tr;
   if (tr.docChanged && suggesting.mode === "suggesting") {

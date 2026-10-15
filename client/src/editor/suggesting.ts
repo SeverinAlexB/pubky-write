@@ -36,6 +36,7 @@ import {
   ReplaceAroundStep,
   ReplaceStep,
   type Step,
+  type StepMap,
 } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
@@ -128,16 +129,179 @@ function passesThrough(tr: Transaction): boolean {
 export function suggestTransaction(state: EditorState, tr: Transaction, context: SuggestContext): SuggestResult | null {
   if (passesThrough(tr) || tr.before !== state.doc) return null;
   // Changing an image's attributes replaces the leaf node with a changed copy: a format change.
-  const replaces = tr.steps.some((step, index) => step instanceof ReplaceStep && !isLeafMarkupChange(tr.docs[index]!, step));
-  const wraps = tr.steps.some((step) => step instanceof ReplaceAroundStep);
+  // Deleting a selection that ends in a list or table cell can be one step that keeps the text in
+  // between (a ReplaceAroundStep) but removes text around it: a content change, not a wrap.
+  const replaces = tr.steps.some(
+    (step, index) =>
+      (step instanceof ReplaceStep && !isLeafMarkupChange(tr.docs[index]!, step)) ||
+      (step instanceof ReplaceAroundStep && removesInline(tr.docs[index]!, step)),
+  );
+  const wraps = tr.steps.some((step, index) => step instanceof ReplaceAroundStep && !removesInline(tr.docs[index]!, step));
   // Dragging a placed image to another paragraph moves it; that is applied as it is.
   if (replaces && isImageMove(state.doc, tr)) return null;
-  const result = replaces && !wraps ? rewriteContent(state, tr, context) : !replaces ? rewriteFormat(state, tr, context) : null;
+  const result = !replaces
+    ? rewriteFormat(state, tr, context)
+    : (deleteSelectionSuggestion(state, tr, context) ??
+      (!wraps ? rewriteContent(state, tr, context) : textblockWrapsOnly(tr) ? rewriteInRuns(state, tr, context) : null) ??
+      joinSuggestion(state, tr, context));
   if (!result) return null;
   copyTransactionState(tr, result.tr);
   result.tr.setMeta(REWRITTEN, true);
   setSuggesting(result.tr, result.made ? { group: result.group, activeId: result.made, activeFollowsCursor: true } : { group: result.group });
   return result;
+}
+
+const isContentStep = (doc: Node, step: Step) =>
+  (step instanceof ReplaceStep && !isLeafMarkupChange(doc, step)) || (step instanceof ReplaceAroundStep && removesInline(doc, step));
+
+const formatBlockTypes = new Set(["paragraph", "heading", "bulletList", "orderedList", "taskList", "listItem", "taskItem", "blockquote"]);
+
+/** Whether the transaction's wrapping steps only change textblocks and lists (not a table's structure). */
+function textblockWrapsOnly(tr: Transaction): boolean {
+  return tr.steps.every((step, index) => {
+    if (!(step instanceof ReplaceAroundStep) || isContentStep(tr.docs[index]!, step)) return true;
+    let ok = true;
+    step.slice.content.descendants((node) => {
+      if (!formatBlockTypes.has(node.type.name)) ok = false;
+      return ok;
+    });
+    return ok;
+  });
+}
+
+/**
+ * A transaction that both changes content and wraps or retypes textblocks (Enter at the start of a
+ * heading splits it and makes the new empty block a paragraph): each run of content steps and of
+ * format steps is rewritten on its own, on the result of the runs before, like suggestParts.
+ */
+function rewriteInRuns(state: EditorState, tr: Transaction, context: SuggestContext): SuggestResult | null {
+  const runs: { content: boolean; steps: Step[] }[] = [];
+  tr.steps.forEach((step, index) => {
+    const content = isContentStep(tr.docs[index]!, step);
+    const last = runs[runs.length - 1];
+    if (last && last.content === content) last.steps.push(step);
+    else runs.push({ content, steps: [step] });
+  });
+  const out = state.tr;
+  const original: StepMap[] = [];
+  let current = state;
+  let group = context.group;
+  let made: string | null = null;
+  for (const run of runs) {
+    // From the document after the original runs so far to the one after their rewritten versions.
+    const remap = new Mapping([...[...original].reverse().map((map) => map.invert()), ...out.mapping.maps]);
+    const part = current.tr;
+    // The rewritten runs usually keep the positions (an inserted paragraph break stays where it was):
+    // the step applies as it is; otherwise it is mapped over the difference.
+    const unchanged = sameMaps(original, out.mapping.maps);
+    for (const step of run.steps) {
+      const mapped = unchanged ? step : step.map(remap);
+      if (!mapped || part.maybeStep(mapped).failed) return null;
+      original.push(step.getMap());
+    }
+    const result = run.content ? rewriteContent(current, part, { ...context, group }) : rewriteFormat(current, part, { ...context, group });
+    if (!result) return null;
+    for (const step of result.tr.steps) out.step(step);
+    group = result.group;
+    made = result.made ?? made;
+    // Only the document and the selection are read by the rewriting.
+    current = EditorState.create({ doc: result.tr.doc, selection: result.tr.selection });
+  }
+  out.setSelection(Selection.fromJSON(out.doc, current.selection.toJSON()));
+  return { tr: out, group, made };
+}
+
+/**
+ * Backspace at the start of a paragraph that ProseMirror joins into the one before by moving it
+ * out of its structure (into an empty list item): the paragraph break is suggested for deletion.
+ */
+function joinSuggestion(state: EditorState, tr: Transaction, context: SuggestContext): SuggestResult | null {
+  const { $from, empty } = state.selection;
+  if (!empty || !$from.parent.isTextblock || $from.parentOffset !== 0 || !("suggestionBreak" in $from.parent.attrs)) return null;
+  if (textblockCount(tr.doc) !== textblockCount(state.doc) - 1 || tr.doc.textContent !== state.doc.textContent) return null;
+  const pos = $from.before();
+  if (!canJoinBackward(state.doc, pos) || $from.parent.attrs.suggestionBreak) return null;
+  const types = suggestionTypes(state.schema);
+  const meta = chooseSuggestion(state.doc, pos, $from.pos, context.group, context, types);
+  const out = state.tr.setNodeAttribute(pos, "suggestionBreak", { kind: "delete", ...meta });
+  return { tr: out, group: { id: meta.id, createdAt: meta.createdAt, time: context.now }, made: meta.id };
+}
+
+/**
+ * Deleting a selection: the selected text, the objects wholly in it and the paragraph breaks in it
+ * are suggested for deletion, and nothing else changes. ProseMirror's own deletion also fits the
+ * structure around it (it ends a list early or reshapes a table where the selection ends), which
+ * a suggestion must not do: rejecting it would leave that. Null for anything but a deletion of the
+ * selection.
+ */
+function deleteSelectionSuggestion(state: EditorState, tr: Transaction, context: SuggestContext): SuggestResult | null {
+  const { selection } = state;
+  if (selection.empty || !(selection instanceof TextSelection)) return null;
+  // Nothing but deletions: no step brings in content of its own (what a ReplaceAroundStep keeps is its gap).
+  const insertsContent = tr.steps.some((step) => {
+    if (!(step instanceof ReplaceStep || step instanceof ReplaceAroundStep)) return true;
+    let inline = false;
+    step.slice.content.descendants((node) => {
+      if (node.isInline || node.isAtom) inline = true;
+      return !inline;
+    });
+    return inline;
+  });
+  if (insertsContent || tr.doc.content.size >= state.doc.content.size) return null;
+  const types = suggestionTypes(state.schema);
+  const out = state.tr;
+  const meta = chooseSuggestion(out.doc, selection.from, selection.to, context.group, context, types);
+  markDeleted(out, selection.from, selection.to, meta, context.author, types);
+  // The cursor goes after the struck-through text, as for other deletions.
+  out.setSelection(Selection.near(out.doc.resolve(out.mapping.map(selection.to, 1)), -1));
+  return { tr: out, group: { id: meta.id, createdAt: meta.createdAt, time: context.now }, made: meta.id };
+}
+
+/** Whether two lists of step maps change the same ranges. */
+function sameMaps(a: readonly StepMap[], b: readonly StepMap[]): boolean {
+  const ranges = (maps: readonly StepMap[]) => {
+    const result: number[] = [];
+    for (const map of maps) map.forEach((oldStart, oldEnd, newStart, newEnd) => result.push(oldStart, oldEnd, newStart, newEnd));
+    return result.join(",");
+  };
+  return ranges(a) === ranges(b);
+}
+
+/**
+ * Whether a ReplaceAroundStep removes content rather than only wrapping, lifting or retyping it:
+ * inline content (text, images) around its gap, or a paragraph boundary (Backspace joining a
+ * paragraph into an empty list item).
+ */
+function removesInline(doc: Node, step: ReplaceAroundStep): boolean {
+  const after = step.apply(doc).doc;
+  if (after && textblockCount(after) < textblockCount(doc)) return true;
+  let found = false;
+  for (const [from, to] of [
+    [step.from, step.gapFrom],
+    [step.gapTo, step.to],
+  ] as const) {
+    if (to > from) {
+      doc.nodesBetween(from, to, (node, pos) => {
+        if (node.isInline && pos < to && pos + node.nodeSize > from) found = true;
+        return !found;
+      });
+    }
+  }
+  return found;
+}
+
+const textblockCounts = new WeakMap<Node, number>();
+
+function textblockCount(doc: Node): number {
+  let count = textblockCounts.get(doc);
+  if (count !== undefined) return count;
+  count = 0;
+  doc.descendants((node) => {
+    if (node.isTextblock) count!++;
+    return !node.isTextblock;
+  });
+  textblockCounts.set(doc, count);
+  return count;
 }
 
 /** A step that replaces a leaf object (an image) by one of the same type: only its attributes change. */
@@ -223,6 +387,19 @@ function suggestableRange(doc: Node, from: number, to: number, insert: MarkType)
     if ((pos < from && end > to) || listTypes.has(node.type.name)) return true;
     ok = false;
     return false;
+  });
+  return ok;
+}
+
+/** Whether `from`–`to` holds only the opening or closing tokens of lists, list items and quotes. */
+function wrapperTokensOnly(doc: Node, from: number, to: number): boolean {
+  let ok = true;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!ok) return false;
+    const end = pos + node.nodeSize;
+    if (pos < from && end > to) return true;
+    if (node.isInline || node.isTextblock || node.isAtom || !formatBlockTypes.has(node.type.name)) ok = false;
+    return ok;
   });
   return ok;
 }
@@ -351,7 +528,9 @@ function rewriteContent(state: EditorState, tr: Transaction, context: SuggestCon
     const deletedTo = afterDeletion.map(to, 1);
     let insertedFrom = deletedTo;
     let insertedTo = deletedTo;
-    if (change.toB > change.fromB) {
+    // Deleting across lists can reopen a list where the deletion ends: structure ProseMirror needs to
+    // fit the deletion, not content. Suggested, the text stays, and so does the list it is in.
+    if (change.toB > change.fromB && !(to > from && wrapperTokensOnly(tr.doc, change.fromB, change.toB))) {
       const before = out.steps.length;
       out.replace(deletedTo, deletedTo, tr.doc.slice(change.fromB, change.toB));
       const step = out.steps[before];
@@ -468,15 +647,24 @@ function markDeleted(out: Transaction, from: number, to: number, meta: Suggestio
     }
     if (isSuggestedObject(node) && pos >= from && pos + node.nodeSize <= to) {
       const inserted = objectSuggestion(node, "insert");
-      if (inserted && inserted.author === author) removals.push({ from: pos, to: pos + node.nodeSize });
-      else if (!objectSuggestion(node, "delete")) objects.push(pos);
+      // A cell of a new column stays: removing one cell would leave its row a cell short.
+      const cell = node.type.spec.tableRole === "cell" || node.type.spec.tableRole === "header_cell";
+      if (inserted && inserted.author === author) {
+        if (!cell) removals.push({ from: pos, to: pos + node.nodeSize });
+        return cell;
+      }
+      if (!objectSuggestion(node, "delete")) objects.push(pos);
       return false;
     }
-    // The boundary before a textblock whose content starts inside the range is deleted.
+    // The boundary before a textblock whose content starts inside the range is deleted. A whole
+    // textblock deleted with nothing before it to join with (the first paragraph) takes the
+    // boundary after it instead, with the textblock right after the range.
     if (node.isTextblock && pos + 1 > from && pos + 1 <= to && "suggestionBreak" in node.attrs) {
-      const brk = node.attrs.suggestionBreak as BreakSuggestion | null;
-      if (brk?.kind === "insert" && brk.author === author) joins.push(pos);
-      else if (brk?.kind !== "delete") breaks.push(pos);
+      const next = pos === from && pos + node.nodeSize === to && !canJoinBackward(out.doc, pos) ? out.doc.nodeAt(to) : null;
+      const target = next?.isTextblock && "suggestionBreak" in next.attrs && canJoinBackward(out.doc, to) ? to : pos;
+      const brk = out.doc.nodeAt(target)!.attrs.suggestionBreak as BreakSuggestion | null;
+      if (brk?.kind === "insert" && brk.author === author) joins.push(target);
+      else if (brk?.kind !== "delete") breaks.push(target);
     }
     return true;
   });
@@ -485,9 +673,15 @@ function markDeleted(out: Transaction, from: number, to: number, meta: Suggestio
   for (const pos of breaks) out.setNodeAttribute(pos, "suggestionBreak", { kind: "delete", ...meta });
   const removed = new Set(removals.map((range) => range.from));
   for (const pos of joins) {
-    const end = previousTextblockEnd(out.doc, pos);
+    // The textblock before, leaving out those inside objects that are removed (a new table being taken out).
+    let end = previousTextblockEnd(out.doc, pos);
+    for (let range = removals.find((candidate) => end !== null && candidate.from < end && end < candidate.to); range; ) {
+      end = previousTextblockEnd(out.doc, range.from);
+      range = removals.find((candidate) => end !== null && candidate.from < end && end < candidate.to);
+    }
+    // A break that cannot be joined back (a table now lies before it) stays a suggested insertion:
+    // clearing it would make the split permanent.
     if (end !== null && joinable(out.doc, end, pos + 1, removed)) removals.push({ from: end, to: pos + 1 });
-    else out.setNodeAttribute(pos, "suggestionBreak", null);
   }
   // Removed objects can lie inside a join's range: delete each position once.
   removals.sort((a, b) => a.from - b.from);
@@ -498,6 +692,12 @@ function markDeleted(out: Transaction, from: number, to: number, meta: Suggestio
     else merged.push({ ...range });
   }
   for (const range of merged.reverse()) out.delete(range.from, range.to);
+}
+
+/** Whether the textblock at `pos` can be joined with the textblock before it. */
+function canJoinBackward(doc: Node, pos: number): boolean {
+  const end = previousTextblockEnd(doc, pos);
+  return end !== null && joinable(doc, end, pos + 1);
 }
 
 /** The end of the content of the textblock before the one at `pos`. */

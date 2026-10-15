@@ -5,10 +5,10 @@
 // suggested paragraph breaks are attributes of paragraphs and headings. Every part of one
 // suggestion has the same id.
 import { Extension, Mark as TiptapMark, mergeAttributes, type JSONContent } from "@tiptap/core";
-import { Fragment, Mark, Slice, type MarkType, type Node, type Schema } from "@tiptap/pm/model";
-import { liftListItem, wrapInList } from "@tiptap/pm/schema-list";
+import { Fragment, Mark, Slice, type MarkType, type Node, type NodeType, type Schema } from "@tiptap/pm/model";
+import { liftListItem, sinkListItem, wrapInList } from "@tiptap/pm/schema-list";
 import { EditorState, TextSelection, type Command } from "@tiptap/pm/state";
-import { Transform } from "@tiptap/pm/transform";
+import { canSplit, Transform } from "@tiptap/pm/transform";
 import { regionKeys, type RegionContent, type RegionKey } from "./pageElements.ts";
 
 export type SuggestionMeta = { id: string; author: string; createdAt: number };
@@ -18,7 +18,8 @@ export const suggestionMarkNames: readonly SuggestionMarkName[] = ["suggestionIn
 /** A mark as JSON, as kept in a format suggestion's `before`. */
 export type MarkJSON = { type: string; attrs?: Record<string, unknown> };
 
-export type ListInfo = { type: string; preset: unknown } | null;
+/** The list a textblock is in: its kind, preset and (when nested) how many lists it is nested in. */
+export type ListInfo = { type: string; preset: unknown; level?: number } | null;
 /** A textblock's type, attributes (without the suggestion attributes) and list, before a paragraph format suggestion. */
 export type BlockFormat = { type: string; attrs: Record<string, unknown>; list: ListInfo };
 
@@ -330,7 +331,11 @@ export function blockFormat(doc: Node, pos: number): BlockFormat | null {
   let list: ListInfo = null;
   if ($pos.depth >= 2 && listItemTypes.has($pos.parent.type.name) && $pos.index() === 0) {
     const listNode = $pos.node($pos.depth - 1);
-    if (listTypes.has(listNode.type.name)) list = { type: listNode.type.name, preset: listNode.attrs.listPreset ?? null };
+    if (listTypes.has(listNode.type.name)) {
+      let level = 0;
+      for (let depth = $pos.depth - 2; depth > 0; depth--) if (listTypes.has($pos.node(depth).type.name)) level++;
+      list = { type: listNode.type.name, preset: listNode.attrs.listPreset ?? null, ...(level > 0 && { level }) };
+    }
   }
   return { type: node.type.name, attrs, list };
 }
@@ -747,8 +752,9 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
   const deletes: InlinePart[] = [];
   const formats: InlinePart[] = [];
   const blocks: { pos: number; node: Node; format: FormatSuggestion | null; brk: BreakSuggestion | null }[] = [];
-  let previousEnd = -1;
-  const breaks: { pos: number; previousEnd: number; brk: BreakSuggestion }[] = [];
+  /** The textblocks in document order, with the end of their content. */
+  const textblocks: { pos: number; end: number }[] = [];
+  const breaks: { pos: number; brk: BreakSuggestion }[] = [];
   const objects: { pos: number; node: Node; kind: "insert" | "delete" }[] = [];
   const images: { pos: number; node: Node; format: ImageFormatSuggestion }[] = [];
   const footnotes: { pos: number; node: Node }[] = [];
@@ -759,8 +765,8 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
       if (selected(format) || selected(brk)) {
         blocks.push({ pos, node, format: selected(format) ? format : null, brk: selected(brk) ? brk : null });
       }
-      if (selected(brk)) breaks.push({ pos, previousEnd, brk: brk! });
-      previousEnd = pos + node.nodeSize - 1;
+      if (selected(brk)) breaks.push({ pos, brk: brk! });
+      textblocks.push({ pos, end: pos + node.nodeSize - 1 });
       return true;
     }
     if (!node.isInline) {
@@ -789,13 +795,18 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
     tr.removeMark(part.from, part.to, part.mark);
   }
   const listReverts: { pos: number; list: ListInfo }[] = [];
+  const typeRestores: { pos: number; type: NodeType; attrs: Record<string, unknown> }[] = [];
   for (const { pos, node, format, brk } of blocks) {
     if (format) {
       if (action === "reject") {
         const type = schema.nodes[format.before.type];
         const attrs = { ...format.before.attrs, suggestionFormat: null, suggestionBreak: node.attrs.suggestionBreak };
-        if (type && type.validContent(node.content)) tr.setNodeMarkup(pos, type, attrs, node.marks);
+        const $pos = doc.resolve(pos);
+        const fits = !!type && type.validContent(node.content);
+        if (fits && $pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, type)) tr.setNodeMarkup(pos, type, attrs, node.marks);
         else tr.setNodeAttribute(pos, "suggestionFormat", null);
+        // A heading in a list item: its type comes back once it is out of the list.
+        if (fits && type !== node.type && !$pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, type)) typeRestores.push({ pos, type, attrs });
         const current = blockFormat(doc, pos);
         if (current && !sameJSON(current.list, format.before.list)) listReverts.push({ pos, list: format.before.list });
       } else {
@@ -837,17 +848,32 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
 
   // Deletions, from the end of the document to the start.
   const removals: { from: number; to: number }[] = (action === "accept" ? deletes : inserts).map(({ from, to }) => ({ from, to }));
-  removals.push(...objectRemovals(doc, removedObjects));
+  const removedRanges = objectRemovals(doc, removedObjects);
+  removals.push(...removedRanges);
   const joinKind = action === "accept" ? "delete" : "insert";
-  for (const { pos, previousEnd: end, brk } of breaks) {
-    if (brk.kind === joinKind && end >= 0 && joinable(doc, end, pos + 1, removedObjects)) removals.push({ from: end, to: pos + 1 });
+  for (const { pos, brk } of breaks) {
+    if (brk.kind !== joinKind) continue;
+    // The textblock before, leaving out those inside objects that go (the cells of a rejected table).
+    const previous = textblocks.findLast(
+      (block) => block.end < pos && !removedRanges.some((range) => block.pos >= range.from && block.end <= range.to),
+    );
+    if (previous && joinable(doc, previous.end, pos + 1, removedObjects)) removals.push({ from: previous.end, to: pos + 1 });
   }
   const start = tr.steps.length;
   for (const { from, to } of mergeRanges(removals).reverse()) tr.delete(from, to);
 
   for (const { pos, list } of listReverts) {
-    const mapped = tr.mapping.slice(start).mapResult(pos + 1);
-    if (!mapped.deleted) revertList(tr, mapped.pos, list);
+    // The textblock itself, unless it was removed (joined with the one before): text deleted at
+    // its start does not count.
+    const mapped = tr.mapping.slice(start).mapResult(pos, 1);
+    if (!mapped.deletedAfter && tr.doc.nodeAt(mapped.pos)?.isTextblock) revertList(tr, mapped.pos + 1, list);
+  }
+  for (const { pos, type, attrs } of typeRestores) {
+    const mapped = tr.mapping.slice(start).mapResult(pos, 1);
+    const node = tr.doc.nodeAt(mapped.pos);
+    if (mapped.deletedAfter || !node?.isTextblock) continue;
+    const $pos = tr.doc.resolve(mapped.pos);
+    if ($pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, type)) tr.setNodeMarkup(mapped.pos, type, { ...attrs, suggestionBreak: node.attrs.suggestionBreak }, node.marks);
   }
   return tr;
 }
@@ -943,6 +969,13 @@ function revertList(tr: Transform, pos: number, list: ListInfo): void {
     const item = $pos.depth >= 2 ? $pos.node($pos.depth - 1) : null;
     if (!item || !listItemTypes.has(item.type.name)) break;
     const before = tr.steps.length;
+    // A paragraph after the first one of its item (joined into it) becomes an item of its own
+    // first, so lifting it does not take the item's first paragraph with it.
+    if ($pos.index($pos.depth - 1) > 0 && canSplit(tr.doc, $pos.before())) {
+      tr.split($pos.before());
+      current = tr.mapping.slice(before).map(current);
+      continue;
+    }
     if (!run(liftListItem(item.type), current)) break;
     current = tr.mapping.slice(before).map(current);
   }
@@ -951,16 +984,27 @@ function revertList(tr: Transform, pos: number, list: ListInfo): void {
   if (!listType) return;
   const before = tr.steps.length;
   if (!run(wrapInList(listType, { listPreset: list.preset }), current)) return;
-  // Join it with a list of the same kind right before it, as it was before.
+  // Join it with lists of the same kind right after and before it, as it was before.
   const mapped = tr.mapping.slice(before).map(current);
   const $pos = tr.doc.resolve(mapped);
   for (let depth = $pos.depth; depth > 0; depth--) {
     if ($pos.node(depth).type !== listType) continue;
+    const list = $pos.node(depth);
     const listPos = $pos.before(depth);
-    const $list = tr.doc.resolve(listPos);
-    const previous = $list.nodeBefore;
-    if (previous && previous.type === listType && sameJSON(previous.attrs, $pos.node(depth).attrs)) tr.join(listPos);
+    const next = tr.doc.resolve(listPos + list.nodeSize).nodeAfter;
+    if (next && next.type === listType && sameJSON(next.attrs, list.attrs)) tr.join(listPos + list.nodeSize);
+    const previous = tr.doc.resolve(listPos).nodeBefore;
+    if (previous && previous.type === listType && sameJSON(previous.attrs, list.attrs)) tr.join(listPos);
     break;
+  }
+  // Nested as deep as it was (each level under the item before it).
+  current = tr.mapping.slice(before).map(current);
+  for (let level = 0; level < (list.level ?? 0); level++) {
+    const $item = tr.doc.resolve(current);
+    const item = $item.node($item.depth - 1);
+    const steps = tr.steps.length;
+    if (!listItemTypes.has(item.type.name) || !run(sinkListItem(item.type), current)) break;
+    current = tr.mapping.slice(steps).map(current);
   }
 }
 

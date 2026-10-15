@@ -3,7 +3,7 @@
 // the browser's store when the document opens again. PROPERTY_RUNS sets the number of cases
 // (PROPERTY_RUNS=20000 for a long run); PROPERTY_SEED replays one.
 import { documentSchema } from "@docs/shared";
-import { Node } from "@tiptap/pm/model";
+import type { Node } from "@tiptap/pm/model";
 import { Step, Transform } from "@tiptap/pm/transform";
 import fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,32 +11,11 @@ import { getCommentAnchors } from "../../client/src/editor/commentAnchors.ts";
 import { createComment } from "../../server/src/comments.ts";
 import { getStepsSince } from "../../server/src/documents.ts";
 import { buildEdit, countOf, editArbitrary, type Edit, type EditKind } from "./edits.ts";
-import { random, reliable, World, type Client } from "./world.ts";
+import { random, reliable, startDocument, World, type Client } from "./world.ts";
 
 const runs = Number(process.env.PROPERTY_RUNS) || 100;
 const seed = process.env.PROPERTY_SEED ? Number(process.env.PROPERTY_SEED) : undefined;
 const settings = { numRuns: runs, ...(seed !== undefined && { seed }) };
-
-const text = (value: string) => ({ type: "text", text: value });
-const paragraph = (value: string) => ({ type: "paragraph", content: value ? [text(value)] : [] });
-
-/** A document with paragraphs, a heading, a list and a table to start from. */
-export const startDocument = Node.fromJSON(documentSchema, {
-  type: "doc",
-  content: [
-    { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
-    paragraph("The quick brown fox"),
-    { type: "bulletList", content: [{ type: "listItem", content: [paragraph("one")] }, { type: "listItem", content: [paragraph("two")] }] },
-    {
-      type: "table",
-      content: [
-        { type: "tableRow", content: [{ type: "tableCell", content: [paragraph("a")] }, { type: "tableCell", content: [paragraph("b")] }] },
-        { type: "tableRow", content: [{ type: "tableCell", content: [paragraph("c")] }, { type: "tableCell", content: [paragraph("d")] }] },
-      ],
-    },
-    paragraph("jumps over the lazy dog"),
-  ],
-});
 
 type Action =
   | { kind: "edit"; client: number; edit: Edit }
