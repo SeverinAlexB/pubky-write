@@ -27,3 +27,12 @@ Playwright's driver for it does, not the app:
 | `placeOf` in `columns-images-tables.spec.ts` | `boundingBox()` of a paragraph broken across columns is its first box in Chrome but all of them in Firefox. |
 | Outline colours | Browsers write the `outline` shorthand in different orders; the tests check the longhands. |
 | `unique` in `home.spec.ts` | Documents created by the same test in another browser of the run would match the search. |
+
+## Keys right after the editor gets the focus
+
+For 200ms after the editor gets the focus, ProseMirror puts its own selection back when the
+browser's moves to the start of the document (it takes that for the browser resetting the
+selection on focus), and once more 20ms after the focus. A test that focuses the editor (or closes
+something that returns the focus to it) and then moves the cursor calls `selectionSynced` first,
+which waits until that time has passed. Firefox and WebKit are fast enough to hit that window
+otherwise.

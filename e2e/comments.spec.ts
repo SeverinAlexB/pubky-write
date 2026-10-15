@@ -121,7 +121,9 @@ test("cards sit beside lines far apart and stack with an 8px gap on the same lin
   await createDocument(page);
   await typeAndSelect(page, "alpha beta gamma", "alpha");
   await addComment(page, "On alpha");
-  await editor(page).press(lineEnd);
+  await editor(page).focus();
+  await selectionSynced(page);
+  await page.keyboard.press(lineEnd);
   await selectionSynced(page);
   for (let line = 0; line < 30; line++) await page.keyboard.press("Enter");
   await page.keyboard.type("far below");
@@ -188,7 +190,9 @@ test("active and idle cards, and the colours of commented text", async ({ page }
   await createDocument(page);
   await typeAndSelect(page, "one two three", "one");
   await addComment(page, "First");
-  await editor(page).press(lineEnd);
+  await editor(page).focus();
+  await selectionSynced(page);
+  await page.keyboard.press(lineEnd);
   await selectionSynced(page);
   await selectBack(page, "one two three", "three");
   await addComment(page, "Second");
@@ -258,7 +262,9 @@ test("All comments lists threads in document order and activates the clicked one
   await createDocument(page);
   await typeAndSelect(page, "first second", "second");
   await addComment(page, "On second");
-  await editor(page).press(lineEnd);
+  await editor(page).focus();
+  await selectionSynced(page);
+  await page.keyboard.press(lineEnd);
   await selectionSynced(page);
   for (let line = 0; line < 50; line++) await page.keyboard.press("Enter");
   await page.keyboard.type("last");

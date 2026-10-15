@@ -112,6 +112,7 @@ test("the find bar starts at the cursor, takes the selection as its query and cl
   await expect(find).toBeHidden();
   await expect(editor(page).locator(".search-match")).toHaveCount(0);
   await expect(editor(page)).toBeFocused();
+  await selectionSynced(page);
 
   await page.keyboard.press(lineStart);
   await page.keyboard.press("Shift+ArrowRight");
