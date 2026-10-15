@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createDocument, editor, mod, selectionSynced } from "./helpers.ts";
+import { allowClipboard, createDocument, editor, mod, readClipboard, selectionSynced } from "./helpers.ts";
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -131,7 +131,7 @@ test("a right-click outside the selection moves the cursor to the pointer first"
   await expect(contextMenu(page).getByRole("menuitem", { name: "Copy", exact: true })).toBeDisabled();
 });
 
-test("Shift+right-click leaves the browser's menu", async ({ page }) => {
+test("Shift+right-click leaves the browser's menu", async ({ page, browserName }) => {
   await typeParagraph(page, "Spelling");
   await page.evaluate(() => {
     (window as unknown as { lastContextMenu: boolean | null }).lastContextMenu = null;
@@ -140,7 +140,11 @@ test("Shift+right-click leaves the browser's menu", async ({ page }) => {
     });
   });
   await editor(page).getByText("Spelling").click({ button: "right", modifiers: ["Shift"] });
-  await expect.poll(() => page.evaluate(() => (window as unknown as { lastContextMenu: boolean | null }).lastContextMenu)).toBe(false);
+  // Firefox does not send the contextmenu event to the page for Shift+right-click (it always shows
+  // its own menu), so there is no event to check there.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { lastContextMenu: boolean | null }).lastContextMenu))
+    .toBe(browserName === "firefox" ? null : false);
   await expect(contextMenu(page)).toBeHidden();
 
   await editor(page).getByText("Spelling").click({ button: "right" });
@@ -180,8 +184,8 @@ test("the menu works from the keyboard", async ({ page }) => {
   await expect(editor(page).locator("strong")).toHaveText("Make this bold");
 });
 
-test("on a link the menu offers Edit link, Copy link and Remove link", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("on a link the menu offers Edit link, Copy link and Remove link", async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
   await typeParagraph(page, "Visit ");
   await page.keyboard.press(`${mod}+k`);
   await page.getByLabel("Link URL").fill("example.com");
@@ -195,7 +199,7 @@ test("on a link the menu offers Edit link, Copy link and Remove link", async ({ 
 
   await contextMenu(page).getByRole("menuitem", { name: "Copy link" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Link copied to clipboard" })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("https://example.com");
+  expect(await readClipboard(page, browserName)).toBe("https://example.com");
 
   await editor(page).locator("a").click({ button: "right" });
   await contextMenu(page).getByRole("menuitem", { name: "Remove link" }).click();

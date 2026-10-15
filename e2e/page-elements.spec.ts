@@ -409,7 +409,10 @@ test("each table of contents preset lists the headings; Update refreshes it", as
   await expect(toc).toHaveCSS("border-top-style", "none");
   // Only while it is selected (as after inserting it) a faint outline shows.
   await expect(toc).toHaveClass(/ProseMirror-selectednode/);
-  await expect(toc).toHaveCSS("outline", "rgb(211, 227, 253) solid 1px");
+  // The longhands: browsers write the outline shorthand in different orders.
+  await expect(toc).toHaveCSS("outline-color", "rgb(211, 227, 253)");
+  await expect(toc).toHaveCSS("outline-style", "solid");
+  await expect(toc).toHaveCSS("outline-width", "1px");
   // The page number is right-aligned at the right margin.
   const page1 = (await toc.locator(".toc-page").first().boundingBox())!;
   const stack = (await page.locator(".page-stack").boundingBox())!;

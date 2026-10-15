@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 export const mod = process.platform === "darwin" ? "Meta" : "Control";
 /** Start and end of the line: Home/End scroll the page in Chrome on macOS. */
@@ -58,4 +58,54 @@ export async function selectionSynced(page: Page): Promise<void> {
       }),
     )
     .toBe(true);
+}
+
+/**
+ * Double-clicks the middle of `text` inside `locator`. A double-click on a locator hits the middle
+ * of its element, which for a paragraph is often past the end of its text, where browsers select
+ * different things (Chrome the last word, Firefox the whole line).
+ */
+export async function dblclickText(page: Page, locator: Locator, text: string): Promise<void> {
+  const rect = await locator.evaluate((element, wanted) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const index = node.textContent!.indexOf(wanted);
+      if (index === -1) continue;
+      const range = document.createRange();
+      range.setStart(node, index);
+      range.setEnd(node, index + wanted.length);
+      const { left, top, width, height } = range.getBoundingClientRect();
+      return { left, top, width, height };
+    }
+    throw new Error(`No text ${wanted}`);
+  }, text);
+  await page.mouse.dblclick(rect.left + rect.width / 2, rect.top + rect.height / 2);
+}
+
+/**
+ * Lets the page use the clipboard. Chrome needs the permissions; Firefox has no such permissions
+ * (playwright.config.ts sets preferences that let the tests read the clipboard there), and WebKit
+ * allows writing on a click and reading only by a real paste (see `readClipboard`).
+ */
+export async function allowClipboard(context: BrowserContext, browserName: string): Promise<void> {
+  if (browserName === "chromium") await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+}
+
+/** The clipboard's text. WebKit has no permission for reading it, so it is pasted into a scratch field there. */
+export async function readClipboard(page: Page, browserName: string): Promise<string> {
+  if (browserName !== "webkit") return page.evaluate(() => navigator.clipboard.readText());
+  await page.evaluate(() => {
+    const field = document.createElement("textarea");
+    field.id = "clipboard-reader";
+    document.body.append(field);
+    (window as unknown as { focusBeforeClipboard: Element | null }).focusBeforeClipboard = document.activeElement;
+    field.focus();
+  });
+  await page.keyboard.press(`${mod}+v`);
+  return page.evaluate(() => {
+    const field = document.getElementById("clipboard-reader") as HTMLTextAreaElement;
+    field.remove();
+    ((window as unknown as { focusBeforeClipboard: Element | null }).focusBeforeClipboard as HTMLElement | null)?.focus();
+    return field.value;
+  });
 }

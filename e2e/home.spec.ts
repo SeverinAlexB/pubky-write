@@ -20,6 +20,14 @@ async function expectButtonNames(list: Locator, names: string[]): Promise<void> 
   for (const [index, name] of names.entries()) await expect(buttons.nth(index)).toHaveAccessibleName(name);
 }
 
+/**
+ * A search word unique to this browser: the projects of one run (npm run e2e:all) share the server
+ * and its data, so documents created by the same test in another browser would match too.
+ */
+function unique(word: string): string {
+  return `${word}${test.info().project.name}`;
+}
+
 const box = async (page: Page, selector: string) => (await page.locator(selector).first().boundingBox())!;
 
 test("the header, template band and grid tiles have the specified sizes at 1440px", async ({ page }) => {
@@ -66,14 +74,15 @@ test("tiles show a thumbnail of the first page, the title and when it was opened
 });
 
 test("the view toggle switches between the grid and the list grouped by date, and is remembered", async ({ page }) => {
-  await createDocuments(page, ["Viewtoggle alpha"]);
+  const word = unique("Viewtoggle");
+  await createDocuments(page, [`${word} alpha`]);
   await page.goto("/");
-  await page.getByLabel("Search documents").fill("Viewtoggle");
-  await expect(page.getByRole("list", { name: "Documents" }).getByRole("link")).toHaveText([/Viewtoggle alpha/]);
+  await page.getByLabel("Search documents").fill(word);
+  await expect(page.getByRole("list", { name: "Documents" }).getByRole("link")).toHaveText([new RegExp(`${word} alpha`)]);
 
   await page.getByRole("button", { name: "List view" }).click();
   const list = page.getByRole("group", { name: "Documents" });
-  await expect(list.getByRole("list", { name: "Today" }).getByRole("link")).toHaveText([/Viewtoggle alpha\s*me\s*\d\d:\d\d/]);
+  await expect(list.getByRole("list", { name: "Today" }).getByRole("link")).toHaveText([new RegExp(`${word} alpha\\s*me\\s*\\d\\d:\\d\\d`)]);
   // The header row names the first group and the columns.
   await expect(page.locator(".recent-header h2")).toHaveText("Today");
   await expect(page.locator(".recent-date-label")).toHaveText("Last opened by me");
@@ -89,9 +98,10 @@ test("the view toggle switches between the grid and the list grouped by date, an
 });
 
 test("sort options and the owner filter work and are remembered", async ({ page }) => {
-  await createDocuments(page, ["Sorttest banana", "Sorttest apple", "Sorttest cherry"]);
+  const word = unique("Sorttest");
+  await createDocuments(page, [`${word} banana`, `${word} apple`, `${word} cherry`]);
   await page.goto("/");
-  await page.getByLabel("Search documents").fill("Sorttest");
+  await page.getByLabel("Search documents").fill(word);
   const links = page.getByRole("list", { name: "Documents" }).getByRole("link");
   // Last opened first: the newest document is first.
   await expect(links).toHaveText([/cherry/, /apple/, /banana/]);
@@ -114,7 +124,7 @@ test("sort options and the owner filter work and are remembered", async ({ page 
   await expect(links).toHaveCount(3);
 
   await page.reload();
-  await page.getByLabel("Search documents").fill("Sorttest");
+  await page.getByLabel("Search documents").fill(word);
   await expect(page.getByRole("button", { name: "Owned by me" })).toBeVisible();
   await expect(links).toHaveCount(3);
   await page.getByRole("button", { name: "Sort options" }).click();
@@ -123,35 +133,36 @@ test("sort options and the owner filter work and are remembered", async ({ page 
 });
 
 test("the ⋮ menu renames, removes after confirmation and opens in a new tab", async ({ page, context }) => {
-  await createDocuments(page, ["Tilemenu draft"]);
+  const word = unique("Tilemenu");
+  await createDocuments(page, [`${word} draft`]);
   await page.goto("/");
-  await page.getByLabel("Search documents").fill("Tilemenu");
+  await page.getByLabel("Search documents").fill(word);
 
-  await page.getByRole("button", { name: "More actions for Tilemenu draft" }).click();
+  await page.getByRole("button", { name: `More actions for ${word} draft` }).click();
   await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Rename", "Remove", "Open in new tab"]);
   await page.getByRole("menuitem", { name: "Rename" }).click();
-  await page.getByLabel("Document name").fill("Tilemenu final");
+  await page.getByLabel("Document name").fill(`${word} final`);
   await page.getByRole("button", { name: "OK" }).click();
-  await expect(page.getByRole("list", { name: "Documents" }).getByRole("link")).toHaveText([/Tilemenu final/]);
+  await expect(page.getByRole("list", { name: "Documents" }).getByRole("link")).toHaveText([new RegExp(`${word} final`)]);
 
   const opened = context.waitForEvent("page");
-  await page.getByRole("button", { name: "More actions for Tilemenu final" }).click();
+  await page.getByRole("button", { name: `More actions for ${word} final` }).click();
   await page.getByRole("menuitem", { name: "Open in new tab" }).click();
   const tab = await opened;
   await expect(tab).toHaveURL(/\/d\/[\w-]+$/);
   await tab.close();
 
-  await page.getByRole("button", { name: "More actions for Tilemenu final" }).click();
+  await page.getByRole("button", { name: `More actions for ${word} final` }).click();
   await page.getByRole("menuitem", { name: "Remove" }).click();
   const confirm = page.getByRole("dialog", { name: "Remove document?" });
-  await expect(confirm).toContainText('"Tilemenu final" will be deleted permanently.');
+  await expect(confirm).toContainText(`"${word} final" will be deleted permanently.`);
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("list", { name: "Documents" }).getByRole("link")).toHaveCount(1);
 
-  await page.getByRole("button", { name: "More actions for Tilemenu final" }).click();
+  await page.getByRole("button", { name: `More actions for ${word} final` }).click();
   await page.getByRole("menuitem", { name: "Remove" }).click();
   await confirm.getByRole("button", { name: "Remove" }).click();
-  await expect(page.getByText('No documents match "Tilemenu".')).toBeVisible();
+  await expect(page.getByText(`No documents match "${word}".`)).toBeVisible();
 });
 
 test("a template creates a new document with its content", async ({ page }) => {

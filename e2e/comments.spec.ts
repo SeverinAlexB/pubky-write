@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { createDocument, editor, lineEnd, lineStart, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { allowClipboard, createDocument, editor, lineEnd, lineStart, menuBarItem, mod, readClipboard, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 /** Types `text`, then selects `word` (its last occurrence) with the keyboard. */
 async function typeAndSelect(page: Page, text: string, word: string): Promise<void> {
@@ -134,6 +134,8 @@ test("cards sit beside lines far apart and stack with an 8px gap on the same lin
 
   // A second comment on the first line: the active (new) card stays at its line, the other moves up.
   await editor(page).focus();
+  // The editor puts its selection back into the page shortly after it gets the focus.
+  await selectionSynced(page);
   await page.keyboard.press(`${mod}+ArrowUp`);
   await selectionSynced(page);
   await page.keyboard.press(lineEnd);
@@ -168,6 +170,8 @@ test("cards follow their lines when the zoom, the text or the window changes", a
 
   // Lines added above push the text, and its card, down.
   await editor(page).focus();
+  // The editor puts its selection back into the page shortly after it gets the focus.
+  await selectionSynced(page);
   await page.keyboard.press(`${mod}+ArrowUp`);
   await selectionSynced(page);
   const before = (await box(highlight)).y;
@@ -404,8 +408,8 @@ test("selecting text shows the floating Add comment pill", async ({ page }) => {
   await expect(actions).toBeHidden();
 });
 
-test("Get link copies a link that opens the document with the thread active", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("Get link copies a link that opens the document with the thread active", async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
   await createDocument(page);
   await typeAndSelect(page, "linked text", "linked");
   await addComment(page, "Share me");
@@ -415,7 +419,7 @@ test("Get link copies a link that opens the document with the thread active", as
   await page.getByRole("menuitem", { name: "Get link to this comment" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Link copied to clipboard" })).toBeVisible();
 
-  const link = await page.evaluate(() => navigator.clipboard.readText());
+  const link = await readClipboard(page, browserName);
   expect(link).toMatch(/\/d\/[\w-]+\?comment=\d+$/);
   await page.goto(link);
   await expect(card(page, "linked")).toHaveAttribute("aria-current", "true");

@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -28,11 +28,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Install Chrome for the end-to-end tests
-        run: npx playwright install --with-deps chrome
+      - name: Install Chrome, Firefox and WebKit for the end-to-end tests
+        run: npx playwright install --with-deps chrome firefox webkit
 
-      - name: End-to-end tests
-        run: npm run e2e
+      - name: End-to-end tests (Chrome, Firefox and WebKit)
+        run: npm run e2e:all
 
       - name: Upload Playwright traces
         if: failure()

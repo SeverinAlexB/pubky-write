@@ -1,7 +1,7 @@
 // Document tabs (docs/spec/18-document-tabs.md).
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
-import { chooseStyle, createDocument, editor, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { allowClipboard, chooseStyle, createDocument, editor, menuBarItem, mod, readClipboard, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 function sidebar(page: Page) {
   return page.getByRole("complementary", { name: "Tabs and outlines" });
@@ -211,8 +211,8 @@ test("Rename, Choose emoji, Add subtab, Duplicate, Move up and down, Move into a
   await expect(tabNames(page)).toHaveText(["Plan", "Tab 2", "Copy of Plan"]);
 });
 
-test("Copy link copies a ?tab= link that opens the document on that tab", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("Copy link copies a ?tab= link that opens the document on that tab", async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
   await createDocument(page);
   await editor(page).click();
   await page.keyboard.type("In the first tab");
@@ -223,7 +223,7 @@ test("Copy link copies a ?tab= link that opens the document on that tab", async 
 
   await tabOption(page, "Tab 2", "Copy link");
   await expect(page.getByRole("status").filter({ hasText: "Link copied to clipboard" })).toBeVisible();
-  const link = await page.evaluate(() => navigator.clipboard.readText());
+  const link = await readClipboard(page, browserName);
   expect(new URL(link).pathname).toBe(new URL(page.url()).pathname);
   expect(new URL(link).searchParams.get("tab")).toMatch(/^t\./);
 

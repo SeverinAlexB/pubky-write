@@ -4,9 +4,13 @@ import { createDocument, editor, menuBarItem, mod, waitUntilSaved, selectionSync
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
-/** Checks a length in CSS pixels against a size in points. */
+/**
+ * Checks a length in CSS pixels against a size in points. Firefox computes font sizes in steps of
+ * 1/64 px (26pt is 34.6875px there), so it is checked to 0.05px instead of 0.005px.
+ */
 async function expectPoints(locator: Locator, property: string, points: number): Promise<void> {
-  await expect.poll(async () => Number.parseFloat(await css(locator, property))).toBeCloseTo((points * 4) / 3, 2);
+  const precision = test.info().project.name === "firefox" ? 1 : 2;
+  await expect.poll(async () => Number.parseFloat(await css(locator, property))).toBeCloseTo((points * 4) / 3, precision);
 }
 
 function menu(page: Page, name: string) {

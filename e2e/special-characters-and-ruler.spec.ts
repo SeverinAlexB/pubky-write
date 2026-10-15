@@ -229,13 +229,14 @@ test.describe("ruler", () => {
     const paragraphs = editor(page).locator("p");
     const margin = await contentLeft(page);
 
-    // Alt turns snapping off: 1 cm and 10px is 1.26 cm, not 1.25 cm.
+    // Alt turns snapping off: 47px is 1.24 cm, not 1.25 cm. (A whole number of pixels: Firefox and
+    // WebKit move the mouse to whole pixels.)
     await page.keyboard.down("Alt");
-    await dragBy(page, leftMarker(page), CM + 10, async () => {
-      await expect(page.locator(".ruler-tooltip")).toHaveText("Left indent 1.26 cm");
+    await dragBy(page, leftMarker(page), 47, async () => {
+      await expect(page.locator(".ruler-tooltip")).toHaveText("Left indent 1.24 cm");
     });
     await page.keyboard.up("Alt");
-    await expect.poll(async () => (await box(paragraphs.nth(2))).x - margin).toBeCloseTo(CM + 10, 0);
+    await expect.poll(async () => (await box(paragraphs.nth(2))).x - margin).toBeCloseTo(47, 0);
     // Only the paragraph with the cursor.
     expect((await box(paragraphs.nth(0))).x - margin).toBeCloseTo(0, 0);
 

@@ -33,13 +33,26 @@ export default defineConfig({
       cookies: [],
       origins: [{ origin: baseURL, localStorage: [{ name: "docs.preferences", value: JSON.stringify(plainTypingPreferences) }] }],
     },
-    // Uses the installed Chrome instead of downloading a browser.
-    channel: "chrome",
     // The spec's measurements are for en-GB: A4 paper and centimetres.
     locale: "en-GB",
     headless: true,
     trace: "retain-on-failure",
   },
+  // npm run e2e runs the chrome project (the installed Chrome); npm run e2e:all runs all
+  // three. Firefox and WebKit are Playwright's builds (npx playwright install firefox webkit).
+  projects: [
+    { name: "chrome", use: { browserName: "chromium", channel: "chrome" } },
+    {
+      name: "firefox",
+      use: {
+        browserName: "firefox",
+        // Firefox has no clipboard permissions to grant: these let the tests read what the app
+        // copied (navigator.clipboard.readText) without Firefox's paste prompt.
+        launchOptions: { firefoxUserPrefs: { "dom.events.asyncClipboard.readText": true, "dom.events.testing.asyncClipboard": true } },
+      },
+    },
+    { name: "webkit", use: { browserName: "webkit" } },
+  ],
   webServer: [
     {
       // A short session gap lets the version history test create separate versions quickly.

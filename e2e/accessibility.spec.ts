@@ -215,7 +215,7 @@ test("the document list's views, menus and Open a file dialog have no serious ac
   await expectAccessible(page, "Main menu");
 });
 
-test("the toolbar and menu bar work with the keyboard", async ({ page }) => {
+test("the toolbar and menu bar work with the keyboard", async ({ page, browserName }) => {
   await createDocument(page);
   await editor(page).click();
   await page.keyboard.type("Hello");
@@ -253,11 +253,11 @@ test("the toolbar and menu bar work with the keyboard", async ({ page }) => {
   await page.keyboard.type(" world");
   await expect(editor(page)).toHaveText("Hello world");
 
-  // Shift+Tab from the toolbar reaches the header and the menu bar.
+  // Shift+Tab from the toolbar reaches the header and the menu bar. Safari (by default, without
+  // "Press Tab to highlight each item") skips buttons without a tabindex, here the two header
+  // buttons, so the menu bar is the first stop there.
   await page.keyboard.press("Alt+F10");
-  await page.keyboard.press("Shift+Tab");
-  await page.keyboard.press("Shift+Tab");
-  await page.keyboard.press("Shift+Tab");
+  for (let step = 0; step < (browserName === "webkit" ? 1 : 3); step++) await page.keyboard.press("Shift+Tab");
   await expect(menuBarItem(page, "File")).toBeFocused();
   await page.keyboard.press("ArrowRight");
   await expect(menuBarItem(page, "Edit")).toBeFocused();

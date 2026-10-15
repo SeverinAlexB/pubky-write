@@ -38,10 +38,18 @@ async function addParagraphs(page: Page, texts: string[]): Promise<void> {
   }, texts);
 }
 
-/** Where a locator is: page (0-based), offset from the page's top and from the content's left edge. */
+/**
+ * Where a locator starts: page (0-based), offset from the page's top and from the content's left
+ * edge. The first of its boxes: a paragraph broken across columns has one per column, and
+ * `boundingBox()` is the first of them in Chrome but all of them in Firefox; WebKit's union also
+ * includes empty boxes at the column spanners.
+ */
 async function placeOf(page: Page, locator: Locator): Promise<{ page: number; top: number; left: number }> {
   const stack = (await page.locator(".page-stack").boundingBox())!;
-  const box = (await locator.boundingBox())!;
+  const box = await locator.evaluate((element) => {
+    const first = [...element.getClientRects()].find((rect) => rect.width > 0 && rect.height > 0) ?? element.getBoundingClientRect();
+    return { x: first.left, y: first.top };
+  });
   const y = box.y - stack.y;
   const index = Math.floor(y / PAGE_STRIDE);
   return { page: index, top: Math.round(y - index * PAGE_STRIDE), left: Math.round(box.x - stack.x - MARGIN) };
@@ -337,9 +345,12 @@ test("images behind and in front of text are placed freely, and dragging moves a
   await chooseWrap(page, image, "Wrap text");
   const start = (await image.boundingBox())!;
   const target = (await editor(page).getByText("Last paragraph").boundingBox())!;
-  await page.mouse.move(start.x + 40, start.y + 40);
+  // Whole pixels, as Firefox and WebKit move the mouse to whole pixels: the image moves by exactly
+  // the distance it is dragged.
+  const grab = { x: Math.round(start.x + 40), y: Math.round(start.y + 40) };
+  await page.mouse.move(grab.x, grab.y);
   await page.mouse.down();
-  await page.mouse.move(start.x + 140, target.y + 45, { steps: 8 });
+  await page.mouse.move(grab.x + 100, grab.y + Math.round(target.y + 45 - (start.y + 40)), { steps: 8 });
   await page.mouse.up();
   await expect(editor(page).locator(".image-frame + p")).toHaveText("Last paragraph");
   const moved = (await image.boundingBox())!;
@@ -589,7 +600,8 @@ test("a pinned header row is grey, repeats at the top of the next page and stays
   await editor(page).getByText("Name").click({ button: "right" });
   const contextMenu = page.getByRole("menu", { name: "Context menu" });
   await contextMenu.getByRole("menuitem", { name: "Pin header row" }).click();
-  const header = editor(page).locator("th", { hasText: "Name" });
+  // The table's own header cell, not its copy at the top of page 2.
+  const header = editor(page).locator("tr:not(.table-repeat-row) > th", { hasText: "Name" });
   await expect(header).toHaveCSS("background-color", "rgb(217, 217, 217)");
 
   const repeat = page.locator(".table-repeat-row");

@@ -59,7 +59,11 @@ test("a selected image shows an outline, eight handles, a rotation handle and th
     await expect(handles.nth(index)).toHaveCSS("width", "6px");
     await expect(handles.nth(index)).toHaveCSS("background-color", "rgb(11, 87, 208)");
   }
-  await expect(editor(page).locator(".image-handles")).toHaveCSS("outline", /rgb\(11, 87, 208\) solid 1px/);
+  // The longhands: browsers write the outline shorthand in different orders.
+  const handlesBox = editor(page).locator(".image-handles");
+  await expect(handlesBox).toHaveCSS("outline-color", "rgb(11, 87, 208)");
+  await expect(handlesBox).toHaveCSS("outline-style", "solid");
+  await expect(handlesBox).toHaveCSS("outline-width", "1px");
   await expect(editor(page).locator(".image-rotate-handle")).toBeVisible();
   await expect(editor(page).locator(".image-rotate-handle")).toHaveCSS("width", "8px");
 
@@ -155,8 +159,10 @@ test("edge handles stretch one side; Shift keeps the proportions; one undo step 
   await page.keyboard.press(`${mod}+z`);
   await expect.poll(() => sizeOf(image)).toEqual([400, 200]);
 
-  // An image is never wider than the page's content.
-  await dragHandle(page, "se", 1000, 0);
+  // An image is never wider than the page's content. (Dragged to near the window's right edge:
+  // Playwright's Firefox reports a mouse outside the window at x 0.)
+  const handle = (await editor(page).locator(".image-handle-se").boundingBox())!;
+  await dragHandle(page, "se", page.viewportSize()!.width - 10 - (handle.x + handle.width / 2), 0);
   const contentWidth = await editor(page).evaluate((element) => {
     const style = getComputedStyle(element);
     return element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);

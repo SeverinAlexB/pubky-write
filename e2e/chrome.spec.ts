@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createDocument, editor, menuBarItem, mod, waitUntilSaved } from "./helpers.ts";
+import { createDocument, dblclickText, editor, menuBarItem, mod, waitUntilSaved } from "./helpers.ts";
 
 /** Shortcut text as the app writes it on this platform (see client/src/components/shortcuts.ts). */
 function shortcut(mac: string): string {
@@ -425,7 +425,7 @@ test("paint format copies formatting to the next selection", async ({ page }) =>
   await editor(page).locator("em").click();
   await page.getByRole("button", { name: "Paint format" }).click();
   await expect(page.getByRole("button", { name: "Paint format" })).toHaveAttribute("aria-pressed", "true");
-  await editor(page).getByText("target").dblclick();
+  await dblclickText(page, editor(page), "target");
   await expect(editor(page).locator("em")).toHaveText(["source", "target"]);
   await expect(page.getByRole("button", { name: "Paint format" })).toHaveAttribute("aria-pressed", "false");
 });

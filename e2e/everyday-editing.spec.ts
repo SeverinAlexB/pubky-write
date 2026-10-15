@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { createDocument, editor, lineEnd, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { allowClipboard, createDocument, editor, lineEnd, menuBarItem, mod, readClipboard, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -30,8 +30,21 @@ function documentText(page: Page): Promise<string> {
   });
 }
 
-/** Pastes `html` (and `text`) as a paste event from the clipboard would. */
+/**
+ * Pastes `html` (and `text`) as a paste event from the clipboard would. Firefox ignores the data
+ * given to a constructed ClipboardEvent, so there the data is put on the real clipboard (allowed by
+ * the preferences in playwright.config.ts) and pasted with the keyboard.
+ */
 async function paste(page: Page, data: { html?: string; text?: string }) {
+  if (page.context().browser()!.browserType().name() === "firefox") {
+    await page.evaluate(async ({ html, text }) => {
+      const types: Record<string, Blob> = { "text/plain": new Blob([text ?? ""], { type: "text/plain" }) };
+      if (html !== undefined) types["text/html"] = new Blob([html], { type: "text/html" });
+      await navigator.clipboard.write([new ClipboardItem(types)]);
+    }, data);
+    await page.keyboard.press(`${mod}+v`);
+    return;
+  }
   await page.evaluate(({ html, text }) => {
     const transfer = new DataTransfer();
     if (html !== undefined) transfer.setData("text/html", html);
@@ -49,8 +62,8 @@ async function openPreferences(page: Page) {
 }
 
 test.describe("link bubble", () => {
-  test("shows under a link at the cursor with Copy, Edit and Remove; Escape and typing hide it", async ({ page, context }) => {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  test("shows under a link at the cursor with Copy, Edit and Remove; Escape and typing hide it", async ({ page, context, browserName }) => {
+    await allowClipboard(context, browserName);
     await newDocument(page);
     await page.keyboard.type("Read ");
     await page.keyboard.press(`${mod}+k`);
@@ -83,7 +96,7 @@ test.describe("link bubble", () => {
 
     await bubble.getByRole("button", { name: "Copy link" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Link copied to clipboard" })).toBeVisible();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("https://example.com/guide/");
+    expect(await readClipboard(page, browserName)).toBe("https://example.com/guide/");
 
     await page.keyboard.press("Escape");
     await expect(bubble).toHaveCount(0);
