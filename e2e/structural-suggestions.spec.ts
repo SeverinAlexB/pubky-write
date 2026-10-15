@@ -29,6 +29,8 @@ async function suggest(page: Page): Promise<void> {
   await modeButton(page, "Editing").click();
   await page.getByRole("menuitemcheckbox", { name: "Suggesting" }).click();
   await expect(modeButton(page, "Suggesting")).toBeVisible();
+  // The document gets the focus back a frame after the mode changes.
+  await expect(editor(page)).toBeFocused();
 }
 
 /** Clicks Accept or Reject on a card (activating it first). */

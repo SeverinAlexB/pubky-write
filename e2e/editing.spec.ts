@@ -351,6 +351,7 @@ test("word count shows pages, words and characters, for the selection too", asyn
   await expect(dialog.getByRole("checkbox", { name: "Display word count while typing" })).not.toBeChecked();
   await dialog.getByRole("button", { name: "OK" }).click();
   await expect(editor(page)).toBeFocused();
+  await selectionSynced(page);
 
   for (let step = 0; step < 4; step++) await page.keyboard.press("Shift+ArrowLeft");
   await selectionSynced(page);

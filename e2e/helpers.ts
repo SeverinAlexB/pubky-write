@@ -41,7 +41,9 @@ export async function chooseDownload(page: Page, format: string): Promise<void> 
 /**
  * Waits until the editor has read the browser's selection. The editor picks up selection changes
  * made by the browser (clicks, arrow keys) asynchronously, so a shortcut pressed right after could
- * still see the old selection.
+ * still see the old selection. It also waits until 20ms after the editor got the focus, when
+ * ProseMirror puts its selection back into the page once more; keys pressed before that can be
+ * undone by it (seen in Firefox).
  */
 export async function selectionSynced(page: Page): Promise<void> {
   await expect
@@ -50,8 +52,10 @@ export async function selectionSynced(page: Page): Promise<void> {
         type View = {
           state: { selection: { head: number } };
           posAtDOM: (node: globalThis.Node, offset: number) => number;
+          input?: { lastFocus?: number };
         };
         const view = (document.querySelector(".ProseMirror") as unknown as { editor: { view: View } }).editor.view;
+        if (Date.now() - (view.input?.lastFocus ?? 0) < 40) return false;
         const selection = getSelection();
         if (!selection?.focusNode) return true;
         return view.posAtDOM(selection.focusNode, selection.focusOffset) === view.state.selection.head;
