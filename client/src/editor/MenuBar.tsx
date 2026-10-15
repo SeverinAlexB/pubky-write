@@ -1,6 +1,5 @@
 import { columnsOf, listPresetAt } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
-import { useEditorState } from "@tiptap/react";
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { MenuList, type MenuEntry, type MenuItem } from "../components/MenuList.tsx";
 import { modeEntries } from "./modes.tsx";
@@ -13,6 +12,7 @@ import { ColumnPresetsPanel } from "./ColumnOptions.tsx";
 import { ListPresetMenu } from "./ListPresets.tsx";
 import { PageNumbersPanel, TableOfContentsPanel } from "./PageElementPresets.tsx";
 import { currentParagraphStyle } from "./paragraphStyles.ts";
+import { useSwitchingEditorState } from "./switchingEditorState.ts";
 import { formatTableMenu, tableMenuState } from "./tableMenus.ts";
 import { TableSizePicker } from "./TableSizePicker.tsx";
 
@@ -20,7 +20,7 @@ type MenuBarProps = { editor: Editor; actions: EditorActions; view: ViewSettings
 
 type MenuState = ReturnType<typeof selectMenuState>;
 
-function selectMenuState({ editor }: { editor: Editor }) {
+function selectMenuState(editor: Editor) {
   return {
     canUndo: editor.can().undo(),
     canRedo: editor.can().redo(),
@@ -45,7 +45,7 @@ function selectMenuState({ editor }: { editor: Editor }) {
  * and ← → move between menus.
  */
 export function MenuBar({ editor, actions, view }: MenuBarProps) {
-  const state = useEditorState({ editor, selector: selectMenuState });
+  const state = useSwitchingEditorState(editor, selectMenuState);
   const [open, setOpen] = useState<{ index: number; fromKeyboard: boolean } | null>(null);
   // The menu that is in the Tab order: the last one focused.
   const [focusIndex, setFocusIndex] = useState(0);

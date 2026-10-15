@@ -1,6 +1,5 @@
 import { listPresetAt } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
-import { useEditorState } from "@tiptap/react";
 import { isValidElement, useCallback, useRef, type ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";
 import { Menu } from "../../components/Menu.tsx";
@@ -14,6 +13,7 @@ import type { EditorMode } from "../suggesting.ts";
 import { clearFormatting, selectedFontFamily, selectedFontSize } from "../extensions.ts";
 import { paragraphSpacingAt } from "../formatMenus.ts";
 import { currentParagraphStyle } from "../paragraphStyles.ts";
+import { useSwitchingEditorState } from "../switchingEditorState.ts";
 import { ColorPicker } from "./ColorPicker.tsx";
 import { AlignControl, LineSpacingControl, ListControl, type Alignment } from "./ParagraphControls.tsx";
 import { FontControl, FontSizeControl, StylesControl } from "./TextControls.tsx";
@@ -40,34 +40,31 @@ const readOnlyControls = new Set(["search", "print", "zoom"]);
 
 /** The rounded formatting bar under the menus. Controls that do not fit move into "More". */
 export function Toolbar({ editor, actions, zoom, onZoomChange, menusHidden, onToggleMenus, mode, onModeChange, readOnly }: ToolbarProps) {
-  const state = useEditorState({
-    editor,
-    selector: ({ editor }) => {
-      return {
-        canUndo: editor.can().undo(),
-        canRedo: editor.can().redo(),
-        style: currentParagraphStyle(editor),
-        fontFamily: selectedFontFamily(editor),
-        fontSize: selectedFontSize(editor),
-        bold: editor.isActive("bold"),
-        italic: editor.isActive("italic"),
-        underline: editor.isActive("underline"),
-        color: (editor.getAttributes("textStyle").color as string | undefined) ?? null,
-        highlight: (editor.getAttributes("highlight").color as string | undefined) ?? null,
-        align: (["center", "right", "justify"] as const).find((align) => editor.isActive({ textAlign: align })) ?? "left",
-        bulletList: editor.isActive("bulletList"),
-        orderedList: editor.isActive("orderedList"),
-        checklist: editor.isActive("taskList"),
-        listPresets: {
-          bullet: listPresetAt(editor.state, "bullet"),
-          numbered: listPresetAt(editor.state, "numbered"),
-          checklist: listPresetAt(editor.state, "checklist"),
-        },
-        hasSelection: !editor.state.selection.empty,
-        spacing: paragraphSpacingAt(editor),
-        image: isImage(editor),
-      };
-    },
+  const state = useSwitchingEditorState(editor, (editor) => {
+    return {
+      canUndo: editor.can().undo(),
+      canRedo: editor.can().redo(),
+      style: currentParagraphStyle(editor),
+      fontFamily: selectedFontFamily(editor),
+      fontSize: selectedFontSize(editor),
+      bold: editor.isActive("bold"),
+      italic: editor.isActive("italic"),
+      underline: editor.isActive("underline"),
+      color: (editor.getAttributes("textStyle").color as string | undefined) ?? null,
+      highlight: (editor.getAttributes("highlight").color as string | undefined) ?? null,
+      align: (["center", "right", "justify"] as const).find((align) => editor.isActive({ textAlign: align })) ?? "left",
+      bulletList: editor.isActive("bulletList"),
+      orderedList: editor.isActive("orderedList"),
+      checklist: editor.isActive("taskList"),
+      listPresets: {
+        bullet: listPresetAt(editor.state, "bullet"),
+        numbered: listPresetAt(editor.state, "numbered"),
+        checklist: listPresetAt(editor.state, "checklist"),
+      },
+      hasSelection: !editor.state.selection.empty,
+      spacing: paragraphSpacingAt(editor),
+      image: isImage(editor),
+    };
   });
   const paintFormat = usePaintFormat(editor);
   // One Tab stop; ← → move between the controls and Escape returns to the document.

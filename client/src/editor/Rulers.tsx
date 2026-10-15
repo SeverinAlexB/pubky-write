@@ -9,7 +9,7 @@ import {
   type TabStopKind,
 } from "@docs/shared";
 import { closeHistory } from "@tiptap/pm/history";
-import { useEditorState, type Editor } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import {
   useCallback,
   useEffect,
@@ -23,6 +23,7 @@ import { createPortal } from "react-dom";
 import { MenuList } from "../components/MenuList.tsx";
 import { useDismiss } from "../components/useDismiss.ts";
 import { PAGE_GAP } from "./pagination.ts";
+import { useSwitchingEditorState } from "./switchingEditorState.ts";
 import {
   changeTabStopsTransaction,
   clampHandle,
@@ -147,16 +148,16 @@ export function HorizontalRuler({
     window.addEventListener("keydown", cancel, true);
     return () => window.removeEventListener("keydown", cancel, true);
   }, [drag !== null]);
-  const indents = useEditorState({
-    editor: paragraphEditor,
-    selector: ({ editor: current }) => rulerIndents(current.state),
-    equalityFn: (a, b) => b !== null && a.left === b.left && a.firstLine === b.firstLine && a.right === b.right,
-  });
-  const tabStops = useEditorState({
-    editor: paragraphEditor,
-    selector: ({ editor: current }) => rulerTabStops(current.state),
-    equalityFn: (a, b) => b !== null && encodeTabStops(a) === encodeTabStops(b),
-  });
+  const indents = useSwitchingEditorState(
+    paragraphEditor,
+    (current) => rulerIndents(current.state),
+    (a, b) => b !== null && a.left === b.left && a.firstLine === b.firstLine && a.right === b.right,
+  );
+  const tabStops = useSwitchingEditorState(
+    paragraphEditor,
+    (current) => rulerTabStops(current.state),
+    (a, b) => b !== null && encodeTabStops(a) === encodeTabStops(b),
+  );
 
   const left = stack && band.current ? stack.getBoundingClientRect().left - band.current.getBoundingClientRect().left : null;
   const pxPerPt = PX_PER_PT * zoom;
