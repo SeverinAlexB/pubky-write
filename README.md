@@ -122,8 +122,8 @@ To restore a backup:
   (the other cells of its row and column span the new ones). Pin header row
   pins the rows from the top to the cursor's (light grey; Unpin header rows
   undoes it), Insert title row adds an empty pinned row at the top; tables break
-  between rows across pages and repeat their pinned rows at the top of every page
-  they continue to (see [docs/design/columns.md](docs/design/columns.md)).
+  between rows across pages and columns and repeat their pinned rows at the top of
+  every page and column they continue to (see [docs/design/columns.md](docs/design/columns.md)).
 - **Images:** click an image to select it: an outline with eight handles and a
   rotation handle (Shift snaps to 15°). Corner handles resize keeping the
   proportions, edge handles stretch one side (Shift keeps the proportions);
@@ -386,7 +386,8 @@ and other atomic blocks move to the next page whole; one taller than a page
 overflows. Tables break between rows, and spacers between their rows repeat the
 pinned rows. With columns the content is a CSS multi-column box: the same rules
 fill each column, and the spacers are forced column breaks and, between pages,
-blocks across all columns (see [docs/design/columns.md](docs/design/columns.md)).
+blocks across all columns; a table broken between columns is drawn as one table per column (see
+[docs/design/columns.md](docs/design/columns.md)).
 
 Headers and footers are document attributes (block JSON) and footnote text is an
 attribute of the footnote's reference, so they are saved, validated, undone and

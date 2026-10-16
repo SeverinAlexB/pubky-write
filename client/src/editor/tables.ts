@@ -125,7 +125,7 @@ export function measureRowHeights(view: EditorView): number[] {
   const { tableStart } = selectedRect(view.state);
   const wrapper = view.nodeDOM(tableStart - 1);
   if (!(wrapper instanceof HTMLElement)) return [];
-  return Array.from(wrapper.querySelectorAll<HTMLTableRowElement>(":scope tbody > tr")).map((row) => row.offsetHeight);
+  return Array.from(wrapper.querySelectorAll<HTMLTableRowElement>(":scope tbody > tr:not(.table-size-row)")).map((row) => row.offsetHeight);
 }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -241,9 +241,11 @@ function columnResizing(): Plugin {
     const table = wrapper instanceof HTMLElement ? wrapper.querySelector("table") : null;
     if (!tableNode || !table) return false;
     const cols = Array.from(table.querySelectorAll<HTMLTableColElement>(":scope > colgroup > col"));
-    const tableWidth = table.offsetWidth;
+    // A table broken into columns draws no box of its own (see pagination.ts): its wrapper is as wide.
+    const sized = table.offsetWidth > 0 ? table : (wrapper as HTMLElement);
+    const tableWidth = sized.offsetWidth;
     // CSS pixels per screen pixel, under the editor's zoom.
-    const scale = tableWidth / table.getBoundingClientRect().width || 1;
+    const scale = tableWidth / sized.getBoundingClientRect().width || 1;
     const widths = columnFractions(tableNode).map((fraction) => fraction * tableWidth);
     const pair = widths[column]! + widths[column + 1]!;
     const startX = event.clientX;

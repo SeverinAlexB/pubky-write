@@ -101,8 +101,30 @@ widget inside the table's `tbody`, a `display: contents` wrapper with
 The line has a `carry`, the height of the pinned rows, and `paginate` moves it to the next page's top
 plus that height, so the copies fit above it. The copies are drawn from the table's own rows when
 the widget is created; the spacer's key includes a hash of the pinned rows' content, so editing a
-pinned row draws the copies again. With columns a table still moves whole (a spanner cannot be
-inside a table).
+pinned row draws the copies again.
+
+### Tables across columns
+
+With columns the same row lines fill each slot, so a row that does not fit moves to the next column
+or page with the pinned rows above it. Drawing it needs a forced column break, a Firefox filler or a
+spanner between two rows, and none of them works inside a table (a spanner cannot be in a table at
+all). So the spacer between the rows (`.table-column-spacer`, a `display: contents` widget in the
+`tbody`) holds the usual column spacer parts as blocks, and while a table holds one, CSS makes the
+`table` and `tbody` `display: contents` too (`.tableWrapper:has(...)`). The rows then have the
+table wrapper as their parent box, and the browser wraps every run of rows between two spacers in a
+table of its own (an anonymous table box, as for rows without a table): the spacers are blocks between
+tables, exactly like the spacers between paragraphs, and the spanner is a block of the multi-column
+box's flow (nested in the wrapper `div`, as spanners are nested in lists). No DOM is moved, so
+ProseMirror's view of the table is untouched and the rows stay editable where they are drawn.
+
+Anonymous tables cannot be styled: they have automatic layout and shrink to their content. Each part
+therefore starts with a row of empty cells without height, borders or padding
+(`.table-size-row`), as wide as the table's columns in pixels (the column fractions times the
+column width): one widget at the table's start, and one in each spacer before the copies of the
+pinned rows. The wrapper takes the table's margin and `border-collapse`. While the pagination measures
+the flat layout, the spacers are hidden, so the whole table is one anonymous table with the same
+widths. Code that reads a table's rows skips the sizing rows; dragging a column border measures the
+wrapper when the table has no box.
 
 ## Exports and import
 
@@ -116,6 +138,7 @@ inside a table).
 - The ruler shows the whole content width, not the column the cursor is in.
 - A footnote referenced in a later column of a page can overlap the end of an earlier column, which
   was laid out before the footnote's space was known.
-- With columns, tables move whole and a table taller than a column overflows it.
+- With columns, a long word in a table that is broken into columns can widen its column in that
+  part only (the parts have automatic table layout).
 - A column's first block keeps its top margin (lists, tables, images: 8px), so it starts slightly
   below the top margin.

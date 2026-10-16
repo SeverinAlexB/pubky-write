@@ -2228,6 +2228,33 @@ button:disabled {
   pointer-events: none;
 }
 
+/*
+ * With columns, a table that continues in the next column or page: its table and row group draw no
+ * boxes, so its rows form a table of their own between every two spacers, which are blocks (column
+ * breaks, fillers, a spanner) between those tables. A row of empty cells starts each part and gives
+ * its columns their widths (see pagination.ts).
+ */
+.page-content .tableWrapper:has(> table > tbody > .table-column-spacer) {
+  margin: 8px 0;
+  border-collapse: collapse;
+}
+
+.page-content .tableWrapper:has(> table > tbody > .table-column-spacer) > table,
+.page-content .tableWrapper:has(> table > tbody > .table-column-spacer) > table > tbody {
+  display: contents;
+}
+
+.page-content .table-column-spacer {
+  display: contents;
+}
+
+.page-content .table-size-row > td {
+  height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
 /* Headers, footers and footnotes (see editor/PageElements.tsx and docs/design/page-elements.md). */
 
 .page-stack .page-region {

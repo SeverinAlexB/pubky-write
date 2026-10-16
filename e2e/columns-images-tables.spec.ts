@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import JSZip from "jszip";
-import { createDocument, editor, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
+import { createDocument, editor, lineEnd, menuBarItem, mod, selectionSynced, waitUntilSaved } from "./helpers.ts";
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -649,4 +649,85 @@ test("a pinned header row is grey, repeats at the top of the next page and stays
   await expect(editor(page).locator("tr").first().locator("th")).toHaveCount(2);
   await expect(editor(page).locator("tr").first()).toContainText("Scores");
   await expect(page.locator(".table-repeat-row")).toContainText("Scores");
+});
+
+test("with columns a table breaks between rows into the next column and page, repeating its pinned rows", async ({ page }) => {
+  await createDocument(page);
+  await chooseColumns(page, "Two columns");
+  await page.evaluate(() => {
+    type Editor = { commands: { setContent: (content: unknown) => boolean } };
+    const instance = (document.querySelector(".ProseMirror") as unknown as { editor: Editor }).editor;
+    const cell = (type: string, text: string) => ({ type, content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
+    const rows = [
+      { type: "tableRow", content: [cell("tableHeader", "Name"), cell("tableHeader", "Score")] },
+      ...Array.from({ length: 80 }, (_, index) => ({ type: "tableRow", content: [cell("tableCell", `Person ${index + 1}`), cell("tableCell", String(index))] })),
+    ];
+    instance.commands.setContent({
+      type: "doc",
+      attrs: { columns: 2 },
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Before the table" }] }, { type: "table", content: rows }, { type: "paragraph", content: [{ type: "text", text: "After the table" }] }],
+    });
+  });
+  const stack = page.locator(".page-stack");
+  await expect(stack).toHaveAttribute("data-page-count", "2");
+  // The table continues in the second column and on the second page, with the pinned row at the
+  // top of each.
+  const repeat = page.locator(".table-repeat-row");
+  await expect(repeat).toHaveCount(2);
+  const near = (place: { page: number; top: number; left: number }, page: number, left: number) =>
+    place.page === page && Math.abs(place.top - MARGIN) <= 1 && Math.abs(place.left - left) <= 1;
+  await expect.poll(async () => near(await placeOf(page, repeat.first()), 0, COLUMN_WIDTH + 48)).toBe(true);
+  expect(near(await placeOf(page, repeat.nth(1)), 1, 0)).toBe(true);
+  await expect(repeat.first()).toContainText("Name");
+
+  // Every row is in a column, between the margins, and as wide as the column.
+  const rows = editor(page).locator("tbody > tr:not(.table-size-row)");
+  await expect(rows).toHaveCount(81);
+  const places = await rows.evaluateAll((elements) =>
+    elements.map((row) => {
+      const rect = [...row.getClientRects()].find((box) => box.width > 0 && box.height > 0)!;
+      return { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width };
+    }),
+  );
+  const stackBox = (await stack.boundingBox())!;
+  const columnLefts = [MARGIN, MARGIN + COLUMN_WIDTH + 48].map((left) => stackBox.x + left);
+  for (const place of places) {
+    expect(columnLefts.some((left) => Math.abs(place.left - left) <= 1)).toBe(true);
+    expect(Math.abs(place.width - COLUMN_WIDTH)).toBeLessThanOrEqual(1.5);
+    const y = place.top - stackBox.y;
+    const pageIndex = Math.floor(y / PAGE_STRIDE);
+    expect(y - pageIndex * PAGE_STRIDE).toBeGreaterThanOrEqual(MARGIN - 1);
+    expect(place.bottom - stackBox.y - pageIndex * PAGE_STRIDE).toBeLessThanOrEqual(1123 - MARGIN + 1);
+  }
+  // The row after each repeated pinned row follows right under it.
+  for (const index of [0, 1]) {
+    const box = (await repeat.nth(index).boundingBox())!;
+    expect(places.filter((place) => Math.abs(place.top - (box.y + box.height)) < 2)).toHaveLength(1);
+  }
+  await expect.poll(async () => (await placeOf(page, editor(page).getByText("After the table"))).page).toBe(1);
+
+  // Typing in a row that moved to the next column edits that row.
+  await editor(page).getByText("Person 60", { exact: true }).click();
+  await selectionSynced(page);
+  await page.keyboard.press(lineEnd);
+  await page.keyboard.type(" (moved)");
+  await expect(editor(page).getByText("Person 60 (moved)")).toBeVisible();
+  await expect(repeat).toHaveCount(2);
+
+  // Printing lays the pages out without gaps: the table still starts page 2 under its pinned row.
+  await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+  await page.emulateMedia({ media: "print" });
+  const printed = async () => {
+    const top = (await stack.boundingBox())!.y;
+    return Math.round((await repeat.nth(1).boundingBox())!.y - top);
+  };
+  expect(Math.abs((await printed()) - (1123 + MARGIN))).toBeLessThanOrEqual(1);
+  await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+  await page.emulateMedia({ media: "screen" });
+  await expect.poll(async () => Math.abs((await printed()) - (PAGE_STRIDE + MARGIN)) <= 1).toBe(true);
+
+  // One column: the table continues on the next page as before.
+  await chooseColumns(page, "One column");
+  await expect(page.locator(".table-column-spacer")).toHaveCount(0);
+  await expect(page.locator(".table-page-spacer .table-repeat-row")).toHaveCount(2);
 });

@@ -7,6 +7,7 @@
 // that are saved. Measuring happens in requestAnimationFrame, before the browser paints the
 // edit, and repeats until the spacers stop changing.
 import {
+  columnFractions,
   columnKeys,
   columnsOf,
   footnotesOf,
@@ -22,7 +23,7 @@ import {
   type RegionContent,
 } from "@docs/shared";
 import { Extension } from "@tiptap/core";
-import type { Node } from "@tiptap/pm/model";
+import type { Node, ResolvedPos } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import {
@@ -73,6 +74,8 @@ type RenderedSpacer = PageSpacer & {
   fill?: number;
   endFill?: number;
   repeat?: string;
+  /** With columns, between table rows: the widths of the table's columns in CSS pixels (see tableSizeRow). */
+  sizes?: string;
   end?: boolean;
 };
 
@@ -206,7 +209,7 @@ function staleSpacers(tr: Transaction, decorations: DecorationSet): Decoration[]
     const rest = tr.mapping.slice(index + 1);
     map.forEach((_oldStart, _oldEnd, start, end) => changed.push([rest.map(start, -1), rest.map(end, 1)]));
   });
-  return decorations.find().filter((decoration) => {
+  return decorations.find(undefined, undefined, (spec) => spec.spacer !== undefined).filter((decoration) => {
     const $pos = tr.doc.resolve(decoration.from);
     if (!$pos.parent.isTextblock) return false;
     if (!(decoration.spec.spacer as RenderedSpacer).inline) return true;
@@ -217,23 +220,32 @@ function staleSpacers(tr: Transaction, decorations: DecorationSet): Decoration[]
 }
 
 function spacerDecorations(doc: Node, spacers: RenderedSpacer[]): DecorationSet {
-  return DecorationSet.create(
-    doc,
-    spacers.map((spacer) =>
-      Decoration.widget(
-        spacer.pos,
-        (view) => (spacer.breaks !== undefined ? columnSpacerElement(spacer) : tableSpacerElement(view, doc, spacer) ?? spacerElement(spacer)),
-        {
-          // Before the cursor, so a cursor at the start of a moved line shows on the new page. The
-          // spacer after the content stays after content inserted at the end.
-          side: spacer.end ? 1 : -1,
-          ignoreSelection: true,
-          key: `page-spacer:${spacer.inline}:${spacer.height}:${spacer.shift}:${spacer.breaks ?? ""}:${spacer.spanner ?? ""}:${spacer.after ?? ""}:${spacer.fill ?? ""}:${spacer.endFill ?? ""}:${spacer.repeat ?? ""}`,
-          spacer,
-        },
-      ),
+  const decorations = spacers.map((spacer) =>
+    Decoration.widget(
+      spacer.pos,
+      (view) =>
+        spacer.breaks !== undefined
+          ? spacer.sizes !== undefined
+            ? tableColumnSpacerElement(view, doc, spacer)
+            : columnSpacerElement(spacer)
+          : (tableSpacerElement(view, doc, spacer) ?? spacerElement(spacer)),
+      {
+        // Before the cursor, so a cursor at the start of a moved line shows on the new page. The
+        // spacer after the content stays after content inserted at the end.
+        side: spacer.end ? 1 : -1,
+        ignoreSelection: true,
+        key: `page-spacer:${spacer.inline}:${spacer.height}:${spacer.shift}:${spacer.breaks ?? ""}:${spacer.spanner ?? ""}:${spacer.after ?? ""}:${spacer.fill ?? ""}:${spacer.endFill ?? ""}:${spacer.repeat ?? ""}:${spacer.sizes ?? ""}`,
+        spacer,
+      },
     ),
   );
+  // A table broken into columns starts with a row that gives its first part the columns' widths.
+  const split = new Map<number, string>();
+  for (const spacer of spacers) if (spacer.sizes !== undefined) split.set(doc.resolve(spacer.pos).start(), spacer.sizes);
+  for (const [start, sizes] of split) {
+    decorations.push(Decoration.widget(start, () => tableSizeRow(sizes), { side: -1, ignoreSelection: true, key: `table-size:${sizes}` }));
+  }
+  return DecorationSet.create(doc, decorations);
 }
 
 function spacerElement(spacer: RenderedSpacer): HTMLElement {
@@ -288,8 +300,6 @@ function tableSpacerElement(view: EditorView, doc: Node, spacer: RenderedSpacer)
   if (!spacer.inline || spacer.pos > doc.content.size) return null;
   const $pos = doc.resolve(spacer.pos);
   if ($pos.parent.type.spec.tableRole !== "table") return null;
-  const wrapper = view.nodeDOM($pos.before());
-  const rows = wrapper instanceof HTMLElement ? tableRowElements(wrapper) : [];
   const group = document.createElement("span");
   group.className = "table-page-spacer";
   group.setAttribute("aria-hidden", "true");
@@ -298,8 +308,40 @@ function tableSpacerElement(view: EditorView, doc: Node, spacer: RenderedSpacer)
   const cell = gap.appendChild(document.createElement("td"));
   cell.colSpan = 1000;
   cell.style.height = `${Math.max(0, spacer.height)}px`;
-  group.append(gap);
-  for (const row of rows.slice(0, pinnedRowCount($pos.parent))) {
+  group.append(gap, ...pinnedRowCopies(view, $pos));
+  group.lastElementChild!.setAttribute("data-shift", String(spacer.shift));
+  return group;
+}
+
+/**
+ * With columns, a spacer between two rows of a table: the column breaks (or fillers) and the spanner
+ * to the next page, then a row that sizes the table's columns and copies of its pinned rows. While a
+ * table holds one, its table and row group are `display: contents`, so its rows form a table of their
+ * own (an anonymous one) between every two spacers, and the spacers are blocks between them, as
+ * between paragraphs (see docs/design/columns.md).
+ */
+function tableColumnSpacerElement(view: EditorView, doc: Node, spacer: RenderedSpacer): HTMLElement {
+  const element = columnSpacerElement(spacer);
+  element.classList.add("table-column-spacer");
+  if (spacer.pos <= doc.content.size) element.append(tableSizeRow(spacer.sizes ?? ""), ...pinnedRowCopies(view, doc.resolve(spacer.pos)));
+  return element;
+}
+
+/** A row without height or borders whose cells are the table's columns, `sizes` wide (CSS pixels, separated by spaces). */
+function tableSizeRow(sizes: string): HTMLElement {
+  const row = document.createElement("tr");
+  row.className = "table-size-row";
+  row.setAttribute("aria-hidden", "true");
+  row.contentEditable = "false";
+  for (const width of sizes.split(" ").filter(Boolean)) row.appendChild(document.createElement("td")).style.width = `${width}px`;
+  return row;
+}
+
+/** Copies of the pinned rows of the table `$pos` is in, which repeat at the top of every page or column it continues to. */
+function pinnedRowCopies(view: EditorView, $pos: ResolvedPos): HTMLElement[] {
+  const wrapper = view.nodeDOM($pos.before());
+  const rows = wrapper instanceof HTMLElement ? tableRowElements(wrapper) : [];
+  return rows.slice(0, pinnedRowCount($pos.parent)).map((row) => {
     const copy = row.cloneNode(true) as HTMLTableRowElement;
     copy.classList.add("table-repeat-row");
     for (const element of [copy, ...copy.querySelectorAll("*")]) {
@@ -307,10 +349,8 @@ function tableSpacerElement(view: EditorView, doc: Node, spacer: RenderedSpacer)
       element.classList.remove("selectedCell");
     }
     copy.contentEditable = "false";
-    group.append(copy);
-  }
-  group.lastElementChild!.setAttribute("data-shift", String(spacer.shift));
-  return group;
+    return copy;
+  });
 }
 
 function currentSpacers(state: EditorState): RenderedSpacer[] {
@@ -318,7 +358,9 @@ function currentSpacers(state: EditorState): RenderedSpacer[] {
 }
 
 function currentSpacersOf(value: PaginationState): RenderedSpacer[] {
-  return value.decorations.find().map((decoration) => ({ ...(decoration.spec.spacer as RenderedSpacer), pos: decoration.from }));
+  return value.decorations
+    .find(undefined, undefined, (spec) => spec.spacer !== undefined)
+    .map((decoration) => ({ ...(decoration.spec.spacer as RenderedSpacer), pos: decoration.from }));
 }
 
 /**
@@ -338,7 +380,8 @@ function sameRenderedSpacers(a: RenderedSpacer[], b: RenderedSpacer[]): boolean 
         spacer.after === other.after &&
         close(spacer.fill, other.fill) &&
         close(spacer.endFill, other.endFill) &&
-        spacer.repeat === other.repeat
+        spacer.repeat === other.repeat &&
+        spacer.sizes === other.sizes
       );
     })
   );
@@ -480,11 +523,13 @@ class PaginationView {
     if (columns.count > 1) {
       const marginAt = (pos: number, inline = false) => (inline ? 0 : blockMarginTop(view, pos));
       const drawn = drawnColumnHeights(root, toY, contentTop(frame, 0), marginAt);
-      pagination = measureColumnsFlat(stack, () => paginate(layoutBoxes(view, toY, footnotes, footnoteHeight, false), frame));
-      rendered = columnSpacers(pagination, frame, drawn, marginAt, currentTab(view.state).to, supportsColumnBreaks());
+      pagination = measureColumnsFlat(stack, () => paginate(layoutBoxes(view, toY, footnotes, footnoteHeight), frame));
+      rendered = columnSpacers(pagination, frame, drawn, marginAt, currentTab(view.state).to, supportsColumnBreaks()).map((spacer) =>
+        tableColumnSpacer(view.state.doc, spacer, columns.width),
+      );
     } else {
       const natural = naturalPositions(view, toY);
-      pagination = paginate(layoutBoxes(view, (y) => natural(toY(y)), footnotes, footnoteHeight, true), frame);
+      pagination = paginate(layoutBoxes(view, (y) => natural(toY(y)), footnotes, footnoteHeight), frame);
       rendered = pagination.spacers.map((spacer) => renderedSpacer(view, spacer));
     }
     const { pageCount, footnotePages } = pagination;
@@ -693,7 +738,6 @@ function layoutBoxes(
   toNatural: (clientY: number) => number,
   footnotes: readonly FootnoteRef[],
   footnoteHeight: (content: RegionContent) => number,
-  breakTables: boolean,
 ): LayoutBox[] {
   const boxes: LayoutBox[] = [];
   const elementAt = blockElements(view);
@@ -730,7 +774,7 @@ function layoutBoxes(
       columnBreak: node.type.name === "columnBreak",
       lines: node.isTextblock
         ? () => textblockLines(view, node, pos, element, toNatural)
-        : table && breakTables
+        : table
           ? () => tableRowLines(node, pos, tableRowElements(element), toNatural)
           : undefined,
       footnotes: notes,
@@ -742,7 +786,21 @@ function layoutBoxes(
 /** The rows of a table as drawn (the editor wraps the table in a div), without the copies of pinned rows. */
 function tableRowElements(element: HTMLElement): HTMLElement[] {
   const table = element.matches("table") ? element : element.querySelector(":scope > table");
-  return table ? Array.from(table.querySelectorAll<HTMLElement>(":scope > tbody > tr")) : [];
+  return table ? Array.from(table.querySelectorAll<HTMLElement>(":scope > tbody > tr:not(.table-size-row)")) : [];
+}
+
+/**
+ * A spacer between two rows of a table, with columns: it repeats the pinned rows and sizes the
+ * table's columns (`columnWidth` wide in all), as its rows are then drawn as tables of their own.
+ */
+function tableColumnSpacer(doc: Node, spacer: RenderedSpacer, columnWidth: number): RenderedSpacer {
+  if (!spacer.inline || spacer.pos > doc.content.size) return spacer;
+  const table = doc.resolve(spacer.pos).parent;
+  if (table.type.spec.tableRole !== "table") return spacer;
+  const sizes = columnFractions(table)
+    .map((fraction) => Math.round(fraction * columnWidth * 100) / 100)
+    .join(" ");
+  return { ...spacer, repeat: pinnedRowsKey(table), sizes };
 }
 
 /** The lines of a textblock, from the boxes of its text. */

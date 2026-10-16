@@ -211,3 +211,22 @@ describe("paginate tables", () => {
     expect(spacers[0]).toEqual({ pos: 1000 + 31 * 10, shift: contentTop(a4, 1) - (96 + 31 * 30), inline: true });
   });
 });
+
+describe("paginate tables with columns", () => {
+  const twoColumns: PageFrame = { ...a4, columns: 2 };
+  const stride = 1133;
+  const rows = (top: number, count: number) =>
+    Array.from({ length: count }, (_, i) => ({ top: top + i * 30, bottom: top + (i + 1) * 30, start: () => 1000 + i * 10, ...(i >= 1 && { carry: 30 }) }));
+
+  it("breaks a table between rows into the next column and then the next page, with room for the pinned rows", () => {
+    const lines = rows(96, 70);
+    const { spacers, pageCount } = paginate([{ top: 96, bottom: 96 + 70 * 30, breakPos: 999, lines: () => lines }], twoColumns);
+    expect(pageCount).toBe(2);
+    // 31 rows fit in a column; the second and third columns start with the pinned row.
+    expect(spacers.map(({ pos, inline, carry, from, to }) => ({ pos, inline, carry, from, to }))).toEqual([
+      { pos: 1310, inline: true, carry: 30, from: 0, to: 1 },
+      { pos: 1610, inline: true, carry: 30, from: 1, to: 2 },
+    ]);
+    expect(96 + 31 * 30 + spacers[0]!.shift).toBe(stride + 96 + 30);
+  });
+});
