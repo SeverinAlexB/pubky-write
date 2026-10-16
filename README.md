@@ -559,3 +559,7 @@ not report long tasks, and throttling and profiles need Chrome.
   reordered by dragging (use Move up, Move down and Move into).
 - No real-time collaboration yet. Suggestions are always by "You"; the Preview
   reject all view still shows suggested formatting and paragraph breaks.
+- With the same document open in two windows: text typed into a cell in one
+  window while the other merges that cell can end up twice (merging moves the
+  cell's text), and an undo that had to be adjusted to the other window's edits
+  cannot be redone.
