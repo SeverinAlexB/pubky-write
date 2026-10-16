@@ -83,6 +83,12 @@ blocks and lines as before:
     widget decorations at the positions of the copies' text; nothing is painted in between. The
     gaps are only measured again when the layout runs, and only for documents that have such an
     image (otherwise the step costs one query).
+
+    Headers and footers can hold images too (pasted, or from Word files). Their editor uses the
+    same node view and gaps, laid out after every change by the gap plugin itself (it has no
+    pagination). The copies of a header or footer on the pages are static HTML: there the side is
+    worked out from the region's width and the gaps and moved blocks are put into that HTML
+    directly (`layOutStaticWraps`), also where the pagination measures how tall the region is.
 - **Behind text / In front of text**: `position: absolute` with its static position (where the
   anchor starts) moved by margins, `z-index: -1` or `3` inside the page content, which is its own
   stacking context (`isolation: isolate`), so behind is still above the page sheet. A press on a
@@ -148,7 +154,8 @@ attributes). Without the editor's width, the preview always floats wrapped image
 - With text on both sides of an image, the gaps are measured without the page breaks: a line that
   would be beside the image but moves to the next page or column (the image fits, the line does not)
   keeps its gap there. The version preview (and copies) always float wrapped images
-  left, without the editor's width. Text inside table cells beside the image is not split: the
+  left, without the editor's width. Images in headers and footers can be selected and resized,
+  but their wrapping is only set by Word files (the image pill is the body's). Text inside table cells beside the image is not split: the
   table moves below the image.
 - An image is anchored to a top-level block: dropped into a list or a table, it anchors to the
   whole list or table.

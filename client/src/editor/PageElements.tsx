@@ -24,6 +24,7 @@ import {
 } from "./pageElementCommands.ts";
 import { currentTabId } from "./documentTabs.ts";
 import { documentFootnotes, pageLayoutOf, type PageLayout } from "./pagination.ts";
+import { layOutStaticWraps } from "./imageWrap.ts";
 import { HEADER_OFFSET, regionHTML } from "./regionRender.ts";
 import { layoutTabsIn } from "./tabLayout.ts";
 
@@ -281,9 +282,14 @@ function StaticRegion({
       field.textContent = value === undefined ? "" : String(value);
     }
   }, [html, page, pageCount]);
-  // Tabs depend on the page's width too, so they are laid out after every render.
+  // Tabs and text on both sides of images depend on the page's width too, so they are laid out after every render.
   useLayoutEffect(() => {
-    if (element.current) layoutTabsIn([element.current]);
+    const container = element.current;
+    if (!container) return;
+    const stack = container.closest<HTMLElement>(".page-stack");
+    const width = stack?.getBoundingClientRect().width ?? 0;
+    if (width > 0) layOutStaticWraps(container, width / pageGeometry(pageSetupOf(editor.state.doc)).width);
+    layoutTabsIn([container]);
   });
   return (
     <div

@@ -1,6 +1,7 @@
 // Editing headers, footers and footnotes in a region editor, and the Insert > Page elements
 // commands. See docs/design/page-elements.md.
 import {
+  DocsImage,
   documentExtensions,
   emptyRegion,
   pageElementsOf,
@@ -25,6 +26,7 @@ import { closeHistory } from "./tabHistory.ts";
 import { keyBinding, keyBindings } from "../shortcuts.ts";
 import { AUTOFORMAT, Autoformat } from "./autoformat.ts";
 import { FocusSelection } from "./focusSelection.ts";
+import { EditorImage } from "./imageView.ts";
 import { PasteCleanup } from "./paste.ts";
 import { currentTab } from "./documentTabs.ts";
 import { documentFootnotes, layOutNow, pageIndexAt, tabFootnotes } from "./pagination.ts";
@@ -133,7 +135,8 @@ export function createRegionEditor({ main, binding, element, className, onEscape
   const region: Editor = new Editor({
     element,
     extensions: [
-      ...documentExtensions,
+      // Images with the editor's node view: selectable and resizable, with text on both sides of them where there is room.
+      ...documentExtensions.map((extension) => (extension === DocsImage ? EditorImage : extension)),
       TabLayout,
       TabKey,
       FocusSelection,

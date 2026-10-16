@@ -11,13 +11,13 @@
 // gaps to the copy one line at a time (each gap changes how the rest of the paragraph wraps), so the
 // blocks below are measured with the gaps above them. The copies are removed before anything is
 // painted, and the gaps found become widget decorations at the positions of the copies' text.
-import { pageGeometry, pageSetupOf } from "@docs/shared";
+import { imageFrameStyle, imageLayoutOf, pageGeometry, pageSetupOf, wrapSide } from "@docs/shared";
 import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { currentTab, shownTabElement } from "./documentTabs.ts";
-import { boxNodes } from "./pagination.ts";
+import { boxNodes, paginationKey } from "./pagination.ts";
 import { flushPendingSelection } from "./pendingSelection.ts";
 import { clientRect } from "./rects.ts";
 
@@ -52,10 +52,42 @@ export const ImageWrap = Extension.create({
           },
         },
         props: { decorations: (state) => imageWrapKey.getState(state) },
+        view: (view) => new StandaloneWrapView(view),
       }),
     ];
   },
 });
+
+/**
+ * Lays out the gaps of an editor without pagination (a header or footer being edited), after every
+ * change, before the browser paints. With pagination, the pagination does it before it measures.
+ */
+class StandaloneWrapView {
+  private frame = 0;
+
+  constructor(private readonly view: EditorView) {
+    this.schedule();
+  }
+
+  update(view: EditorView, previous: EditorState): void {
+    if (view.state.doc !== previous.doc) this.schedule();
+  }
+
+  destroy(): void {
+    cancelAnimationFrame(this.frame);
+  }
+
+  private schedule(): void {
+    if (this.frame) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = 0;
+      const { view } = this;
+      if (view.isDestroyed || paginationKey.getState(view.state)) return;
+      const stack = view.dom.closest<HTMLElement>(".page-stack");
+      if (stack) layOutImageWraps(view, stack, false);
+    });
+  }
+}
 
 function wrapDecorations(doc: Node, { gaps, clears }: WrapLayout): DecorationSet {
   return DecorationSet.create(doc, [
@@ -195,7 +227,7 @@ function findGaps(view: EditorView, root: HTMLElement, scale: number): (restore:
       const element = view.nodeDOM(pos);
       if (!(element instanceof HTMLElement) || element.getClientRects().length === 0) continue;
       if (node.type.name === "image") {
-        if (element.dataset.wrap === "wrap" && element.dataset.wrapSide === "both") bands.push(bandOf(element, node, scale));
+        if (element.dataset.wrap === "wrap" && element.dataset.wrapSide === "both") bands.push(bandOf(element, Number(node.attrs.wrapMargin) || 0, scale));
         // Images that float or are placed freely take no part in the lines.
         if (node.attrs.wrap === "wrap" || node.attrs.wrap === "behind" || node.attrs.wrap === "front") continue;
       }
@@ -222,12 +254,74 @@ function findGaps(view: EditorView, root: HTMLElement, scale: number): (restore:
   };
 }
 
+/**
+ * Text on both sides of wrapped images in static content (the copies of headers and footers on the
+ * pages, and where the pagination measures them): gives each wrapped image the side it has room for
+ * in `container`, and adds the gaps and moves blocks below the image in place. `scale` is client
+ * pixels per CSS pixel. Running it again starts over.
+ */
+export function layOutStaticWraps(container: HTMLElement, scale: number): void {
+  for (const element of container.querySelectorAll(".image-wrap-gap, .image-wrap-clear")) element.remove();
+  const frames = Array.from(container.querySelectorAll<HTMLElement>('.image-frame[data-wrap="wrap"]'));
+  if (frames.length === 0) return;
+  container.normalize();
+  const style = getComputedStyle(container);
+  const width = container.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+  const bands: { frame: HTMLElement; band: Band }[] = [];
+  for (const frame of frames) {
+    const image = frame.querySelector("img");
+    const layout = imageLayoutOf({
+      wrap: "wrap",
+      wrapMargin: numberOf(frame.dataset.wrapMargin),
+      positioning: frame.dataset.positioning,
+      offsetX: numberOf(frame.dataset.offsetX),
+      offsetY: numberOf(frame.dataset.offsetY),
+      rotation: numberOf(frame.dataset.rotation),
+    });
+    const shown = numberOf(image?.getAttribute("width")) ?? frame.offsetWidth;
+    const side = wrapSide(layout, shown, width);
+    frame.dataset.wrapSide = side;
+    // The static frame (renderHTML) has the style of an image floating left.
+    const frameStyle = imageFrameStyle(layout, shown, side);
+    if (frame.getAttribute("style") !== frameStyle) frame.setAttribute("style", frameStyle);
+    if (side === "both") bands.push({ frame, band: bandOf(frame, layout.wrapMargin, scale) });
+  }
+  const visit = (element: Element) => {
+    for (const child of Array.from(element.children)) {
+      if (!(child instanceof HTMLElement) || child.matches(".image-frame")) continue;
+      if (child.matches("ul, ol, li, blockquote")) {
+        visit(child);
+        continue;
+      }
+      const beside = bands
+        .filter(({ frame }) => frame.compareDocumentPosition(child) & globalThis.Node.DOCUMENT_POSITION_FOLLOWING)
+        .map(({ band }) => band)
+        .filter((band) => {
+          const rect = clientRect(child);
+          return rect.top < band.bottom - EPSILON && rect.bottom > band.top + EPSILON;
+        });
+      if (beside.length === 0) continue;
+      if (child.matches("p, h1, h2, h3, h4, h5, h6")) {
+        for (const gap of addGaps(child, beside, scale)) gap.classList.remove("is-measure");
+      } else {
+        child.before(clearElement(round((Math.max(...beside.map((band) => band.bottom)) - clientRect(child).top) / scale)));
+      }
+    }
+  };
+  if (bands.length > 0) visit(container);
+}
+
+function numberOf(value: string | null | undefined): number | undefined {
+  const number = Number.parseFloat(value ?? "");
+  return Number.isFinite(number) ? number : undefined;
+}
+
 /** The image's box without its rotation (text wraps around the unrotated box, as with floats) and its margin. */
-function bandOf(frame: HTMLElement, node: Node, scale: number): Band {
+function bandOf(frame: HTMLElement, marginPt: number, scale: number): Band {
   const rect = clientRect(frame);
   const width = frame.offsetWidth * scale;
   const height = frame.offsetHeight * scale;
-  const margin = (Number(node.attrs.wrapMargin) || 0) * (96 / 72) * scale;
+  const margin = marginPt * (96 / 72) * scale;
   const centreX = rect.left + rect.width / 2;
   const centreY = rect.top + rect.height / 2;
   return {
@@ -237,9 +331,6 @@ function bandOf(frame: HTMLElement, node: Node, scale: number): Band {
     bottom: centreY + height / 2 + margin,
   };
 }
-
-/** A gap in the copy of a textblock: where it is in the original's text. */
-type PlacedGap = { element: HTMLElement; band: Band; at: { text: Text; offset: number } | { atom: Element } };
 
 /**
  * Adds the gaps a textblock needs to a copy of it put in its place, and returns them with document
@@ -256,11 +347,37 @@ function wrapTextblock(view: EditorView, original: HTMLElement, bands: Band[], s
   });
   const origins = matchNodes(original, copy);
   if (!origins) return null;
+  const elements = addGaps(copy, bands, scale, (text, rest, index) => {
+    const origin = origins.texts.get(text);
+    if (origin) origins.texts.set(rest, { text: origin.text, base: origin.base + index });
+  });
+  const gaps: WrapGap[] = [];
+  for (const element of elements) {
+    // A gap is right before a piece of text or an inline atom of the copy, or before another gap there
+    // (a gap that ends a line, then one that starts the next).
+    let next = element.nextSibling;
+    while (next instanceof Element && next.classList.contains("image-wrap-gap")) next = next.nextSibling;
+    const text = next instanceof Text ? origins.texts.get(next) : undefined;
+    const atom = next instanceof Element ? origins.elements.get(next) : undefined;
+    try {
+      if (text) gaps.push({ pos: view.posAtDOM(text.text, text.base), width: parseFloat(element.style.width) });
+      else if (atom?.parentNode) gaps.push({ pos: view.posAtDOM(atom.parentNode, indexIn(atom)), width: parseFloat(element.style.width) });
+    } catch {
+      // Not in the document (cannot happen for text of the copy).
+    }
+  }
+  return gaps;
+}
 
-  const placed: PlacedGap[] = [];
+/**
+ * Adds gaps to `block` (as laid out now) until none of its text is on the image or margin of a band,
+ * one line at a time, and returns them. `onSplit` hears of every text node split for a gap.
+ */
+function addGaps(block: HTMLElement, bands: Band[], scale: number, onSplit?: (text: Text, rest: Text, index: number) => void): HTMLElement[] {
+  const placed: { element: HTMLElement; band: Band }[] = [];
   const range = document.createRange();
   for (let step = 0; step < MAX_STEPS; step++) {
-    const hit = firstOverlap(copy, bands, range);
+    const hit = firstOverlap(block, bands, range);
     if (!hit) break;
     const gapBefore = placed.find((gap) => gap.band === hit.band && sameLine(clientRect(gap.element), hit.rect));
     if (gapBefore && gapBefore.element.compareDocumentPosition(hit.text) & globalThis.Node.DOCUMENT_POSITION_FOLLOWING) {
@@ -275,41 +392,23 @@ function wrapTextblock(view: EditorView, original: HTMLElement, bands: Band[], s
       gapBefore.element.remove();
       placed.splice(placed.indexOf(gapBefore), 1);
     }
-    const start = wordStart(copy, hit.text, hit.index, hit.rect, range);
+    const start = wordStart(block, hit.text, hit.index, hit.rect, range);
     const left = start.atom ? clientRect(start.atom).left : charRect(start.text, start.index, range)?.left;
     if (left === undefined) break;
     const element = gapElement(round(Math.max(0, hit.band.right - left) / scale));
     element.classList.add("is-measure");
-    const origin = start.atom ? origins.elements.get(start.atom) : origins.texts.get(start.text);
-    if (!origin) break;
     if (start.atom) {
       start.atom.before(element);
-      placed.push({ element, band: hit.band, at: { atom: origin as Element } });
+    } else if (start.index > 0) {
+      const rest = start.text.splitText(start.index);
+      onSplit?.(start.text, rest, start.index);
+      rest.before(element);
     } else {
-      const { text: originalText, base } = origin as { text: Text; base: number };
-      const at = { text: originalText, offset: base + start.index };
-      if (start.index > 0) {
-        const rest = start.text.splitText(start.index);
-        origins.texts.set(rest, { text: originalText, base: base + start.index });
-        rest.before(element);
-      } else {
-        start.text.before(element);
-      }
-      placed.push({ element, band: hit.band, at });
+      start.text.before(element);
     }
+    placed.push({ element, band: hit.band });
   }
-
-  const gaps: WrapGap[] = [];
-  for (const gap of placed) {
-    let pos: number;
-    try {
-      pos = "atom" in gap.at ? view.posAtDOM(gap.at.atom.parentNode!, indexIn(gap.at.atom)) : view.posAtDOM(gap.at.text, gap.at.offset);
-    } catch {
-      continue;
-    }
-    gaps.push({ pos, width: parseFloat(gap.element.style.width) });
-  }
-  return gaps;
+  return placed.map((gap) => gap.element);
 }
 
 /** The first character of the copy (not white space) that is on the image or its margin. */

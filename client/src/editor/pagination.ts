@@ -50,7 +50,7 @@ import {
   supportsColumnBreaks,
 } from "./columnLayout.ts";
 import { placeFixedImages } from "./imagePlacement.ts";
-import { layOutImageWraps } from "./imageWrap.ts";
+import { layOutImageWraps, layOutStaticWraps } from "./imageWrap.ts";
 import { pinnedRowCount, pinnedRowsKey, tableRowLines } from "./tableLayout.ts";
 import { layoutTabsIn } from "./tabLayout.ts";
 import { clientRect } from "./rects.ts";
@@ -631,6 +631,7 @@ class PaginationView {
     const element = document.createElement("div");
     fill(element);
     this.measureBox.replaceChildren(element);
+    if (kind === "region") layOutStaticWraps(element, scale);
     layoutTabsIn([element]);
     const height = Math.round((element.getBoundingClientRect().height / scale) * 100) / 100;
     this.measureBox.replaceChildren();

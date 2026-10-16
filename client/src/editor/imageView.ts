@@ -569,7 +569,8 @@ function columnWidth(element: HTMLElement): number {
   if (!parent) return 0;
   const stack = parent.closest<HTMLElement>(".page-stack[data-columns]");
   const columnWidthValue = stack ? Number.parseFloat(stack.style.getPropertyValue("--column-width")) : Number.NaN;
-  if (columnWidthValue > 0 && (parent.classList.contains("page-content") || parent.classList.contains("document-tab"))) return columnWidthValue;
+  const body = (parent.classList.contains("page-content") && !parent.classList.contains("page-region")) || parent.classList.contains("document-tab");
+  if (columnWidthValue > 0 && body) return columnWidthValue;
   const style = getComputedStyle(parent);
   return parent.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
 }

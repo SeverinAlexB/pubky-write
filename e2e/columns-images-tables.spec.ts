@@ -449,13 +449,13 @@ test("Wrap text puts text on both sides of an image with 1 cm of room on each, a
   await chooseColumns(page, "Two columns");
   await expect(frame).toHaveAttribute("data-wrap-side", "both");
   await expect.poll(async () => (await linePieces(wrapped)).filter((line) => line.pieces.length === 2).length).toBeGreaterThanOrEqual(2);
-  await linesBesideImage(wrapped, image);
+  await expect(() => linesBesideImage(wrapped, image)).toPass({ timeout: 3000 });
 
   await waitUntilSaved(page);
   await page.reload();
   await expect(frame).toHaveAttribute("data-wrap-side", "both");
   await expect.poll(async () => (await linePieces(wrapped)).filter((line) => line.pieces.length === 2).length).toBeGreaterThanOrEqual(2);
-  await linesBesideImage(wrapped, image);
+  await expect(() => linesBesideImage(wrapped, image)).toPass({ timeout: 3000 });
 
   // Word: text on both sides, or on the largest side.
   const xml = async () => {
@@ -470,6 +470,50 @@ test("Wrap text puts text on both sides of an image with 1 cm of room on each, a
   await setImageAttrs(page, { offsetX: 0 });
   await expect(frame).toHaveAttribute("data-wrap-side", "left");
   expect(await xml()).toContain('<wp:wrapSquare wrapText="largest"');
+});
+
+test("a header puts text on both sides of an image too, on the pages and while it is edited", async ({ page }) => {
+  await createDocument(page);
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 120;
+    canvas.height = 60;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#4a86e8";
+    context.fillRect(0, 0, 120, 60);
+    return canvas.toDataURL("image/png");
+  });
+  // A header holding an image (from a Word file or pasted) wrapped in the middle of the page.
+  await page.evaluate(
+    ({ src, text }) => {
+      type View = { state: { tr: { setDocAttribute: (key: string, value: unknown) => unknown } }; dispatch: (tr: unknown) => void };
+      const view = (document.querySelector(".ProseMirror") as unknown as { editor: { view: View } }).editor.view;
+      view.dispatch(
+        view.state.tr.setDocAttribute("header", [
+          { type: "image", attrs: { src, width: 120, height: 60, wrap: "wrap", offsetX: 241 } },
+          { type: "paragraph", content: [{ type: "text", text }] },
+        ]),
+      );
+    },
+    { src: png, text: `Header. ${LOREM}` },
+  );
+  const copy = page.locator(".page-region-slot.is-header .page-region").first();
+  const frame = copy.locator(".image-frame");
+  await expect(frame).toHaveAttribute("data-wrap-side", "both");
+  const paragraph = copy.locator("p");
+  await expect.poll(async () => (await linePieces(paragraph)).filter((line) => line.pieces.length === 2).length).toBeGreaterThanOrEqual(2);
+  await linesBesideImage(paragraph, frame.locator("img"));
+  await expect(paragraph).toHaveText(`Header. ${LOREM}`);
+
+  // Editing the header: the region editor lays the lines out the same way.
+  const stackBox = (await page.locator(".page-stack").boundingBox())!;
+  await page.mouse.dblclick(stackBox.x + 300, stackBox.y + 30);
+  const region = page.getByRole("textbox", { name: "Header" });
+  await expect(region).toBeVisible();
+  const edited = region.locator("p");
+  await expect(region.locator(".image-frame")).toHaveAttribute("data-wrap-side", "both");
+  await expect.poll(async () => (await linePieces(edited)).filter((line) => line.pieces.length === 2).length).toBeGreaterThanOrEqual(2);
+  await linesBesideImage(edited, region.locator(".image-frame img"));
 });
 
 test("images behind and in front of text are placed freely, and dragging moves an image to the paragraph it is dropped at", async ({ page }) => {
