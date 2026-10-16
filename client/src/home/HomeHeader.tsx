@@ -27,7 +27,7 @@ export function HomeHeader({ query, onQueryChange, templatesShown, onTemplatesSh
           <Icon name="menu" size={24} />
         </button>
         <Link to="/" className="brand">
-          <img src="/favicon.svg" alt="" width={30} height={40} />
+          <img src="/favicon.svg" alt="" width={34} height={34} />
           <span>Pubky Write</span>
         </Link>
       </div>
@@ -89,7 +89,7 @@ function MainMenu({ templatesShown, onTemplatesShownChange, onClose }: MainMenuP
       }}
     >
       <div className="home-drawer-brand">
-        <img src="/favicon.svg" alt="" width={30} height={40} />
+        <img src="/favicon.svg" alt="" width={34} height={34} />
         <span>Pubky Write</span>
       </div>
       <nav aria-label="Apps">

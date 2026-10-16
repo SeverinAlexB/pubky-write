@@ -1235,7 +1235,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         {!menusHidden && (
           <header className="editor-header">
             <Link to="/" className="doc-logo" aria-label="Pubky Write home" data-tooltip="Pubky Write home">
-              <img src="/favicon.svg" alt="" width={24} height={32} />
+              <img src="/favicon.svg" alt="" width={28} height={28} />
             </Link>
             <div className="editor-header-main">
               <div className="title-row">

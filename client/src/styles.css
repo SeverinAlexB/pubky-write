@@ -1281,7 +1281,7 @@ button:disabled {
   display: grid;
   flex: none;
   place-items: center;
-  width: 24px;
+  width: 28px;
   height: 32px;
   margin-right: 18px;
 }
