@@ -434,7 +434,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   useEffect(() => {
     const preload = () => {
-      onDemand.forEach((component) => void component.preload());
+      // Errors (the page left while loading) are left for the first real use to report.
+      onDemand.forEach((component) => component.preload().catch(() => {}));
       // So the first equation inserted is ready for typing at once (a failure is retried when needed).
       loadEquationCode().catch(() => {});
     };
