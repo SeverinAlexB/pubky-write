@@ -1,6 +1,6 @@
 // Helpers shared by the Markdown and Word importers. Both build document JSON and finish with
 // `finishDocument`, which validates it against the editor's schema.
-import { documentSchema, isPaperSize } from "@docs/shared";
+import { documentSchema, isPaperSize } from "@pubky-write/shared";
 import type { JSONContent } from "@tiptap/core";
 import { Mark, type Node } from "@tiptap/pm/model";
 import { EditorState } from "@tiptap/pm/state";

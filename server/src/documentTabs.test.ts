@@ -3,7 +3,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { documentSchema, documentTabs, FIRST_TAB_ID, wrapInTab, type DocumentPreview } from "@docs/shared";
+import { documentSchema, documentTabs, FIRST_TAB_ID, wrapInTab, type DocumentPreview } from "@pubky-write/shared";
 import { Fragment } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
 import { beforeEach, describe, expect, it } from "vitest";

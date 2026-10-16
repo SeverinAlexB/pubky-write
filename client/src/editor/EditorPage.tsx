@@ -1,4 +1,4 @@
-import type { OpenedDocument } from "@docs/shared";
+import type { OpenedDocument } from "@pubky-write/shared";
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { Link, useParams } from "react-router";
 import { api, ApiError } from "../api.ts";
@@ -54,7 +54,7 @@ export function EditorPage() {
       <div className="page-message">
         <h1>{error.notFound ? "Document not found" : "Couldn't open the document"}</h1>
         {!error.notFound && <p>{error.message}</p>}
-        <Link to="/">Back to Docs</Link>
+        <Link to="/">Back to Pubky Write</Link>
         {orphaned.length > 0 && (
           <UnsavedChangesDialog entries={orphaned} documentTitle="Deleted document" deleted onClose={() => setOrphaned([])} />
         )}

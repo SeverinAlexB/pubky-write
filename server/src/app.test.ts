@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DocumentSummary, ImportResponse, OpenedDocument } from "@docs/shared";
+import type { DocumentSummary, ImportResponse, OpenedDocument } from "@pubky-write/shared";
 import JSZip from "jszip";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.ts";

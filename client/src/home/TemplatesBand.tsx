@@ -1,4 +1,4 @@
-import { documentTemplates, type DocumentTemplate } from "@docs/shared";
+import { documentTemplates, type DocumentTemplate } from "@pubky-write/shared";
 import { useState } from "react";
 import { Icon } from "../components/Icon.tsx";
 import { Menu } from "../components/Menu.tsx";

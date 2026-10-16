@@ -1,5 +1,5 @@
 // Equations in exports and imports (spec 20): Word as Office Math, Markdown as `$…$`.
-import { documentSchema, toMarkdown } from "@docs/shared";
+import { documentSchema, toMarkdown } from "@pubky-write/shared";
 import { getText, getTextSerializersFromSchema } from "@tiptap/core";
 import { Node } from "@tiptap/pm/model";
 import JSZip from "jszip";

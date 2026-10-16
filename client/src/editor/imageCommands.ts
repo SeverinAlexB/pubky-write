@@ -1,6 +1,6 @@
 // Commands for the selected image: the pill's Wrap text options, margin and position menus, Image
 // options and Replace image. Each is one undo step and keeps the image selected.
-import { imageLayoutOf, pageGeometry, pageSetupOf, type ImagePositioning, type ImageWrap } from "@docs/shared";
+import { imageLayoutOf, pageGeometry, pageSetupOf, type ImagePositioning, type ImageWrap } from "@pubky-write/shared";
 import { closeHistory } from "./tabHistory.ts";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";

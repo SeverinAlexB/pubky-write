@@ -21,7 +21,7 @@ const router = createBrowserRouter([
     element: (
       <div className="page-message">
         <h1>Page not found</h1>
-        <Link to="/">Back to Docs</Link>
+        <Link to="/">Back to Pubky Write</Link>
       </div>
     ),
   },

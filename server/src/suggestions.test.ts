@@ -9,7 +9,7 @@ import {
   type CommentMessage,
   type DocumentSummary,
   type OpenedDocument,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { AddMarkStep } from "@tiptap/pm/transform";
 import JSZip from "jszip";

@@ -1,5 +1,5 @@
 // View > Comments > Show all comments: every thread as a compact card, filtered by state.
-import { isCollapsed, type CommentThread } from "@docs/shared";
+import { isCollapsed, type CommentThread } from "@pubky-write/shared";
 import type { Editor } from "@tiptap/react";
 import { useState } from "react";
 import { Icon } from "../components/Icon.tsx";

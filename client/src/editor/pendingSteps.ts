@@ -5,7 +5,7 @@
 // Each open editor owns its entry through a Web Lock named after it, held while it is open. An
 // entry whose lock is free belongs to a session that has ended and may be restored; holding its
 // lock while restoring keeps two tabs from restoring it both.
-import { documentSchema } from "@docs/shared";
+import { documentSchema } from "@pubky-write/shared";
 import type { Node, Schema } from "@tiptap/pm/model";
 import { Mapping, ReplaceStep, Step, Transform } from "@tiptap/pm/transform";
 import { exactInverse, getVersion, HISTORY_STEPS, receiveTransaction, sendableSteps, unconfirmedSteps } from "./collab.ts";

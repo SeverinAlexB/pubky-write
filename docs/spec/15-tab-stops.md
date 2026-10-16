@@ -51,7 +51,7 @@ specified in 01 and here.
   character, which moves the following text to the next tab stop. Tab never
   changes the paragraph's indent; indenting is done with ⌘+] / ⌘+[ or the
   Increase/Decrease indent buttons. With a selection that spans more than one
-  paragraph, Tab replaces nothing and does nothing (P2: Docs-like behaviour is
+  paragraph, Tab replaces nothing and does nothing (P2: reference-like behaviour is
   not required here).
 - Shift+Tab outside lists and tables does nothing (it does not outdent).
 - A tab character advances to the next stop to the right of the current text

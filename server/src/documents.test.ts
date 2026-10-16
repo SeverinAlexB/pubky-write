@@ -1,4 +1,4 @@
-import { documentSchema, pageSetupOf } from "@docs/shared";
+import { documentSchema, pageSetupOf } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
 import { beforeEach, describe, expect, it } from "vitest";

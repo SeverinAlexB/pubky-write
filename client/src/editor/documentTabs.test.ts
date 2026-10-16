@@ -1,4 +1,4 @@
-import { documentSchema, documentTabs, FIRST_TAB_ID, findTab, tabTree, type TabAttrs } from "@docs/shared";
+import { documentSchema, documentTabs, FIRST_TAB_ID, findTab, tabTree, type TabAttrs } from "@pubky-write/shared";
 import type { JSONContent } from "@tiptap/core";
 import { deleteSelection, joinBackward, selectAll } from "@tiptap/pm/commands";
 import { history, redo, undo } from "@tiptap/pm/history";

@@ -2,7 +2,7 @@
 // fast-check can generate and shrink them) that `buildEdit` turns into a transaction on the state
 // it is applied to, like a user's command would. Positions are fractions of the valid positions in
 // the shown tab, so the same description works on any document.
-import { documentSchema, documentTabs, firstTab, type RegionContent } from "@docs/shared";
+import { documentSchema, documentTabs, firstTab, type RegionContent } from "@pubky-write/shared";
 import { deleteSelection, joinBackward, lift, setBlockType, splitBlock, toggleMark } from "@tiptap/pm/commands";
 import { redo, undo } from "../../client/src/editor/tabHistory.ts";
 import type { Node } from "@tiptap/pm/model";

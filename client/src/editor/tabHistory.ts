@@ -10,7 +10,7 @@
 // tabs, or came from the server) maps its inverse over everything since, as prosemirror-history
 // does for remote changes: the events keep their steps' maps and inverses, and a log of every
 // change's maps lets an event be moved to the current document when it is undone.
-import { DOCUMENT_TAB, FIRST_TAB_ID, hasTabNodes, tabAtPos } from "@docs/shared";
+import { DOCUMENT_TAB, FIRST_TAB_ID, hasTabNodes, tabAtPos } from "@pubky-write/shared";
 import { Extension } from "@tiptap/core";
 import { closeHistory as closeLibraryHistory } from "@tiptap/pm/history";
 import type { Node } from "@tiptap/pm/model";

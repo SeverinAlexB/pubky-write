@@ -9,7 +9,7 @@ import {
   type PageElementSettings,
   type PageGeometry,
   type RegionContent,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";

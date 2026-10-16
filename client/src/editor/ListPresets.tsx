@@ -1,4 +1,4 @@
-import { bulletPresets, checklistPresets, listNumberLabel, numberedPresets } from "@docs/shared";
+import { bulletPresets, checklistPresets, listNumberLabel, numberedPresets } from "@pubky-write/shared";
 import { useState } from "react";
 import { Icon } from "../components/Icon.tsx";
 import type { ListKind } from "./actions.ts";

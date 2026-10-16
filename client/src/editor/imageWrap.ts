@@ -11,7 +11,7 @@
 // gaps to the copy one line at a time (each gap changes how the rest of the paragraph wraps), so the
 // blocks below are measured with the gaps above them. The copies are removed before anything is
 // painted, and the gaps found become widget decorations at the positions of the copies' text.
-import { imageFrameStyle, imageLayoutOf, pageGeometry, pageSetupOf, wrapSide } from "@docs/shared";
+import { imageFrameStyle, imageLayoutOf, pageGeometry, pageSetupOf, wrapSide } from "@pubky-write/shared";
 import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";

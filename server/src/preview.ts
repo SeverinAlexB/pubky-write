@@ -1,7 +1,7 @@
 // The thumbnail content of a document in the document list: the blocks at the top of its first
 // page, cut to about a page of text so the stored preview stays small for any document.
 import type { JSONContent } from "@tiptap/core";
-import { tabsDocument, firstTab } from "@docs/shared";
+import { tabsDocument, firstTab } from "@pubky-write/shared";
 import { Fragment, type Node } from "@tiptap/pm/model";
 
 /** More lines than fit on a page, so the thumbnail is never cut short. */

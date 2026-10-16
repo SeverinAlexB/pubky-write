@@ -1,4 +1,4 @@
-import { collectSuggestions, documentSchema } from "@docs/shared";
+import { collectSuggestions, documentSchema } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { history, undo } from "@tiptap/pm/history";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";

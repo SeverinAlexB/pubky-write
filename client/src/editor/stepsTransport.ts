@@ -1,4 +1,4 @@
-import type { StepsConflictResponse, SubmitStepsRequest, SubmitStepsResponse } from "@docs/shared";
+import type { StepsConflictResponse, SubmitStepsRequest, SubmitStepsResponse } from "@pubky-write/shared";
 import { ApiError } from "../api.ts";
 import { RejectedError, type StepsTransport, type SubmitResult } from "./sync.ts";
 

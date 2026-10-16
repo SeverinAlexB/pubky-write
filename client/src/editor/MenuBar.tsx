@@ -1,4 +1,4 @@
-import { columnsOf, listPresetAt } from "@docs/shared";
+import { columnsOf, listPresetAt } from "@pubky-write/shared";
 import type { Editor } from "@tiptap/react";
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { MenuList, type MenuEntry, type MenuItem } from "../components/MenuList.tsx";

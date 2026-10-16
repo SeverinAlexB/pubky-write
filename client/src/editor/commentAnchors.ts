@@ -6,7 +6,7 @@
 // rebase could end elsewhere than that (mapping is not the same along every path around a deleted
 // range). So the editor also keeps the anchors as of its confirmed version, moves those through the
 // confirmed steps in the server's order, and shows them moved through its unconfirmed steps.
-import { isCollapsed, mapAnchor, type Anchor } from "@docs/shared";
+import { isCollapsed, mapAnchor, type Anchor } from "@pubky-write/shared";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Mapping, type Step } from "@tiptap/pm/transform";

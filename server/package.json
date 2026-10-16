@@ -1,5 +1,5 @@
 {
-  "name": "@docs/server",
+  "name": "@pubky-write/server",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "backup": "tsx src/backupCli.ts"
   },
   "dependencies": {
-    "@docs/shared": "*",
+    "@pubky-write/shared": "*",
     "@hono/node-server": "^2.1.5",
     "@tiptap/core": "^3.32.0",
     "@tiptap/pm": "^3.32.0",

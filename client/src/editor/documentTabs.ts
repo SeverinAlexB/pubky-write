@@ -15,7 +15,7 @@ import {
   wrapInTab,
   type DocTab,
   type TabEntry,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Extension, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "./tabHistory.ts";
 import { Fragment, Slice, type Node } from "@tiptap/pm/model";

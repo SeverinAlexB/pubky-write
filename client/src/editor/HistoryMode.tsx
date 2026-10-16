@@ -13,7 +13,7 @@ import {
   pageSetupOf,
   versionEdits,
   type Revision,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useMemo, useRef, useState } from "react";

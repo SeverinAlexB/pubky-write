@@ -7,7 +7,7 @@
 // pendingSteps.ts), so they survive a closed tab or a crash. The kept version is always the one
 // the batch is built on, so after a crash the server's steps from that version show which of the
 // kept steps it had already applied (they carry this client's id) and none is applied twice.
-import type { SubmitStepsRequest } from "@docs/shared";
+import type { SubmitStepsRequest } from "@pubky-write/shared";
 import { receiveTransaction, sendableSteps } from "./collab.ts";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { Step } from "@tiptap/pm/transform";

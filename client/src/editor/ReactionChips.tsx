@@ -1,7 +1,7 @@
 // Emoji reactions under a comment message (spec 20): a chip per emoji with its count, the user's
 // own in the primary colours. On the active card a chip toggles the user's reaction and a last
 // chip adds one; idle cards and All comments show the chips only.
-import type { Reaction } from "@docs/shared";
+import type { Reaction } from "@pubky-write/shared";
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.tsx";
 

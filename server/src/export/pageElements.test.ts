@@ -1,6 +1,6 @@
 // Headers, footers, page number fields, footnotes and tables of contents in the Word and
 // Markdown exports, and back through the Word import.
-import { documentSchema, footnotesOf, regionText, toMarkdown } from "@docs/shared";
+import { documentSchema, footnotesOf, regionText, toMarkdown } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";

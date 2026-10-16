@@ -1,5 +1,5 @@
 // Insert > Page elements > Page numbers > More options, and Options > Page numbers… in a header.
-import { MAX_PAGE_NUMBER_START } from "@docs/shared";
+import { MAX_PAGE_NUMBER_START } from "@pubky-write/shared";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.tsx";
 import type { PageNumberOptions } from "./pageElementCommands.ts";

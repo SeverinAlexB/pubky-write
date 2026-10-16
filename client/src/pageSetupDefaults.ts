@@ -1,6 +1,6 @@
 // File > Page setup > "Set as default": the page settings new documents start with, kept in the
 // browser and sent with each request to create a document.
-import type { PageSetup } from "@docs/shared";
+import type { PageSetup } from "@pubky-write/shared";
 
 const DEFAULT_PAGE_SETUP_SETTING = "docs.defaultPageSetup";
 

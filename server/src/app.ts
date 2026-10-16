@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { extname } from "node:path";
-import { firstTab, rangeInTabsDocument, tabsDocument, toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type ImportResponse, type SubmitStepsRequest } from "@docs/shared";
+import { firstTab, rangeInTabsDocument, tabsDocument, toMarkdown, type CreateCommentRequest, type CreateDocumentRequest, type DocumentSort, type ImportResponse, type SubmitStepsRequest } from "@pubky-write/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";

@@ -1,7 +1,7 @@
 // Performance with a large document: run with `npm run perf` (see playwright.perf.config.ts).
 // Builds a 60-page document and measures opening, pagination settling and typing on pages 1 and 50.
 import { writeFileSync } from "node:fs";
-import { documentSchema } from "@docs/shared";
+import { documentSchema } from "@pubky-write/shared";
 import { expect, test, type Page } from "@playwright/test";
 
 type Block = Record<string, unknown>;

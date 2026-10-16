@@ -1,7 +1,7 @@
 // The tabs and outline sidebar (docs/spec/07-outline.md, 18-document-tabs.md): the document's
 // tabs, nested, each with a ⋮ menu, and under the shown tab (and tabs with "Show outline") an
 // outline of its headings.
-import { acceptedTextBetween, tabTree, type DocTab, type TabEntry } from "@docs/shared";
+import { acceptedTextBetween, tabTree, type DocTab, type TabEntry } from "@pubky-write/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";

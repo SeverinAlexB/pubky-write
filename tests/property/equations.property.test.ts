@@ -1,7 +1,7 @@
 // Property tests of equations: random equations read back unchanged from their LaTeX, from the
 // Office Math a Word export writes and from the `$…$` a Markdown export writes. PROPERTY_RUNS and
 // PROPERTY_SEED as in sync.property.test.ts.
-import { documentSchema, toMarkdown } from "@docs/shared";
+import { documentSchema, toMarkdown } from "@pubky-write/shared";
 import {
   arrows,
   greekLetters,
@@ -14,7 +14,7 @@ import {
   type AccentCommand,
   type MathAtom,
   type MathRow,
-} from "@docs/shared/equations";
+} from "@pubky-write/shared/equations";
 import { Node } from "@tiptap/pm/model";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";

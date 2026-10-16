@@ -1,4 +1,4 @@
-import { documentSchema } from "@docs/shared";
+import { documentSchema } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { Step, Transform } from "@tiptap/pm/transform";
 import { describe, expect, it } from "vitest";

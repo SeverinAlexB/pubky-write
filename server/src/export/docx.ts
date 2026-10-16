@@ -54,7 +54,7 @@ import {
   type ParagraphChild,
   type XmlComponent,
 } from "docx";
-import { parseLatex } from "@docs/shared/equations";
+import { parseLatex } from "@pubky-write/shared/equations";
 import { mathToOmml, type XmlTree } from "../omml.ts";
 import { imageSize } from "image-size";
 import JSZip from "jszip";
@@ -94,7 +94,7 @@ import {
   type ParagraphStyleDefinition,
   type RegionContent,
   type RegionKey,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 
 export type ImageReader = (src: string) => Promise<Buffer | null>;
 

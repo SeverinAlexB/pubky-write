@@ -5,7 +5,7 @@ import {
   descriptionText,
   documentSchema,
   mapAnchor,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { wrapInList } from "@tiptap/pm/schema-list";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";

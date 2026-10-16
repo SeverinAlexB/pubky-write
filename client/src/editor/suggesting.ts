@@ -22,7 +22,7 @@ import {
   type Suggestion,
   type SuggestionMeta,
   equationTokens,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Extension, type Editor } from "@tiptap/core";
 import { closeHistory } from "./tabHistory.ts";
 import { ChangeSet, type Change, type TokenEncoder } from "@tiptap/pm/changeset";

@@ -141,7 +141,7 @@ function requestOnce(
       url,
       {
         method: "GET",
-        headers: { "User-Agent": "Docs/1.0 (link preview)", Accept: options.accept ?? "*/*" },
+        headers: { "User-Agent": "PubkyWrite/1.0 (link preview)", Accept: options.accept ?? "*/*" },
         lookup: allowPrivate ? undefined : publicLookup,
         timeout: remaining,
       },

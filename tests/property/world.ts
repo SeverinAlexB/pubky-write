@@ -1,7 +1,7 @@
 // A small world for the property tests: the real server (step authority and comments on an
 // in-memory database), editors made of the real plugins and sync, a network that delays, fails
 // and loses answers, and an in-memory stand-in for the browser's IndexedDB that outlives crashes.
-import { documentSchema, type CommentThread } from "@docs/shared";
+import { documentSchema, type CommentThread } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { EditorState, type Plugin, type Selection, type Transaction } from "@tiptap/pm/state";
 import { SELECT_FIRST } from "./edits.ts";

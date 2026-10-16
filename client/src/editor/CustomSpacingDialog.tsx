@@ -1,4 +1,4 @@
-import type { ParagraphSpacing } from "@docs/shared";
+import type { ParagraphSpacing } from "@pubky-write/shared";
 import { useEffect, useRef, useState } from "react";
 import type { ParagraphSpacingState } from "./formatMenus.ts";
 

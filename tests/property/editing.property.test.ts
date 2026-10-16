@@ -1,7 +1,7 @@
 // Property tests of editing in one editor: undo, suggestions and document tabs. PROPERTY_RUNS and
 // PROPERTY_SEED as in sync.property.test.ts.
-import { applySuggestions, hasSuggestions } from "@docs/shared";
-import { documentTabs, findTab } from "@docs/shared";
+import { applySuggestions, hasSuggestions } from "@pubky-write/shared";
+import { documentTabs, findTab } from "@pubky-write/shared";
 import { switchTab } from "../../client/src/editor/documentTabs.ts";
 import { SHARED, tabHistoryKey, undo, undoDepth } from "../../client/src/editor/tabHistory.ts";
 import type { Node } from "@tiptap/pm/model";

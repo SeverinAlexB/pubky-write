@@ -13,7 +13,7 @@
 // Firefox has no forced column breaks at all. There the content of every column but the tallest
 // is followed by a filler that takes it to just under the tallest column, so balancing has to
 // break the columns where the pagination did.
-import { columnsOf, columnWidths, type PageGeometry } from "@docs/shared";
+import { columnsOf, columnWidths, type PageGeometry } from "@pubky-write/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { contentBottom, contentTop, type PageFrame, type Pagination } from "./pageLayout.ts";

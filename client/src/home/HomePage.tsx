@@ -1,4 +1,4 @@
-import type { DocumentSort, DocumentSummary, DocumentTemplate, ImportResponse } from "@docs/shared";
+import type { DocumentSort, DocumentSummary, DocumentTemplate, ImportResponse } from "@pubky-write/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../api.ts";
@@ -45,7 +45,7 @@ export function HomePage() {
   }, [query, sort]);
 
   useEffect(() => {
-    document.title = "Docs";
+    document.title = "Pubky Write";
     const timer = setTimeout(load, query ? 200 : 0);
     return () => clearTimeout(timer);
   }, [load, query]);

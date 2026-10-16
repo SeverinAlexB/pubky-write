@@ -21,7 +21,7 @@ import {
   type FootnoteRef,
   type PageGeometry,
   type RegionContent,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Extension } from "@tiptap/core";
 import type { Node, ResolvedPos } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";

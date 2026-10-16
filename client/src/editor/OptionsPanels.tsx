@@ -8,7 +8,7 @@ import {
   imageMarginPresets,
   isSize,
   normalizeRotation,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { NodeSelection } from "@tiptap/pm/state";
 import { isInTable, selectedRect } from "@tiptap/pm/tables";
 import { useEditorState, type Editor } from "@tiptap/react";

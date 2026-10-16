@@ -1,4 +1,4 @@
-import { documentSchema, paragraphIndents, PT_PER_CM } from "@docs/shared";
+import { documentSchema, paragraphIndents, PT_PER_CM } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { EditorState, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";

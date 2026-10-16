@@ -1,4 +1,4 @@
-import { acceptedTextBetween } from "@docs/shared";
+import { acceptedTextBetween } from "@pubky-write/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 import { currentTab } from "./documentTabs.ts";

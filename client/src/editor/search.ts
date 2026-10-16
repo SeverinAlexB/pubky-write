@@ -1,5 +1,5 @@
 // Find and replace: matching, highlighting (as decorations) and replacing.
-import { acceptedTextBetween, acceptedTextOffsets } from "@docs/shared";
+import { acceptedTextBetween, acceptedTextOffsets } from "@pubky-write/shared";
 import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";

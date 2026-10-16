@@ -2,7 +2,7 @@
 // delays requests, fails them and loses answers, with crashes whose unsaved edits are restored from
 // the browser's store when the document opens again. PROPERTY_RUNS sets the number of cases
 // (PROPERTY_RUNS=20000 for a long run); PROPERTY_SEED replays one.
-import { documentSchema } from "@docs/shared";
+import { documentSchema } from "@pubky-write/shared";
 import type { Node } from "@tiptap/pm/model";
 import { Step, Transform } from "@tiptap/pm/transform";
 import fc from "fast-check";

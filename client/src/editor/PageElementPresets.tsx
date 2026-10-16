@@ -1,5 +1,5 @@
 // The icon presets of Insert > Page elements > Page numbers and Table of contents.
-import type { TocStyle } from "@docs/shared";
+import type { TocStyle } from "@pubky-write/shared";
 import type { ReactNode } from "react";
 import type { PageNumberOptions } from "./pageElementCommands.ts";
 

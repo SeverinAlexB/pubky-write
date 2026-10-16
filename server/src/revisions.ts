@@ -1,6 +1,6 @@
 // Version history. Edits are grouped into editing sessions: a revision keeps absorbing
 // changes until the document has been idle for SESSION_GAP_MS, then the next edit starts a new one.
-import type { Revision, RevisionWithContent } from "@docs/shared";
+import type { Revision, RevisionWithContent } from "@pubky-write/shared";
 import type { Database } from "./database.ts";
 
 export const SESSION_GAP_MS = Number(process.env.REVISION_SESSION_GAP_MS ?? 5 * 60 * 1000);

@@ -1,5 +1,5 @@
-import type { SubmitStepsRequest } from "@docs/shared";
-import { documentSchema } from "@docs/shared";
+import type { SubmitStepsRequest } from "@pubky-write/shared";
+import { documentSchema } from "@pubky-write/shared";
 import { collab, getVersion, sendableSteps } from "./collab.ts";
 import { EditorState, type Transaction } from "@tiptap/pm/state";
 import { Step } from "@tiptap/pm/transform";

@@ -1,6 +1,6 @@
 // Static HTML of header, footer and footnote content (see shared/src/pageElements.ts), for the
 // pages that are not being edited and for measuring.
-import type { RegionContent } from "@docs/shared";
+import type { RegionContent } from "@pubky-write/shared";
 import { DOMSerializer, type Schema } from "@tiptap/pm/model";
 
 const html = new WeakMap<RegionContent, string>();

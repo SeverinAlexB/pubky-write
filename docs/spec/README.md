@@ -11,7 +11,7 @@ editor's user interface on 2026-10-13 (window 1440 × 900, en-GB locale).
   research captures. If something is unclear, ask for the spec to be extended
   instead of looking it up.
 - Do not use the reference product's name, logo, product icons or proprietary
-  fonts. Use the app's own name ("Docs"), its own logo
+  fonts. Use the app's own name ("Pubky Write"), its own logo
   (`client/public/favicon.svg`), system or open-licensed fonts, and an
   open-licensed icon set.
 - Visible labels, keyboard shortcuts, measurements and colours in this spec are

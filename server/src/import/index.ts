@@ -1,6 +1,6 @@
 // File > Open > Upload: converts a Word or Markdown file into a new document.
 import { extname } from "node:path";
-import type { DocumentSummary } from "@docs/shared";
+import type { DocumentSummary } from "@pubky-write/shared";
 import { insertImportedComments } from "../comments.ts";
 import { inTransaction, type Database } from "../database.ts";
 import { createDocument } from "../documents.ts";

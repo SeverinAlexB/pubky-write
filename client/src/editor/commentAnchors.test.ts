@@ -1,4 +1,4 @@
-import { documentSchema, mapAnchor } from "@docs/shared";
+import { documentSchema, mapAnchor } from "@pubky-write/shared";
 import { EditorState } from "@tiptap/pm/state";
 import { Mapping, Transform } from "@tiptap/pm/transform";
 import { collab, receiveTransaction, sendableSteps } from "./collab.ts";

@@ -1,7 +1,7 @@
 // A read-only rendering of the top of a document's first page, scaled down to a thumbnail.
 // It renders the stored JSON directly with the editor's content styles (.page-content), so the
 // document list does not load the editor.
-import { normalizePageSetup, pageGeometry, paragraphIndents } from "@docs/shared";
+import { normalizePageSetup, pageGeometry, paragraphIndents } from "@pubky-write/shared";
 import type { JSONContent } from "@tiptap/core";
 import { createElement, memo, type CSSProperties, type ReactNode } from "react";
 

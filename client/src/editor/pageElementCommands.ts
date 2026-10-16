@@ -18,7 +18,7 @@ import {
   SUGGESTION_AUTHOR,
   tabAtPos,
   type TocRange,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Editor, Extension, type JSONContent } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";

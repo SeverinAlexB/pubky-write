@@ -45,9 +45,9 @@ test("documents can be renamed, searched and deleted from the list", async ({ pa
   await editor(page).click();
   await page.keyboard.type("Revenue grew");
   await waitUntilSaved(page);
-  await expect(page).toHaveTitle("Quarterly report - Docs");
+  await expect(page).toHaveTitle("Quarterly report - Pubky Write");
 
-  await page.getByLabel("Docs home").click();
+  await page.getByLabel("Pubky Write home").click();
   await page.getByLabel("Search documents").fill("revenue grew");
   await expect(page.getByRole("list", { name: "Documents" }).getByRole("link")).toHaveText([/Quarterly report/]);
 

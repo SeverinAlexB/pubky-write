@@ -1,4 +1,4 @@
-import type { DocumentSort, DocumentSummary } from "@docs/shared";
+import type { DocumentSort, DocumentSummary } from "@pubky-write/shared";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Icon } from "../components/Icon.tsx";

@@ -1,11 +1,11 @@
-# Docs
+# Pubky Write
 
 A single-user document editor: a document list, a
 page-style rich-text editor with autosave, version history and export to Word,
 Markdown and PDF.
 
-The design follows how the reference product saves edits (see
-[docs/research.md](docs/research.md)), so real-time collaboration can be added
+Edits are saved as version-stamped batches of editing steps (see
+[client/src/editor/sync.ts](client/src/editor/sync.ts)), so real-time collaboration can be added
 later without changing the storage model.
 
 ## Requirements
@@ -351,7 +351,7 @@ To restore a backup:
 - **Make a copy:** File > Make a copy creates "Copy of <title>" without the
   comments.
 
-Keyboard shortcuts follow the reference product, for example ⌘K for links, ⌘⌥1–3 for
+Keyboard shortcuts include, for example, ⌘K for links, ⌘⌥1–3 for
 headings, ⌘⇧8 for bulleted lists and ⌘⌥⇧H for version history.
 
 ## How saving works

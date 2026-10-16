@@ -1,4 +1,4 @@
-import type { DocumentSummary } from "@docs/shared";
+import type { DocumentSummary } from "@pubky-write/shared";
 import type { JSONContent } from "@tiptap/core";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.ts";

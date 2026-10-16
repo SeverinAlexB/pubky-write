@@ -1,4 +1,4 @@
-import { documentSchema, toMarkdown } from "@docs/shared";
+import { documentSchema, toMarkdown } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";

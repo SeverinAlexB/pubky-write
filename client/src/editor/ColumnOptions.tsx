@@ -1,5 +1,5 @@
 // Format > Columns: three presets (one, two and three columns) and the Column options dialog.
-import { columnSpacingCm, MAX_COLUMN_SPACING_PT, MAX_COLUMNS, PT_PER_CM, type ColumnSettings } from "@docs/shared";
+import { columnSpacingCm, MAX_COLUMN_SPACING_PT, MAX_COLUMNS, PT_PER_CM, type ColumnSettings } from "@pubky-write/shared";
 import { useEffect, useRef, useState } from "react";
 
 const presets = [1, 2, 3] as const;

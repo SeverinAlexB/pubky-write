@@ -1,5 +1,5 @@
 // Hooks shared by the editor and the version history preview.
-import { pageGeometry, paperSizes, type PageSetup } from "@docs/shared";
+import { pageGeometry, paperSizes, type PageSetup } from "@pubky-write/shared";
 import { useEffect, useState } from "react";
 
 /** Space kept on each side of the page when zoomed to fit. */

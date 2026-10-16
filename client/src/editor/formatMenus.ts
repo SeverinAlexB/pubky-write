@@ -1,4 +1,4 @@
-import { DEFAULT_LINE_SPACING, lineSpacings, paragraphSpace } from "@docs/shared";
+import { DEFAULT_LINE_SPACING, lineSpacings, paragraphSpace } from "@pubky-write/shared";
 import type { Editor } from "@tiptap/react";
 import type { MenuEntry, MenuItem } from "../components/MenuList.tsx";
 import { shortcutText } from "../shortcuts.ts";

@@ -1,4 +1,4 @@
-import type { ImportResponse } from "@docs/shared";
+import type { ImportResponse } from "@pubky-write/shared";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { api } from "../api.ts";
 import { Icon } from "../components/Icon.tsx";

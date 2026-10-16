@@ -3,7 +3,7 @@
 // `<!-- page break -->`, and `$…$` (or `$$…$$`) as an equation. Other HTML is dropped.
 //
 // A level 1 heading stays Heading 1: Markdown cannot tell it apart from a Title.
-import { MAX_EQUATION_LENGTH } from "@docs/shared";
+import { MAX_EQUATION_LENGTH } from "@pubky-write/shared";
 import type { JSONContent } from "@tiptap/core";
 import MarkdownIt from "markdown-it";
 import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";

@@ -1,7 +1,7 @@
 // Highlight changes in the version history preview: text added in the shown version is marked,
 // text it removed is shown struck through where it was. Every element of edit `i` carries
 // `data-edit="i"`, so Previous edit and Next edit can find it.
-import type { VersionEdit } from "@docs/shared";
+import type { VersionEdit } from "@pubky-write/shared";
 import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";

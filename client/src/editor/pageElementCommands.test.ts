@@ -1,4 +1,4 @@
-import { documentSchema, pageElementsOf, regionText } from "@docs/shared";
+import { documentSchema, pageElementsOf, regionText } from "@pubky-write/shared";
 import { EditorState } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 import { addPageNumbers, currentPageNumberOptions } from "./pageElementCommands.ts";

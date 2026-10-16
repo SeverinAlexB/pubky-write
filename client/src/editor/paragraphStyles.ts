@@ -1,4 +1,4 @@
-import { paragraphStyleOf, type ParagraphStyleId } from "@docs/shared";
+import { paragraphStyleOf, type ParagraphStyleId } from "@pubky-write/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import type { CSSProperties } from "react";

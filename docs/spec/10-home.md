@@ -6,7 +6,7 @@ Measurements at 1440 × 900.
 
 - Left: a 48px round "Main menu" button (hamburger icon; P2: opens a drawer
   with links to the document list and Preferences), then the app logo and the
-  name "Docs" (22px, secondary text colour).
+  name "Pubky Write" (22px, secondary text colour).
 - Centre: a search pill about 720px wide, 48px high, radius 24px, background
   `#f1f4f8` (focused: white with the card shadow), a search icon at the left,
   placeholder "Search", and a "Clear search" × at the right while it has text.

@@ -17,7 +17,7 @@ import {
   type OpenedDocument,
   type PageSetup,
   type Revision,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { getText, getTextSerializersFromSchema } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { closeHistory as startUndoStep } from "./tabHistory.ts";
@@ -385,7 +385,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   }
 
   useEffect(() => {
-    document.title = `${title || "Untitled document"} - Docs`;
+    document.title = `${title || "Untitled document"} - Pubky Write`;
   }, [title]);
 
   useEffect(() => {
@@ -1041,7 +1041,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     copy: () => editor.commands.focus() && document.execCommand("copy"),
     copyAsMarkdown: async () => {
       const { from, to } = editor.state.selection;
-      const { toMarkdown } = await import("@docs/shared/markdown");
+      const { toMarkdown } = await import("@pubky-write/shared/markdown");
       await navigator.clipboard.writeText(toMarkdown(editor.state.doc.cut(from, to)).trimEnd());
     },
     paste: () => void pasteFromClipboard(editor, true),
@@ -1234,7 +1234,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
       <div className="editor-app" hidden={historyOpen}>
         {!menusHidden && (
           <header className="editor-header">
-            <Link to="/" className="doc-logo" aria-label="Docs home" data-tooltip="Docs home">
+            <Link to="/" className="doc-logo" aria-label="Pubky Write home" data-tooltip="Pubky Write home">
               <img src="/favicon.svg" alt="" width={24} height={32} />
             </Link>
             <div className="editor-header-main">

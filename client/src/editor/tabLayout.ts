@@ -6,7 +6,7 @@
 // out one after another. To keep the number of layouts small, the n-th tab of every paragraph is
 // measured in the same round: one browser layout per round, as many rounds as the paragraph with
 // the most tabs has tabs.
-import { decodeTabStops, PX_PER_PT, tabAdvance, type TabStop } from "@docs/shared";
+import { decodeTabStops, PX_PER_PT, tabAdvance, type TabStop } from "@pubky-write/shared";
 import { Extension, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, type EditorState } from "@tiptap/pm/state";

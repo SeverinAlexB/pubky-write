@@ -1,4 +1,4 @@
-import { documentSchema } from "@docs/shared";
+import { documentSchema } from "@pubky-write/shared";
 import { history, undo } from "@tiptap/pm/history";
 import { Node } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";

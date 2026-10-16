@@ -1,4 +1,4 @@
-import { DocsEquation, DocsImage, DocsTable, documentExtensions, paragraphStyleDefinitions, paragraphStyleOf } from "@docs/shared";
+import { DocsEquation, DocsImage, DocsTable, documentExtensions, paragraphStyleDefinitions, paragraphStyleOf } from "@pubky-write/shared";
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import type { Mark, Node } from "@tiptap/pm/model";

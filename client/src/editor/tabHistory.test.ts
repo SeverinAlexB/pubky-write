@@ -1,4 +1,4 @@
-import { documentSchema, findTab, type TabAttrs } from "@docs/shared";
+import { documentSchema, findTab, type TabAttrs } from "@pubky-write/shared";
 import type { JSONContent } from "@tiptap/core";
 import { Node } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Command, type Transaction } from "@tiptap/pm/state";

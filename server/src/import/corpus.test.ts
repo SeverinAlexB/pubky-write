@@ -4,8 +4,8 @@
 // structure. Set DOCX_CORPUS_DIR to run the same checks over a larger folder of .docx files.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import { commentQuote, documentSchema, emptyDocument, footnotesOf, pageElementsOf, regionKeys, replaceDifference } from "@docs/shared";
-import { mathPlainText, parseLatex } from "@docs/shared/equations";
+import { commentQuote, documentSchema, emptyDocument, footnotesOf, pageElementsOf, regionKeys, replaceDifference } from "@pubky-write/shared";
+import { mathPlainText, parseLatex } from "@pubky-write/shared/equations";
 import { Node } from "@tiptap/pm/model";
 import JSZip from "jszip";
 import { xml2js } from "xml-js";

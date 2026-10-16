@@ -7,7 +7,7 @@ import {
   type PageGeometry,
   type TabStop,
   type TabStopKind,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { closeHistory } from "./tabHistory.ts";
 import type { Editor } from "@tiptap/react";
 import {

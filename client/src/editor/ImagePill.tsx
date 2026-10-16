@@ -9,7 +9,7 @@ import {
   type ImageLayout,
   type ImagePositioning,
   type ImageWrap,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { NodeSelection } from "@tiptap/pm/state";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useState } from "react";

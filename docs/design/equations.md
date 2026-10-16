@@ -62,7 +62,7 @@ equation holds `raw` LaTeX: its MathML for that part is put in place of the raw 
 | Chunk | Size (min / gzip) | Loaded |
 | --- | --- | --- |
 | The `equation` node, the editing plugin and the node view (`equations.ts`, `load.ts`) | about 3 KB in the editor's bundle | with the editor |
-| The model, LaTeX, MathML and editing (`equationCode.ts` and `@docs/shared/equations`) | 28.5 KB / 9.8 KB | before a document with an equation is shown (`EditorPage`, which checks the content and the headers, footers and footnotes); otherwise when the editor is idle (like the dialogs), or with the first equation inserted, pasted or opened in version history if that is sooner |
+| The model, LaTeX, MathML and editing (`equationCode.ts` and `@pubky-write/shared/equations`) | 28.5 KB / 9.8 KB | before a document with an equation is shown (`EditorPage`, which checks the content and the headers, footers and footnotes); otherwise when the editor is idle (like the dialogs), or with the first equation inserted, pasted or opened in version history if that is sooner |
 | The equation toolbar | 4.7 KB / 1.8 KB | while it is shown |
 | temml | 204 KB / 60 KB | only for LaTeX the model does not cover |
 

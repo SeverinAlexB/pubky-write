@@ -2,7 +2,7 @@
 // (spec 16, round 5 amendment). A CSS view of the editor can hide inserted text but cannot restore
 // earlier formatting, paragraphs, lists or image settings, so the rejected document itself is shown,
 // read-only, in pages of its own in place of the editor's (see docs/design/suggesting.md).
-import { DocsEquation, DocsImage, DocsTable, documentExtensions, rejectedDocument, type Suggestion } from "@docs/shared";
+import { DocsEquation, DocsImage, DocsTable, documentExtensions, rejectedDocument, type Suggestion } from "@pubky-write/shared";
 import type { Node } from "@tiptap/pm/model";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useMemo, useRef } from "react";

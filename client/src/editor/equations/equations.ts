@@ -3,8 +3,8 @@
 // (a NodeSelection) and the plugin keeps the caret inside it with the equation's model; keys typed
 // change the model (equationCode.ts) and every change of its LaTeX is an ordinary step. See
 // docs/design/equations.md.
-import { DocsEquation } from "@docs/shared";
-import type { Caret, MathRow } from "@docs/shared/equations";
+import { DocsEquation } from "@pubky-write/shared";
+import type { Caret, MathRow } from "@pubky-write/shared/equations";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, PluginKey, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView, type NodeView } from "@tiptap/pm/view";

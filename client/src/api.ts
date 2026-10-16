@@ -13,7 +13,7 @@ import {
   type RevisionWithContent,
   type StepsConflictResponse,
   type UploadResponse,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { storedPageSetupDefaults } from "./pageSetupDefaults.ts";
 
 export class ApiError extends Error {

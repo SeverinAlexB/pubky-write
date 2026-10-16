@@ -1,4 +1,4 @@
-import { documentSchema } from "@docs/shared";
+import { documentSchema } from "@pubky-write/shared";
 import { closeHistory as closeLibraryHistory, history, undo } from "@tiptap/pm/history";
 import { Node } from "@tiptap/pm/model";
 import { wrapInList } from "@tiptap/pm/schema-list";

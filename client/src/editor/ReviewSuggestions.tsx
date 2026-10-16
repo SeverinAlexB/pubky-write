@@ -1,6 +1,6 @@
 // Tools > Review suggested edits: a card at the top right of the editor area that steps through
 // the suggestions, previews accepting or rejecting all of them, and accepts or rejects them.
-import type { Suggestion } from "@docs/shared";
+import type { Suggestion } from "@pubky-write/shared";
 import { Icon } from "../components/Icon.tsx";
 import { Menu } from "../components/Menu.tsx";
 import type { SuggestionView } from "./suggesting.ts";

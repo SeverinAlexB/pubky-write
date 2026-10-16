@@ -43,12 +43,12 @@ import {
   storedTabStops,
   type ParagraphStyleId,
   type RegionContent,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import type { JSONContent } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
-import type { TabStopKind } from "@docs/shared";
-import { toLatex } from "@docs/shared/equations";
+import type { TabStopKind } from "@pubky-write/shared";
+import { toLatex } from "@pubky-write/shared/equations";
 import JSZip from "jszip";
 import { xml2js } from "xml-js";
 import { ommlToMath } from "../omml.ts";

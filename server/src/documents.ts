@@ -16,7 +16,7 @@ import {
   type OpenedDocument,
   type Revision,
   type StepsConflictResponse,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { Mapping, Step, Transform } from "@tiptap/pm/transform";
 import { listComments, listSuggestionReplies, mapComments } from "./comments.ts";

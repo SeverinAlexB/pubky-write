@@ -1,6 +1,6 @@
 // The right-click menu of the document. Shift+right-click shows the browser's menu instead, so
 // its spell-check suggestions stay reachable.
-import { commentQuote } from "@docs/shared";
+import { commentQuote } from "@pubky-write/shared";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import type { Editor } from "@tiptap/react";

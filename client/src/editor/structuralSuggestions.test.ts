@@ -1,4 +1,4 @@
-import { applySuggestions, collectSuggestions, describeSuggestion, descriptionText, documentSchema, hasSuggestions } from "@docs/shared";
+import { applySuggestions, collectSuggestions, describeSuggestion, descriptionText, documentSchema, hasSuggestions } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import { EditorState, NodeSelection, TextSelection, type Selection, type Transaction } from "@tiptap/pm/state";
 import { addColumnAfter, addRowAfter, CellSelection, deleteColumn, deleteRow, mergeCells } from "@tiptap/pm/tables";

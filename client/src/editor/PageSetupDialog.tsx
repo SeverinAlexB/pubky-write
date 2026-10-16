@@ -8,7 +8,7 @@ import {
   type PageOrientation,
   type PageSetup,
   type PaperSize,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { usePopover } from "../components/usePopover.ts";
 import { storePageSetupDefaults } from "../pageSetupDefaults.ts";

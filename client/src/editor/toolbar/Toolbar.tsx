@@ -1,4 +1,4 @@
-import { listPresetAt } from "@docs/shared";
+import { listPresetAt } from "@pubky-write/shared";
 import type { Editor } from "@tiptap/react";
 import { isValidElement, useCallback, useRef, type ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";

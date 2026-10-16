@@ -28,7 +28,7 @@ export function HomeHeader({ query, onQueryChange, templatesShown, onTemplatesSh
         </button>
         <Link to="/" className="brand">
           <img src="/favicon.svg" alt="" width={30} height={40} />
-          <span>Docs</span>
+          <span>Pubky Write</span>
         </Link>
       </div>
       <div className="search" role="search">
@@ -90,12 +90,12 @@ function MainMenu({ templatesShown, onTemplatesShownChange, onClose }: MainMenuP
     >
       <div className="home-drawer-brand">
         <img src="/favicon.svg" alt="" width={30} height={40} />
-        <span>Docs</span>
+        <span>Pubky Write</span>
       </div>
       <nav aria-label="Apps">
         <Link to="/" className="home-drawer-item" aria-current="page" onClick={onClose}>
           <Icon name="description" size={24} className="document-icon" />
-          Docs
+          Pubky Write
         </Link>
       </nav>
       <div className="home-drawer-separator" />

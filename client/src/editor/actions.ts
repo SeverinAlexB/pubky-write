@@ -1,4 +1,4 @@
-import type { ListKind, TocStyle } from "@docs/shared";
+import type { ListKind, TocStyle } from "@pubky-write/shared";
 import type { PageNumberOptions } from "./pageElementCommands.ts";
 import type { EditorMode } from "./suggesting.ts";
 

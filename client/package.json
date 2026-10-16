@@ -1,5 +1,5 @@
 {
-  "name": "@docs/client",
+  "name": "@pubky-write/client",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@docs/shared": "*",
+    "@pubky-write/shared": "*",
     "@fontsource/roboto": "^5.3.0",
     "@fontsource/roboto-mono": "^5.3.0",
     "@material-symbols/svg-400": "^0.48.0",

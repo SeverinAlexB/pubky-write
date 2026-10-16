@@ -1,4 +1,4 @@
-import { documentSchema, type CommentThread } from "@docs/shared";
+import { documentSchema, type CommentThread } from "@pubky-write/shared";
 import { Transform } from "@tiptap/pm/transform";
 import { beforeEach, describe, expect, it } from "vitest";
 import {

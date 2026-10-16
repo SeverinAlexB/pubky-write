@@ -1,6 +1,6 @@
 // The equation code that is loaded with the first equation (see equations.ts): drawing equations
 // as MathML, the caret, and the keys typed while the cursor is in an equation.
-import { registerEquationRenderer } from "@docs/shared";
+import { registerEquationRenderer } from "@pubky-write/shared";
 import {
   backspace,
   caretPositions,
@@ -28,7 +28,7 @@ import {
   type EquationState,
   type MathElement,
   type MathRow,
-} from "@docs/shared/equations";
+} from "@pubky-write/shared/equations";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";

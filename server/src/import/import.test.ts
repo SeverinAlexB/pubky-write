@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { documentSchema, paragraphIndents, regionText, toMarkdown } from "@docs/shared";
+import { documentSchema, paragraphIndents, regionText, toMarkdown } from "@pubky-write/shared";
 import { Node } from "@tiptap/pm/model";
 import {
   AlignmentType,

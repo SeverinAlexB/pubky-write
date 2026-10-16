@@ -1,6 +1,6 @@
 // Tables in the editor: the node view with proportional columns, dragging column borders, and
 // the Format > Table and right-click commands that prosemirror-tables does not have.
-import { columnFractions, DocsTable, percent, tableStyle } from "@docs/shared";
+import { columnFractions, DocsTable, percent, tableStyle } from "@pubky-write/shared";
 import { Extension } from "@tiptap/core";
 import { closeHistory } from "./tabHistory.ts";
 import { Fragment, type Node } from "@tiptap/pm/model";

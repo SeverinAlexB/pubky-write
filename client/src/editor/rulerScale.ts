@@ -1,4 +1,4 @@
-import { pointsPerUnit, PX_PER_PT, type LengthUnit } from "@docs/shared";
+import { pointsPerUnit, PX_PER_PT, type LengthUnit } from "@pubky-write/shared";
 
 export type RulerTick = {
   /** Distance from the page edge in screen pixels (zoom applied). */

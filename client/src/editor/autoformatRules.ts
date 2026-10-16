@@ -1,6 +1,6 @@
 // The automatic changes of Tools > Preferences, as a pure function of the text before the cursor.
 // See autoformat.ts for how they are applied to the document.
-import { bulletPresets, numberedPresets, type ListKind } from "@docs/shared";
+import { bulletPresets, numberedPresets, type ListKind } from "@pubky-write/shared";
 import type { Preferences, Substitution } from "./preferences.ts";
 
 export type BlockChange =

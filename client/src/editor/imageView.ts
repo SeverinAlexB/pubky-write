@@ -18,7 +18,7 @@ import {
   wrapSide,
   type ImageCrop,
   type ImageLayout,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { Extension } from "@tiptap/core";
 import { closeHistory } from "./tabHistory.ts";
 import type { Node } from "@tiptap/pm/model";

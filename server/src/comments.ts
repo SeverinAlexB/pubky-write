@@ -1,6 +1,6 @@
 // Comment threads. Anchors are kept in step with the document: applySteps calls mapComments
 // with the same steps it applies, so stored positions always refer to the current version.
-import { commentQuote, mapAnchor, type CommentMessage, type CommentThread, type CreateCommentRequest, type Reaction } from "@docs/shared";
+import { commentQuote, mapAnchor, type CommentMessage, type CommentThread, type CreateCommentRequest, type Reaction } from "@pubky-write/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { Mappable } from "@tiptap/pm/transform";
 import type { Database } from "./database.ts";

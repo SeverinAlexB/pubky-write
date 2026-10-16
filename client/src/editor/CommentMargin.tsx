@@ -9,7 +9,7 @@ import {
   type CommentThread,
   type Suggestion,
   type SuggestionDescription,
-} from "@docs/shared";
+} from "@pubky-write/shared";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";

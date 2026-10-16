@@ -9,7 +9,7 @@ import {
   type AccentCommand,
   type MathAtom,
   type MathRow,
-} from "@docs/shared/equations";
+} from "@pubky-write/shared/equations";
 
 /** An OMML element with namespace prefixes removed, as the Word import reads XML. */
 export type OmmlElement = { name: string; attributes: Record<string, string>; children: OmmlElement[]; text: string };

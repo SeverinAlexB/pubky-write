@@ -8,7 +8,7 @@ import {
   parseLatex,
   relations,
   type MathRow,
-} from "@docs/shared/equations";
+} from "@pubky-write/shared/equations";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";
