@@ -1,8 +1,8 @@
 // Text on both sides of a wrapped image (spec 19, round 5 amendment; see docs/design/images.md).
 // A CSS float has text on one side only. An image with at least 1 cm of free text width on both
-// sides is therefore a float that takes no width (imageFrameStyle with side "both"), and each line
-// beside it gets a gap: an inline-block widget from where the line's text would reach the image to
-// the image's right edge and margin. The line's text before the gap is the left part, the text after
+// sides therefore takes no room in the text (imageFrameStyle with side "both": positioned where it
+// is, like an image in front of text), and each line beside it gets a gap: an inline-block widget
+// from where the line's text would reach the image to the image's right edge and margin. The line's text before the gap is the left part, the text after
 // it the right part. Blocks other than text (tables, images in line, lines) beside the image start
 // below it, after a block widget of the missing height.
 //
