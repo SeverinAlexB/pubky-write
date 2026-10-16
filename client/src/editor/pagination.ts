@@ -50,6 +50,7 @@ import {
   supportsColumnBreaks,
 } from "./columnLayout.ts";
 import { placeFixedImages } from "./imagePlacement.ts";
+import { layOutImageWraps } from "./imageWrap.ts";
 import { pinnedRowCount, pinnedRowsKey, tableRowLines } from "./tableLayout.ts";
 import { layoutTabsIn } from "./tabLayout.ts";
 import { clientRect } from "./rects.ts";
@@ -494,9 +495,11 @@ class PaginationView {
     const stack = applyPageStyles(view);
     const state = paginationKey.getState(view.state)!;
     if (!stack) return false;
+    // Text on both sides of images changes where lines break, so it goes first.
+    const wrapped = layOutImageWraps(view, stack, state.enabled && columnsOf(view.state.doc).columns > 1);
     if (!state.enabled) {
       setPageCount(stack, 1);
-      return false;
+      return wrapped;
     }
 
     const geometry = pageGeometry(pageSetupOf(view.state.doc));
@@ -548,7 +551,7 @@ class PaginationView {
     const current = currentSpacers(view.state);
     if (sameRenderedSpacers(rendered, current) && state.layout && sameLayout(state.layout, layout)) {
       updatePageFields(view, stack, stride, scale);
-      return false;
+      return wrapped;
     }
 
     // A redraw writes the editor's selection back to the DOM. Read a caret move the browser has

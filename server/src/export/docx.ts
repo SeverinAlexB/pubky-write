@@ -60,7 +60,10 @@ import {
   bulletPresets,
   columnFractions,
   columnsOf,
+  columnWidths,
   imageLayoutOf,
+  wrapSide,
+  type WrapSide,
   DEFAULT_TABLE_BORDER_COLOR,
   DEFAULT_TABLE_BORDER_WIDTH_PT,
   isSize,
@@ -384,6 +387,9 @@ class DocxConverter {
   /** Word needs a unique id on every revision element. */
   private revisionCount = 0;
 
+  /** The width between the page's margins, in twips (`contentWidth` is a cell's inside tables). */
+  private readonly pageContentWidth: number;
+
   /** Where each of the document's textblocks starts, in document order (a node can occur more than once). */
   private readonly textblockPositions = new Map<Node, number[]>();
 
@@ -394,6 +400,7 @@ class DocxConverter {
     /** Comment range starts and ends, by position; written as they are reached. */
     private readonly commentEvents: CommentEvent[] = [],
   ) {
+    this.pageContentWidth = contentWidth;
     if (commentEvents.length > 0) {
       doc.descendants((node, pos) => {
         if (!node.isTextblock) return true;
@@ -772,6 +779,16 @@ class DocxConverter {
   }
 
   /**
+   * Where text goes beside a wrapped image `width` CSS pixels wide, as in the editor: from its
+   * column's width (in a table cell, the cell's).
+   */
+  private wrapSideOf(node: Node, width: number): WrapSide {
+    const content = this.contentWidth / TWIPS_PER_PX;
+    const column = this.contentWidth === this.pageContentWidth ? columnWidths(columnsOf(this.doc), content).width : content;
+    return wrapSide(imageLayoutOf(node.attrs), width, column);
+  }
+
+  /**
    * At the size set in the editor, or the natural size; never wider than the page's content. With
    * its rotation and crop, and anchored with its text wrapping and position when it is not in line.
    */
@@ -801,7 +818,7 @@ class DocxConverter {
       ...(layout.crop && {
         crop: { left: percent(layout.crop.left), top: percent(layout.crop.top), right: percent(layout.crop.right), bottom: percent(layout.crop.bottom) },
       }),
-      ...(floatingOptions(node) && { floating: floatingOptions(node) }),
+      ...(layout.wrap !== "inline" && { floating: floatingOptions(node, this.wrapSideOf(node, shown.width)) }),
       // An inserted or deleted image: its run in w:ins or w:del.
       ...this.revisionOf(tracked),
       altText: node.attrs.alt || node.attrs.title
@@ -885,12 +902,13 @@ class DocxConverter {
 const EMU_PER_PX = 9525;
 
 /**
- * The anchor of an image that is not in line with text: Wrap text wraps square on both sides,
- * Break text tops and bottoms, Behind and In front of text do not wrap. Move with text positions
- * it from the column and paragraph, Fix position on page from the top of the page (and, behind or
- * in front of text, from its left edge).
+ * The anchor of an image that is not in line with text: Wrap text wraps square, on both sides when
+ * the editor puts text on both (`side`, from the image's width and its column's) and otherwise on
+ * the largest side, Break text tops and bottoms, Behind and In front of text do not wrap. Move with
+ * text positions it from the column and paragraph, Fix position on page from the top of the page
+ * (and, behind or in front of text, from its left edge).
  */
-export function floatingOptions(node: Node): IFloating | undefined {
+export function floatingOptions(node: Node, side: WrapSide = "both"): IFloating | undefined {
   const layout = imageLayoutOf(node.attrs);
   if (layout.wrap === "inline") return undefined;
   const emu = (px: number) => Math.round(px * EMU_PER_PX);
@@ -898,7 +916,7 @@ export function floatingOptions(node: Node): IFloating | undefined {
   const fixed = layout.positioning === "fixed";
   const free = layout.wrap === "behind" || layout.wrap === "front";
   const wrap = {
-    wrap: { type: TextWrappingType.SQUARE, side: TextWrappingSide.BOTH_SIDES },
+    wrap: { type: TextWrappingType.SQUARE, side: side === "both" ? TextWrappingSide.BOTH_SIDES : TextWrappingSide.LARGEST },
     break: { type: TextWrappingType.TOP_AND_BOTTOM },
     behind: { type: TextWrappingType.NONE },
     front: { type: TextWrappingType.NONE },

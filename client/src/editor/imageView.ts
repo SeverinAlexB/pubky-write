@@ -27,6 +27,7 @@ import { Decoration, DecorationSet, type EditorView, type NodeView } from "@tipt
 import { currentTab } from "./documentTabs.ts";
 import { PENDING_IMAGE } from "./paste.ts";
 import { paginationKey, PAGE_GAP } from "./pagination.ts";
+import { ImageWrap, registerWrapSide } from "./imageWrap.ts";
 import { clientRect } from "./rects.ts";
 
 /** Handle names and the direction each one moves the right/bottom edge: -1, 0 or 1. */
@@ -166,6 +167,8 @@ class ImageView implements NodeView {
     // width: known once the frame is on the page and the picture has loaded.
     this.image.addEventListener("load", () => this.refreshFrame());
     queueMicrotask(() => this.refreshFrame());
+    // The pagination lets it pick its side again before laying out text on both sides of it.
+    registerWrapSide(this.dom, () => this.refreshFrame());
     // Images in line with text are dragged by the editor; the others move with startMove.
     this.dom.addEventListener("dragstart", (event) => {
       if (this.busy || this.layout.wrap !== "inline" || this.cropping) event.preventDefault();
@@ -243,8 +246,12 @@ class ImageView implements NodeView {
     const kept = ["--image-page-top", "--image-page-shift"].map((name) => [name, this.dom.style.getPropertyValue(name)] as const);
     const shownWidth = this.shownSize().width;
     const side = layout.wrap === "wrap" ? wrapSide(layout, shownWidth, columnWidth(this.dom)) : "left";
-    this.dom.setAttribute("style", imageFrameStyle(layout, shownWidth || null, side));
-    for (const [name, value] of kept) if (value) this.dom.style.setProperty(name, value);
+    if (layout.wrap === "wrap") this.dom.dataset.wrapSide = side;
+    else delete this.dom.dataset.wrapSide;
+    const style = [imageFrameStyle(layout, shownWidth || null, side), ...kept.filter(([, value]) => value).map(([name, value]) => `${name}: ${value}`)]
+      .filter(Boolean)
+      .join("; ");
+    if (this.dom.getAttribute("style") !== style) this.dom.setAttribute("style", style);
   }
 
   /** The image's size on the page in CSS pixels: the stored one, or as drawn. */
@@ -750,7 +757,7 @@ export const EditorImage = DocsImage.extend({
     return ({ node, view, getPos }) => new ImageView(node, view, getPos);
   },
   addExtensions() {
-    return [ImageCrop];
+    return [ImageCrop, ImageWrap];
   },
 });
 

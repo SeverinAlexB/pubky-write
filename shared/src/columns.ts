@@ -6,7 +6,7 @@
 import { Extension, Node as TiptapNode } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, Selection } from "@tiptap/pm/state";
-import { PT_PER_CM } from "./pageSetup.ts";
+import { PT_PER_CM, PX_PER_PT } from "./pageSetup.ts";
 
 export type ColumnSettings = {
   /** 1, 2 or 3. */
@@ -41,6 +41,16 @@ export function columnsOf(doc: Node): ColumnSettings {
     columnSpacing: isColumnSpacing(columnSpacing) ? columnSpacing : DEFAULT_COLUMN_SPACING_PT,
     columnLine: columnLine === true,
   };
+}
+
+/**
+ * The width of a column and the space between columns, in CSS pixels, for a content width (between
+ * the page's margins) in CSS pixels. The spacing never leaves a column narrower than 1 cm.
+ */
+export function columnWidths(settings: ColumnSettings, contentWidth: number): { width: number; gap: number } {
+  const { columns, columnSpacing } = settings;
+  const gap = Math.max(0, Math.min(columnSpacing * PX_PER_PT, (contentWidth - columns * 38) / Math.max(1, columns - 1)));
+  return { width: columns > 1 ? (contentWidth - gap * (columns - 1)) / columns : contentWidth, gap };
 }
 
 /** Spacing in centimetres, as the Column options dialog shows it (two decimals). */

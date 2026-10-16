@@ -134,11 +134,22 @@ export function croppedImageStyle(crop: ImageCrop): string {
 }
 
 /**
+ * Where text goes beside a wrapped image: on both sides ("both"), or the side the image floats to
+ * ("left": the text is on its right, "right": on its left).
+ */
+export type WrapSide = "left" | "right" | "both";
+
+/** The free text width needed on each side of a wrapped image for text on both sides: 1 cm, in CSS pixels. */
+export const MIN_WRAP_SIDE = 96 / 2.54;
+
+/**
  * The style of the image's frame for its wrap mode, without what depends on the page layout (a
  * fixed position on the page is set by the pagination). `side` is where a wrapped image floats: the
- * text goes on the other, wider side.
+ * text goes on the other, wider side. With text on both sides it takes no room in the text at all
+ * (like an image in front of text): the editor keeps the lines beside it off the image
+ * (client/src/editor/imageWrap.ts).
  */
-export function imageFrameStyle(layout: ImageLayout, width: number | null, side: "left" | "right" = "left"): string {
+export function imageFrameStyle(layout: ImageLayout, width: number | null, side: WrapSide = "left"): string {
   const margin = `${round(layout.wrapMargin * (96 / 72))}px`;
   const styles: string[] = [];
   const fixed = layout.positioning === "fixed";
@@ -155,9 +166,10 @@ export function imageFrameStyle(layout: ImageLayout, width: number | null, side:
       styles.push(`margin: ${margin} 0 ${margin} ${round(x)}px`, `margin-top: ${top(margin)}`);
       break;
     case "wrap":
-      styles.push(`float: ${side}`);
-      if (side === "left") styles.push(`margin: 0 ${margin} ${margin} ${round(x)}px`);
+      if (side === "both") styles.push("position: absolute", `margin: 0 0 0 ${round(x)}px`);
+      else if (side === "left") styles.push("float: left", `margin: 0 ${margin} ${margin} ${round(x)}px`);
       else {
+        styles.push("float: right");
         const right = width === null ? "0px" : `calc(100% - ${round(x + width)}px)`;
         styles.push(`margin: 0 max(0px, ${right}) ${margin} ${margin}`);
       }
@@ -174,10 +186,15 @@ export function imageFrameStyle(layout: ImageLayout, width: number | null, side:
   return styles.join("; ");
 }
 
-/** Whether a wrapped image floats left (text on its right) or right, given the width of its column. */
-export function wrapSide(layout: ImageLayout, width: number, columnWidth: number): "left" | "right" {
-  const left = layout.offsetX;
-  const right = columnWidth - layout.offsetX - width;
+/**
+ * Where the text of a wrapped image goes, given the width of its column: on both sides when each has
+ * at least 1 cm of free text width (beyond the image's margin), otherwise on the wider side.
+ */
+export function wrapSide(layout: ImageLayout, width: number, columnWidth: number): WrapSide {
+  const margin = layout.wrapMargin * (96 / 72);
+  const left = Math.max(0, layout.offsetX);
+  const right = columnWidth - left - width;
+  if (left - margin >= MIN_WRAP_SIDE && right - margin >= MIN_WRAP_SIDE) return "both";
   return right >= left ? "left" : "right";
 }
 

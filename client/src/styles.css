@@ -3152,6 +3152,31 @@ button:disabled {
   max-width: none;
 }
 
+/*
+ * Wrap text with room on both sides (editor/imageWrap.ts): each line beside the image has a gap as
+ * wide as the image and its margin, and blocks that are not text start below it.
+ */
+.page-content .image-wrap-gap {
+  display: inline-block;
+  height: 0;
+  vertical-align: baseline;
+  user-select: none;
+  pointer-events: none;
+}
+
+.page-content .image-wrap-clear {
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* While the gaps are measured: no spacers or gaps, and copies of the textblocks in their place. */
+.page-stack.is-measuring-wraps .page-content :is(.page-spacer, .column-spacer, .table-page-spacer),
+.page-stack.is-measuring-wraps .page-content :is(.image-wrap-gap, .image-wrap-clear):not(.is-measure),
+.page-stack.is-measuring-wraps .page-content .is-wrap-measured {
+  display: none;
+}
+
 /* Crop image: the whole image dimmed, the part that stays bright, and black crop handles. */
 .image-frame.is-cropping > .image-crop,
 .image-frame.is-cropping > .image-handles {

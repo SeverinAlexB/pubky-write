@@ -3,7 +3,7 @@
 import { Node } from "@tiptap/pm/model";
 import { Step, Transform } from "@tiptap/pm/transform";
 import { describe, expect, it } from "vitest";
-import { columnsOf, columnSpacingCm, defaultColumnSettings } from "./columns.ts";
+import { columnsOf, columnSpacingCm, columnWidths, defaultColumnSettings } from "./columns.ts";
 import { imageFilterStyle, imageFrameStyle, imageLayoutOf, imageMarginLabel, isImageCrop, normalizeRotation, wrapSide } from "./images.ts";
 import { replaceDifference } from "./versionDiff.ts";
 import { documentSchema } from "./schema.ts";
@@ -66,6 +66,13 @@ describe("column settings", () => {
     expect(columnSpacingCm(36)).toBe(1.27);
   });
 
+  it("divide the content width into equal columns, never narrower than 1 cm", () => {
+    expect(columnWidths({ columns: 1, columnSpacing: 36, columnLine: false }, 602).width).toBe(602);
+    expect(columnWidths({ columns: 2, columnSpacing: 36, columnLine: false }, 602)).toEqual({ width: 277, gap: 48 });
+    // 216pt (288px) of spacing would leave three columns 9px wide: the spacing shrinks.
+    expect(columnWidths({ columns: 3, columnSpacing: 216, columnLine: false }, 602).width).toBe(38);
+  });
+
   it("allow column breaks in the body, not in headers", () => {
     const doc = Node.fromJSON(documentSchema, { type: "doc", content: [{ type: "paragraph" }, { type: "columnBreak" }, { type: "paragraph" }] });
     doc.check();
@@ -101,11 +108,23 @@ describe("image layout", () => {
   });
 
   it("floats wrapped images to the side with less room, so the text gets the wider side", () => {
-    const layout = imageLayoutOf({ wrap: "wrap", offsetX: 50 });
+    const layout = imageLayoutOf({ wrap: "wrap", offsetX: 30 });
     expect(wrapSide(layout, 200, 600)).toBe("left");
     expect(wrapSide({ ...layout, offsetX: 380 }, 200, 600)).toBe("right");
     expect(imageFrameStyle(layout, 200, "left")).toContain("float: left");
     expect(imageFrameStyle({ ...layout, offsetX: 380 }, 200, "right")).toContain("calc(100% - 580px)");
+  });
+
+  it("puts text on both sides of a wrapped image with 1 cm of free text width on each side beyond its margin", () => {
+    // The default margin is 3.2 mm (12px); 1 cm is 37.8px.
+    const layout = imageLayoutOf({ wrap: "wrap", offsetX: 50 });
+    expect(wrapSide(layout, 200, 600)).toBe("both");
+    expect(wrapSide({ ...layout, offsetX: 49 }, 200, 600)).toBe("left");
+    expect(wrapSide({ ...layout, offsetX: 300 }, 200, 600)).toBe("both");
+    expect(wrapSide({ ...layout, offsetX: 351 }, 200, 600)).toBe("right");
+    expect(wrapSide({ ...layout, wrapMargin: 0 }, 200, 600)).toBe("both");
+    // Out of the text's flow, where the image is.
+    expect(imageFrameStyle(layout, 200, "both")).toBe("position: absolute; margin: 0 0 0 50px; margin-top: 0px");
   });
 
   it("styles each wrap mode", () => {

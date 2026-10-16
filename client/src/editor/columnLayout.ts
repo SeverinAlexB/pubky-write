@@ -13,7 +13,7 @@
 // Firefox has no forced column breaks at all. There the content of every column but the tallest
 // is followed by a filler that takes it to just under the tallest column, so balancing has to
 // break the columns where the pagination did.
-import { columnsOf, PX_PER_PT, type PageGeometry } from "@docs/shared";
+import { columnsOf, columnWidths, type PageGeometry } from "@docs/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { contentBottom, contentTop, type PageFrame, type Pagination } from "./pageLayout.ts";
@@ -22,12 +22,9 @@ import { contentBottom, contentTop, type PageFrame, type Pagination } from "./pa
 export type ColumnGeometry = { count: number; width: number; gap: number; line: boolean };
 
 export function columnGeometry(doc: Node, geometry: PageGeometry): ColumnGeometry {
-  const { columns, columnSpacing, columnLine } = columnsOf(doc);
-  const content = geometry.width - geometry.marginLeft - geometry.marginRight;
-  // The spacing never leaves a column narrower than 1 cm.
-  const gap = Math.max(0, Math.min(columnSpacing * PX_PER_PT, (content - columns * 38) / Math.max(1, columns - 1)));
-  const width = columns > 1 ? (content - gap * (columns - 1)) / columns : content;
-  return { count: columns, width: round(width), gap: round(gap), line: columnLine };
+  const settings = columnsOf(doc);
+  const { width, gap } = columnWidths(settings, geometry.width - geometry.marginLeft - geometry.marginRight);
+  return { count: settings.columns, width: round(width), gap: round(gap), line: settings.columnLine };
 }
 
 /** Turns the page content into columns (or back), with print layout only. */

@@ -315,7 +315,7 @@ test("Wrap text flows the text beside the image, Break text above and below it; 
   await expect(frame).toHaveAttribute("data-positioning", "fixed");
   await expect.poll(async () => Math.round((await frameTop()) - before)).toBe(0);
 
-  // The Word file anchors the image with square wrapping, its margin and its place on the page.
+  // The Word file anchors the image with square wrapping (on its one side), its margin and its place on the page.
   const download = page.waitForEvent("download");
   await menuBarItem(page, "File").click();
   await page.getByRole("menuitem", { name: "Download" }).hover();
@@ -323,8 +323,153 @@ test("Wrap text flows the text beside the image, Break text above and below it; 
   const zip = await JSZip.loadAsync(await readFile(await (await download).path()));
   const xml = await zip.file("word/document.xml")!.async("string");
   expect(xml).toContain('<wp:anchor distT="457200" distB="457200" distL="457200" distR="457200"');
-  expect(xml).toContain('<wp:wrapSquare wrapText="bothSides"');
+  expect(xml).toContain('<wp:wrapSquare wrapText="largest"');
   expect(xml).toContain('<wp:positionV relativeFrom="page">');
+});
+
+/** Changes the attributes of the (first) image, as one undo step. */
+async function setImageAttrs(page: Page, attrs: Record<string, unknown>): Promise<void> {
+  await page.evaluate((changes) => {
+    type View = {
+      state: { doc: { descendants: (visit: (node: { type: { name: string }; attrs: Record<string, unknown> }, pos: number) => boolean) => void }; tr: unknown };
+      dispatch: (tr: unknown) => void;
+    };
+    const view = (document.querySelector(".ProseMirror") as unknown as { editor: { view: View } }).editor.view;
+    let found: { pos: number; attrs: Record<string, unknown> } | null = null;
+    view.state.doc.descendants((node, pos) => {
+      if (!found && node.type.name === "image") found = { pos, attrs: node.attrs };
+      return !found;
+    });
+    const image = found as unknown as { pos: number; attrs: Record<string, unknown> };
+    const tr = view.state.tr as { setNodeMarkup: (pos: number, type: undefined, attrs: Record<string, unknown>) => unknown };
+    view.dispatch(tr.setNodeMarkup(image.pos, undefined, { ...image.attrs, ...changes }));
+  }, attrs);
+}
+
+/**
+ * The text of a paragraph by line: each line's pieces of text (left and right edges), in client
+ * coordinates. A line beside an image with text on both sides has a piece on each side.
+ */
+function linePieces(paragraph: Locator) {
+  return paragraph.evaluate((element) => {
+    const lines: { top: number; bottom: number; pieces: { left: number; right: number }[] }[] = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (let index = 0; index < node.textContent!.length; index++) {
+        if (/\s/.test(node.textContent![index]!)) continue;
+        range.setStart(node, index);
+        range.setEnd(node, index + 1);
+        const rect = [...range.getClientRects()].find((box) => box.width > 0);
+        if (!rect) continue;
+        let line = lines.find((candidate) => Math.abs(candidate.top - rect.top) < 3);
+        if (!line) lines.push((line = { top: rect.top, bottom: rect.bottom, pieces: [] }));
+        const piece = line.pieces.find((candidate) => rect.left - candidate.right < 12);
+        if (piece) piece.right = Math.max(piece.right, rect.right);
+        else line.pieces.push({ left: rect.left, right: rect.right });
+      }
+    }
+    return lines.sort((a, b) => a.top - b.top);
+  });
+}
+
+/** Checks that no text of the paragraph is on the image or its margin, and returns the lines beside it. */
+async function linesBesideImage(paragraph: Locator, image: Locator, margin = 12) {
+  const box = (await image.boundingBox())!;
+  const lines = await linePieces(paragraph);
+  const beside = lines.filter((line) => line.bottom > box.y && line.top < box.y + box.height + margin);
+  for (const line of beside) {
+    for (const piece of line.pieces) {
+      const clear = piece.right <= box.x - margin + 1 || piece.left >= box.x + box.width + margin - 1;
+      expect(clear, `text at ${piece.left}–${piece.right} beside the image at ${box.x}–${box.x + box.width}`).toBe(true);
+    }
+  }
+  return { box, lines, beside };
+}
+
+test("Wrap text puts text on both sides of an image with 1 cm of room on each, and on the wider side otherwise", async ({ page }) => {
+  const image = await insertImageBeforeText(page);
+  const frame = editor(page).locator(".image-frame");
+  const wrapped = editor(page).locator("p", { hasText: "Wrapped." });
+  await chooseWrap(page, image, "Wrap text");
+  // In the middle of the content width.
+  await setImageAttrs(page, { offsetX: (CONTENT_WIDTH - 300) / 2 });
+  await expect(frame).toHaveAttribute("data-wrap-side", "both");
+  await expect(editor(page).locator(".image-wrap-gap").first()).toBeAttached();
+
+  const check = async () => {
+    const stackLeft = (await page.locator(".page-stack").boundingBox())!.x;
+    const { box, lines, beside } = await linesBesideImage(wrapped, image);
+    // Every line beside the image has text left of it, from the margin, and right of it, after its
+    // 3.2mm (12px) margin; the lines below use the whole width.
+    expect(beside.length).toBeGreaterThanOrEqual(8);
+    for (const line of beside.slice(0, -1)) {
+      expect(line.pieces).toHaveLength(2);
+      expect(Math.abs(line.pieces[0]!.left - (stackLeft + MARGIN))).toBeLessThanOrEqual(1);
+      expect(Math.abs(line.pieces[1]!.left - (box.x + box.width + 12))).toBeLessThanOrEqual(1.5);
+    }
+    const below = lines.find((line) => line.top >= box.y + box.height + 12)!;
+    expect(below.pieces).toHaveLength(1);
+    expect(below.pieces[0]!.right).toBeGreaterThan(box.x + box.width + 12);
+  };
+  await expect.poll(async () => (await linePieces(wrapped)).filter((line) => line.pieces.length === 2).length).toBeGreaterThanOrEqual(7);
+  await expect(check).toPass({ timeout: 3000 });
+  // The text reads on: the gaps are not part of it.
+  await expect(wrapped).toHaveText(/^Wrapped\. Lorem ipsum dolor sit amet/);
+
+  // Typing at the start of the paragraph moves the text through the gaps.
+  await wrapped.click({ position: { x: 1, y: 8 } });
+  await selectionSynced(page);
+  await page.keyboard.type("Some new words here. ");
+  await expect(wrapped).toHaveText(/^Some new words here\. Wrapped\./);
+  await expect.poll(async () => (await linePieces(wrapped)).filter((line) => line.pieces.length === 2).length).toBeGreaterThanOrEqual(7);
+  await expect(check).toPass({ timeout: 3000 });
+  // Undo puts the text back; the gaps follow.
+  await page.keyboard.press(`${mod}+z`);
+  await expect(wrapped).toHaveText(/^Wrapped\./);
+  await expect(check).toPass({ timeout: 3000 });
+
+  // Printing keeps the text off the image.
+  await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+  await page.emulateMedia({ media: "print" });
+  await expect(check).toPass({ timeout: 3000 });
+  await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+  await page.emulateMedia({ media: "screen" });
+
+  // Less than 1 cm of text width on the left: the text goes on the wider side only.
+  await setImageAttrs(page, { offsetX: 40 });
+  await expect(frame).toHaveAttribute("data-wrap-side", "left");
+  await expect(editor(page).locator(".image-wrap-gap")).toHaveCount(0);
+  const { box } = await linesBesideImage(wrapped, image);
+  const lines = await linePieces(wrapped);
+  expect(Math.round(lines[0]!.pieces[0]!.left - (box.x + box.width))).toBe(12);
+
+  // With two columns: on both sides of an image in the middle of its column.
+  await setImageAttrs(page, { offsetX: Math.round((COLUMN_WIDTH - 120) / 2), width: 120, height: 60 });
+  await chooseColumns(page, "Two columns");
+  await expect(frame).toHaveAttribute("data-wrap-side", "both");
+  await expect.poll(async () => (await linePieces(wrapped)).filter((line) => line.pieces.length === 2).length).toBeGreaterThanOrEqual(2);
+  await linesBesideImage(wrapped, image);
+
+  await waitUntilSaved(page);
+  await page.reload();
+  await expect(frame).toHaveAttribute("data-wrap-side", "both");
+  await expect.poll(async () => (await linePieces(wrapped)).filter((line) => line.pieces.length === 2).length).toBeGreaterThanOrEqual(2);
+  await linesBesideImage(wrapped, image);
+
+  // Word: text on both sides, or on the largest side.
+  const xml = async () => {
+    const download = page.waitForEvent("download");
+    await menuBarItem(page, "File").click();
+    await page.getByRole("menuitem", { name: "Download" }).hover();
+    await page.getByRole("menuitem", { name: "Microsoft Word (.docx)" }).click();
+    const zip = await JSZip.loadAsync(await readFile(await (await download).path()));
+    return zip.file("word/document.xml")!.async("string");
+  };
+  expect(await xml()).toContain('<wp:wrapSquare wrapText="bothSides"');
+  await setImageAttrs(page, { offsetX: 0 });
+  await expect(frame).toHaveAttribute("data-wrap-side", "left");
+  expect(await xml()).toContain('<wp:wrapSquare wrapText="largest"');
 });
 
 test("images behind and in front of text are placed freely, and dragging moves an image to the paragraph it is dropped at", async ({ page }) => {

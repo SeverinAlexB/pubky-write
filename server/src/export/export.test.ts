@@ -313,6 +313,26 @@ describe("toDocx", () => {
     ]);
   });
 
+  it("wraps text on both sides of an image with room on both sides of it in its column", async () => {
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEUlEQVR42mNk+M9QzwAEjDAGACCDAv8cI7IoAAAAAElFTkSuQmCC",
+      "base64",
+    );
+    const image = (offsetX: number) => ({ type: "image", attrs: { src: "/uploads/a.png", width: 200, height: 100, wrap: "wrap", offsetX } });
+    const doc = (columns: number) =>
+      Node.fromJSON(documentSchema, {
+        type: "doc",
+        attrs: { columns },
+        content: [image(200), paragraph(text("Both sides"))],
+      });
+    // A4 between 2.54 cm margins is 602px wide: 188px of text left of the image and 190px right of it.
+    const one = await documentXml(await toDocx(doc(1), "Wrap", async () => png), "word/document.xml");
+    expect(one).toContain('<wp:wrapSquare wrapText="bothSides"');
+    // In a column of 277px there is no room right of it.
+    const two = await documentXml(await toDocx(doc(2), "Wrap", async () => png), "word/document.xml");
+    expect(two).toContain('<wp:wrapSquare wrapText="largest"');
+  });
+
   it("writes columns, column breaks, and images anchored with their wrap mode, position, rotation and crop", async () => {
     const png = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEUlEQVR42mNk+M9QzwAEjDAGACCDAv8cI7IoAAAAAElFTkSuQmCC",
@@ -337,10 +357,11 @@ describe("toDocx", () => {
     const body = await documentXml(await toDocx(doc, "Layout", async () => png), "word/document.xml");
     expect(body).toMatch(/<w:cols w:space="720" w:num="2" w:sep="(true|1)" w:equalWidth="(true|1)"\/>/);
     expect(body).toContain('<w:br w:type="column"/>');
-    // The wrapped image is anchored in the paragraph after it, its text wraps square on both sides.
+    // The wrapped image is anchored in the paragraph after it, its text wraps square on the largest
+    // side (there is no room left of it in its column).
     const wrapped = body.match(/<w:p>(?:(?!<\/w:p>).)*Wrapped around the image/s)![0];
     expect(wrapped).toContain('<wp:anchor distT="228600" distB="228600" distL="228600" distR="228600"');
-    expect(wrapped).toContain('<wp:wrapSquare wrapText="bothSides"');
+    expect(wrapped).toContain('<wp:wrapSquare wrapText="largest"');
     expect(wrapped).toMatch(/<wp:positionH relativeFrom="column"><wp:posOffset>95250<\/wp:posOffset>/);
     expect(wrapped).toMatch(/<wp:positionV relativeFrom="paragraph"><wp:posOffset>190500<\/wp:posOffset>/);
     expect(wrapped).toContain('rot="1800000"');
