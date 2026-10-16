@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { Link, useParams } from "react-router";
 import { api, ApiError } from "../api.ts";
 import { lazyComponent } from "../components/lazyComponent.tsx";
+import { containsEquation, loadEquationCode } from "./equations/load.ts";
 import type { PendingEntry } from "./pendingSteps.ts";
 
 const UnsavedChangesDialog = lazyComponent(() => import("./UnsavedChangesDialog.tsx").then((module) => module.UnsavedChangesDialog));
@@ -29,6 +30,8 @@ export function EditorPage() {
   const load = useCallback(async () => {
     try {
       const [document, DocumentEditor] = await Promise.all([api.openDocument(id), loadEditor()]);
+      // A document with equations is shown once their code is there, so they are drawn as maths at once.
+      if (containsEquation(document.content)) await loadEquationCode();
       setLoaded((previous) => ({ document, DocumentEditor, generation: (previous?.generation ?? 0) + 1 }));
       setError(null);
     } catch (loadError) {

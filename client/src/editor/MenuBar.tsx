@@ -237,6 +237,7 @@ function viewMenu(actions: EditorActions, view: ViewSettings): MenuEntry[] {
     "separator",
     { label: "Show print layout", checked: view.printLayout, onSelect: actions.togglePrintLayout },
     { label: "Show ruler", checked: view.rulerVisible, onSelect: actions.toggleRuler },
+    { label: "Show equation toolbar", checked: view.equationToolbar ?? false, onSelect: actions.toggleEquationToolbar },
     {
       label: "Show non-printing characters",
       shortcut: shortcutText("nonPrintingCharacters"),
@@ -277,7 +278,8 @@ function insertMenu(editor: Editor, actions: EditorActions, state: MenuState): M
       icon: "special_character",
       submenu: [
         { label: "Special characters", onSelect: actions.insertSpecialCharacter },
-        { label: "Emoji", onSelect: actions.insertEmoji },
+        { label: "Equation", icon: "function", onSelect: actions.insertEquation },
+        { label: "Emoji", shortcut: shortcutText("emoji"), onSelect: actions.insertEmoji },
       ],
     },
     "separator",

@@ -11,6 +11,8 @@ export type Preferences = {
   autoLists: boolean;
   markdown: boolean;
   linkDetails: boolean;
+  /** The colon picker: `:smi` shows matching emoji (spec 20). */
+  emojiColon: boolean;
   substitutionsEnabled: boolean;
   substitutions: Substitution[];
 };
@@ -55,6 +57,7 @@ export function defaultPreferences(): Preferences {
     autoLists: true,
     markdown: true,
     linkDetails: true,
+    emojiColon: true,
     substitutionsEnabled: true,
     substitutions: defaultPairs.map(([replace, by]) => ({ replace, with: by, enabled: true })),
   };
@@ -67,6 +70,7 @@ const booleanKeys = [
   "autoLists",
   "markdown",
   "linkDetails",
+  "emojiColon",
   "substitutionsEnabled",
 ] as const;
 

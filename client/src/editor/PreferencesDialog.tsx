@@ -16,6 +16,7 @@ const generalOptions: { key: BooleanPreference; label: string }[] = [
   { key: "autoLists", label: "Automatically detect lists" },
   { key: "markdown", label: "Enable Markdown" },
   { key: "linkDetails", label: "Show link details" },
+  { key: "emojiColon", label: "Insert emoji using the colon character" },
 ];
 
 /** A row of the Substitutions list; `key` keeps a row's fields (and focus) while it is edited. */

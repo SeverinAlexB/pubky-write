@@ -1,4 +1,4 @@
-import { DocsImage, DocsTable, documentExtensions, paragraphStyleDefinitions, paragraphStyleOf } from "@docs/shared";
+import { DocsEquation, DocsImage, DocsTable, documentExtensions, paragraphStyleDefinitions, paragraphStyleOf } from "@docs/shared";
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import type { Mark, Node } from "@tiptap/pm/model";
@@ -6,12 +6,14 @@ import { collab } from "./collab.ts";
 import { clampFontSize, DEFAULT_FONT, parseFontSize, stepFontSize } from "./fonts.ts";
 import { keyBinding } from "../shortcuts.ts";
 import { Autoformat } from "./autoformat.ts";
+import { ColonEmoji } from "./emoji/colonEmoji.ts";
 import { FocusSelection } from "./focusSelection.ts";
 import { PasteCleanup } from "./paste.ts";
 import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
 import { DocumentTabs } from "./documentTabs.ts";
 import { TabHistory } from "./tabHistory.ts";
 import { EditorImage } from "./imageView.ts";
+import { EditorEquation } from "./equations/equations.ts";
 import { Pagination } from "./pagination.ts";
 import { Search } from "./search.ts";
 import { followTocEntry } from "./pageElementCommands.ts";
@@ -54,7 +56,7 @@ export function editorExtensions({
   return [
     // The shared schema, with the editor's own views of tables and images.
     ...documentExtensions.map((extension) =>
-      extension === DocsTable ? EditorTable : extension === DocsImage ? EditorImage : extension,
+      extension === DocsTable ? EditorTable : extension === DocsImage ? EditorImage : extension === DocsEquation ? EditorEquation : extension,
     ),
     TableColumnResize,
     TabHistory,
@@ -97,6 +99,7 @@ export function editorExtensions({
     TabKey,
     FocusSelection,
     Autoformat,
+    ColonEmoji,
     PasteCleanup.configure({ onImageError }),
   ];
 }

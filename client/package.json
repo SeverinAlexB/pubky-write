@@ -17,7 +17,8 @@
     "@tiptap/react": "^3.32.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-router": "^8.4.0"
+    "react-router": "^8.4.0",
+    "temml": "^0.14.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

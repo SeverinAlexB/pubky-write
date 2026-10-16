@@ -45,6 +45,7 @@ export type EditorActions = {
   togglePrintLayout?: () => void;
   toggleRuler?: () => void;
   toggleNonPrintingCharacters?: () => void;
+  toggleEquationToolbar?: () => void;
   fullScreen: () => void;
 
   // Insert
@@ -52,6 +53,7 @@ export type EditorActions = {
   insertImageByUrl: () => void;
   insertLink: () => void;
   insertSpecialCharacter?: () => void;
+  insertEquation?: () => void;
   insertEmoji?: () => void;
   insertPageBreak?: () => void;
   insertColumnBreak?: () => void;
@@ -111,6 +113,8 @@ export type ViewSettings = {
   printLayout: boolean;
   rulerVisible: boolean;
   nonPrintingCharacters: boolean;
+  /** View > Show equation toolbar. */
+  equationToolbar?: boolean;
   commentsHidden: boolean;
   mode: EditorMode;
   /** Viewing mode or a suggestion preview: nothing may change the document. */

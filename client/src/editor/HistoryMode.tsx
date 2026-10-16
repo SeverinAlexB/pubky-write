@@ -1,6 +1,7 @@
 // Version history mode: a top bar in place of the header and toolbar, the selected version as
 // read-only pages in the centre and the list of versions on the right (docs/spec/08-version-history.md).
 import {
+  DocsEquation,
   DocsImage,
   DocsTable,
   documentExtensions,
@@ -24,6 +25,7 @@ import { PromptDialog } from "../components/PromptDialog.tsx";
 import { formatDay, formatVersionTime, formatVersionTitle } from "../format.ts";
 import { currentTabId, DocumentTabs, switchTab } from "./documentTabs.ts";
 import { EditorImage } from "./imageView.ts";
+import { EditorEquation } from "./equations/equations.ts";
 import { OutlinePanel, OutlineToggle } from "./OutlinePanel.tsx";
 import { PageElements } from "./PageElements.tsx";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
@@ -124,7 +126,13 @@ export function HistoryMode({ documentId, initialTab, loadRevisions, initialZoom
       extensions: [
         // The editor's own views of tables and images, so they are laid out as in the editor.
         ...documentExtensions.map((extension) =>
-          extension === DocsTable ? EditorTable : extension === DocsImage ? EditorImage : extension,
+          extension === DocsTable
+            ? EditorTable
+            : extension === DocsImage
+              ? EditorImage
+              : extension === DocsEquation
+                ? EditorEquation.configure({ editable: false })
+                : extension,
         ),
         DocumentTabs.configure({ initialTab: previewTab.current }),
         TabLayout,

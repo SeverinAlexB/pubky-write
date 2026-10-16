@@ -44,6 +44,8 @@ type ImagePillProps = {
   column: HTMLElement | null;
   onImageOptions: () => void;
   onAddComment: () => void;
+  /** "Add emoji reaction": a comment on the image that is one emoji. */
+  onEmojiReaction: (button: HTMLElement) => void;
 };
 
 function selectLayout({ editor }: { editor: Editor }): ImageLayout | null {
@@ -51,7 +53,7 @@ function selectLayout({ editor }: { editor: Editor }): ImageLayout | null {
   return selection instanceof NodeSelection && selection.node.type.name === "image" ? imageLayoutOf(selection.node.attrs) : null;
 }
 
-export function ImagePill({ editor, column, onImageOptions, onAddComment }: ImagePillProps) {
+export function ImagePill({ editor, column, onImageOptions, onAddComment, onEmojiReaction }: ImagePillProps) {
   const [position, setPosition] = useState<Position | null>(null);
   const [customMargin, setCustomMargin] = useState(false);
   const layout = useEditorState({ editor, selector: selectLayout, equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
@@ -187,7 +189,13 @@ export function ImagePill({ editor, column, onImageOptions, onAddComment }: Imag
       <button type="button" className="icon-button" aria-label="Add comment" data-tooltip="Add comment" onClick={onAddComment}>
         <Icon name="add_comment" />
       </button>
-      <button type="button" className="icon-button" aria-label="Add emoji reaction" data-tooltip="Add emoji reaction" disabled>
+      <button
+        type="button"
+        className="icon-button"
+        aria-label="Add emoji reaction"
+        data-tooltip="Add emoji reaction"
+        onClick={(event) => onEmojiReaction(event.currentTarget)}
+      >
         <Icon name="add_reaction" />
       </button>
     </div>

@@ -3,6 +3,7 @@ import { isCollapsed, type CommentThread } from "@docs/shared";
 import type { Editor } from "@tiptap/react";
 import { useState } from "react";
 import { Icon } from "../components/Icon.tsx";
+import { ReactionChips } from "./ReactionChips.tsx";
 import { Menu } from "../components/Menu.tsx";
 import { formatCommentTime } from "../format.ts";
 import { AUTHOR_NAME, Avatar, useCommentAnchors } from "./CommentMargin.tsx";
@@ -91,6 +92,7 @@ export function AllCommentsPanel({ editor, threads, tabNames = {}, onSelect, onR
                 )}
               </div>
               {first && <p className="comment-body">{first.body}</p>}
+              {first && <ReactionChips reactions={first.reactions ?? []} />}
               {replies.length > 0 && (
                 <p className="all-comments-replies">{replies.length === 1 ? "1 reply" : `${replies.length} replies`}</p>
               )}

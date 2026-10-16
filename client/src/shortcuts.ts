@@ -86,6 +86,7 @@ export const shortcutDefinitions = define({
   viewingMode: { name: "Viewing mode", group: "Actions", keys: ["⌘+Option+Shift+C"], handledBy: "window" },
   reviewSuggestions: { name: "Review suggested edits", group: "Actions", keys: ["Ctrl+⌘+O Ctrl+⌘+U"], handledBy: "window" },
   keyboardShortcuts: { name: "Keyboard shortcuts", group: "Actions", keys: ["⌘+/"], handledBy: "window" },
+  emoji: { name: "Insert emoji", group: "Actions", keys: ["Ctrl+⌘+Space"], handledBy: "window" },
 
   // Comments
   addComment: { name: "Add comment", group: "Comments", keys: ["⌘+Option+M"], handledBy: "editor" },

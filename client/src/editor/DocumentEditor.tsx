@@ -96,6 +96,9 @@ import { ColorPalette } from "./toolbar/ColorPicker.tsx";
 import { Toolbar } from "./toolbar/Toolbar.tsx";
 import type { Zoom } from "./toolbar/ZoomControl.tsx";
 import { LiveWordCount, useLiveCountSetting } from "./LiveWordCount.tsx";
+import { insertEquation } from "./equations/equations.ts";
+import type { PickerAnchor } from "./emoji/EmojiPicker.tsx";
+import { ColonPicker } from "./emoji/ColonPicker.tsx";
 
 // Parts used now and then are in their own chunks, fetched once the editor is idle (or when
 // first opened, if that is sooner), so they are not in the way of opening the document.
@@ -116,6 +119,8 @@ const PreferencesDialog = lazyComponent(() => import("./PreferencesDialog.tsx").
 const KeyboardShortcutsDialog = lazyComponent(() =>
   import("./KeyboardShortcutsDialog.tsx").then((module) => module.KeyboardShortcutsDialog),
 );
+const EmojiPicker = lazyComponent(() => import("./emoji/EmojiPicker.tsx").then((module) => module.EmojiPicker));
+const EquationToolbar = lazyComponent(() => import("./equations/EquationToolbar.tsx").then((module) => module.EquationToolbar));
 const SpecialCharactersDialog = lazyComponent(() =>
   import("./characters/SpecialCharactersDialog.tsx").then((module) => module.SpecialCharactersDialog),
 );
@@ -132,6 +137,7 @@ const onDemand = [
   PageNumbersDialog,
   SplitCellDialog,
   SpecialCharactersDialog,
+  EmojiPicker,
   ReviewSuggestions,
   RejectPreview,
   PreferencesDialog,
@@ -145,6 +151,7 @@ const OUTLINE_SETTING = "docs.outlineOpen";
 const RULER_SETTING = "docs.rulerVisible";
 const PRINT_LAYOUT_SETTING = "docs.printLayout";
 const COMMENTS_HIDDEN_SETTING = "docs.commentsHidden";
+const EQUATION_TOOLBAR_SETTING = "docs.equationToolbar";
 
 type DocumentEditorProps = {
   document: OpenedDocument;
@@ -158,6 +165,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [zoom, setZoom] = useState<Zoom>(1);
   const [rulerVisible, setRulerVisible] = useState(() => localStorage.getItem(RULER_SETTING) !== "false");
+  // View > Show equation toolbar: off until the first equation is inserted, then remembered.
+  const [equationToolbar, setEquationToolbar] = useState(() => localStorage.getItem(EQUATION_TOOLBAR_SETTING) === "true");
   const [printLayout, setPrintLayout] = useState(() => localStorage.getItem(PRINT_LAYOUT_SETTING) !== "false");
   const [pageSetupOpen, setPageSetupOpen] = useState(false);
   const [columnOptionsOpen, setColumnOptionsOpen] = useState(false);
@@ -191,6 +200,9 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [specialCharacters, setSpecialCharacters] = useState<{ category: string } | null>(null);
+  // The emoji picker: Insert > Symbols > Emoji at the cursor, or the pills' "Add emoji reaction"
+  // (a comment that is one emoji) under the button.
+  const [emojiPicker, setEmojiPicker] = useState<{ anchor: PickerAnchor; purpose: "insert" | "comment" } | null>(null);
   // Editing, Suggesting or Viewing, remembered per document.
   const [mode, setMode] = useState<EditorMode>(() => storedMode(doc.id));
   // Tools > Review suggested edits, and its preview of accepting or rejecting all suggestions.
@@ -383,6 +395,10 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   }, [rulerVisible]);
 
   useEffect(() => {
+    localStorage.setItem(EQUATION_TOOLBAR_SETTING, String(equationToolbar));
+  }, [equationToolbar]);
+
+  useEffect(() => {
     localStorage.setItem(COMMENTS_HIDDEN_SETTING, String(commentsHidden));
     if (getCommentAnchors(editor.state).hidden !== commentsHidden) {
       editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "hide", hidden: commentsHidden }));
@@ -516,6 +532,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     editingMode: () => changeMode("editing"),
     viewingMode: () => changeMode("viewing"),
     keyboardShortcuts: () => setShortcutsOpen(true),
+    emoji: () => actions.insertEmoji?.(),
     showAllComments: () => setAllCommentsOpen(true),
     hideComments: () => setCommentsHidden((hidden) => !hidden),
     hideMenus: () => setMenusHidden((hidden) => !hidden),
@@ -671,6 +688,23 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     if (empty || historyOpen || readOnly || !commentQuote(editor.state.doc, from, to)) return;
     setCommentsHidden(false);
     editor.view.dispatch(updateCommentAnchors(editor.state.tr, { type: "draft", anchor: { from, to } }));
+  }
+
+  /** The pills' "Add emoji reaction": a comment on the selection whose message is the emoji. */
+  async function reactWithComment(emoji: string) {
+    startComment();
+    if (!getCommentAnchors(editor.state).draft) return;
+    try {
+      await createComment(emoji);
+    } catch (error) {
+      cancelComment();
+      setNotice((error as Error).message);
+    }
+  }
+
+  function openReactionPicker(button: HTMLElement) {
+    const { left, top, bottom } = button.getBoundingClientRect();
+    setEmojiPicker({ anchor: { left, top, bottom }, purpose: "comment" });
   }
 
   function cancelComment() {
@@ -1020,7 +1054,18 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     insertImageByUrl: () => setImageUrlDialog(true),
     insertLink: () => handlers.current.openLinkDialog(),
     insertSpecialCharacter: () => setSpecialCharacters({ category: "Symbol" }),
-    insertEmoji: () => setSpecialCharacters({ category: "Emoji" }),
+    insertEquation: () => {
+      if (readOnly) return;
+      setEquationToolbar(true);
+      void insertEquation(activeEditor.view);
+    },
+    toggleEquationToolbar: () => setEquationToolbar((shown) => !shown),
+    insertEmoji: () => {
+      if (readOnly || historyOpen) return;
+      const { view } = activeEditor;
+      const { left, top, bottom } = view.coordsAtPos(view.state.selection.head);
+      setEmojiPicker({ anchor: { left, top, bottom }, purpose: "insert" });
+    },
     insertPageBreak: () => editor.chain().focus().insertPageBreak().run(),
     insertColumnBreak: () => editor.chain().focus().insertColumnBreak().run(),
     insertTableOfContents: (style) => {
@@ -1209,7 +1254,17 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
               <MenuBar
                 editor={activeEditor}
                 actions={actions}
-                view={{ outlineOpen, printLayout, rulerVisible, nonPrintingCharacters: false, commentsHidden, mode, readOnly, multipleTabs: tabCount > 1 }}
+                view={{
+                  outlineOpen,
+                  printLayout,
+                  rulerVisible,
+                  nonPrintingCharacters: false,
+                  equationToolbar,
+                  commentsHidden,
+                  mode,
+                  readOnly,
+                  multipleTabs: tabCount > 1,
+                }}
               />
             </div>
             <div className="header-actions">
@@ -1249,6 +1304,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             readOnly={readOnly}
           />
         )}
+        {equationToolbar && !historyOpen && <EquationToolbar editor={activeEditor} onHide={() => setEquationToolbar(false)} />}
         {rulerVisible ? (
           <HorizontalRuler
             editor={editor}
@@ -1347,6 +1403,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                       replaceThread(await api.editCommentMessage(doc.id, id, messageId, body))
                     }
                     onDeleteReply={async (id, messageId) => replaceThread(await api.deleteCommentReply(doc.id, id, messageId))}
+                    onReact={async (id, messageId, emoji, on) => replaceThread(await api.setReaction(doc.id, id, messageId, emoji, on))}
                     onCopyLink={(id) => void copyCommentLink(id)}
                     suggestions={marginSuggestions}
                     regionEditor={regionEditor}
@@ -1359,7 +1416,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                     onDeleteSuggestionReply={deleteSuggestionReply}
                   />
                 )}
-                {!historyOpen && !readOnly && <CommentPill editor={editor} column={column} onAddComment={startComment} />}
+                {!historyOpen && !readOnly && <CommentPill editor={editor} column={column} onAddComment={startComment} onEmojiReaction={openReactionPicker} />}
                 {!historyOpen && !readOnly && <TocPill editor={editor} column={column} />}
                 {!historyOpen && !readOnly && (
                   <LinkBubble
@@ -1375,6 +1432,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
                     column={column}
                     onImageOptions={() => openOptionsPanel("image")}
                     onAddComment={startComment}
+                    onEmojiReaction={openReactionPicker}
                   />
                 )}
               </div>
@@ -1397,6 +1455,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             <ImageOptionsPanel editor={editor} onClose={() => setOptionsPanel(null)} />
           )}
         </div>
+
+        {!historyOpen && !readOnly && <ColonPicker editor={activeEditor} />}
 
         {!historyOpen && <ContextMenu editor={editor} actions={actions} onCopyLink={(href) => void copyLink(href)} />}
 
@@ -1506,6 +1566,22 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             initialCategory={specialCharacters.category}
             onClose={() => {
               setSpecialCharacters(null);
+              activeEditor.commands.focus();
+            }}
+          />
+        )}
+
+        {emojiPicker && !historyOpen && (
+          <EmojiPicker
+            anchor={emojiPicker.anchor}
+            label={emojiPicker.purpose === "insert" ? "Insert emoji" : "Add emoji reaction"}
+            onPick={(emoji) => {
+              setEmojiPicker(null);
+              if (emojiPicker.purpose === "comment") return void reactWithComment(emoji);
+              activeEditor.chain().focus().insertContent(emoji).run();
+            }}
+            onClose={() => {
+              setEmojiPicker(null);
               activeEditor.commands.focus();
             }}
           />

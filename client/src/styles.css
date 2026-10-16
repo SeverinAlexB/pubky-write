@@ -4292,35 +4292,6 @@ body.is-column-resizing * {
   font-size: 14px;
 }
 
-.tab-emoji-picker {
-  position: absolute;
-  z-index: 30;
-  top: 44px;
-  left: 12px;
-  display: grid;
-  grid-template-columns: repeat(6, 36px);
-  gap: 2px;
-  padding: 8px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: var(--menu-shadow);
-}
-
-.tab-emoji {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  font-size: 20px;
-}
-
-.tab-emoji:hover,
-.tab-emoji:focus-visible {
-  background: var(--hover);
-}
-
 .all-comments-tab {
   display: flex;
   align-items: center;
@@ -5478,4 +5449,481 @@ body.is-column-resizing * {
   font: inherit;
   font-weight: 500;
   cursor: pointer;
+}
+
+/* Equations (spec 20): native MathML in the text line, at the text's size. While the cursor is in
+   one it is grey, with a caret and dotted boxes for its empty slots. See docs/design/equations.md. */
+
+.equation {
+  position: relative;
+  display: inline-block;
+  padding: 0 1px;
+  border-radius: 2px;
+  text-indent: 0;
+  white-space: nowrap;
+  line-height: normal;
+  vertical-align: baseline;
+}
+
+.equation math {
+  font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
+  font-size: 1.1em;
+}
+
+/* Until the equation code has loaded, the LaTeX. */
+.equation:not(:has(math)) {
+  color: var(--text-tertiary);
+  font-family: "Roboto Mono", monospace;
+  font-size: 0.9em;
+}
+
+.equation.is-editing {
+  background: #f1f3f4;
+}
+
+.equation.is-empty:not(.is-editing) {
+  min-width: 0.5em;
+}
+
+.page-content .equation.ProseMirror-selectednode {
+  outline: none;
+}
+
+.equation-caret {
+  position: absolute;
+  width: 1px;
+  background: var(--text);
+  pointer-events: none;
+  animation: equation-caret-blink 1.06s steps(1) infinite;
+}
+
+.ProseMirror:not(:focus) .equation-caret {
+  display: none;
+}
+
+@keyframes equation-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.eq-slot {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.75em;
+  border: 1px dotted var(--text-tertiary);
+  vertical-align: -0.05em;
+}
+
+.equation mtext.eq-command {
+  color: var(--text-tertiary);
+  font-family: Roboto, system-ui, sans-serif;
+}
+
+.equation .eq-large {
+  font-size: 1.35em;
+}
+
+.equation mrow.eq-boxed {
+  border: 1px solid currentColor;
+  padding: 1px;
+}
+
+.equation mtext.eq-raw {
+  font-family: "Roboto Mono", monospace;
+  font-size: 0.85em;
+}
+
+/* The equation toolbar: a full-width bar under the main toolbar. */
+
+.equation-toolbar {
+  position: relative;
+  z-index: 9;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 41px;
+  margin-top: 7px;
+  padding: 0 16px;
+  border-bottom: 1px solid #e1e3e1;
+  background: #fff;
+}
+
+.equation-new {
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.equation-new.is-active {
+  color: var(--text);
+}
+
+.equation-new:hover,
+.equation-menu-button:hover:not(:disabled),
+.equation-menu-cell:hover,
+.equation-menu-cell:focus-visible {
+  background: var(--hover);
+}
+
+.equation-menu {
+  position: relative;
+}
+
+.equation-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 30px;
+  padding: 0 0 0 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.equation-menu-button[aria-expanded="true"] {
+  background: var(--primary-container);
+}
+
+.equation-menu-sample {
+  font-family: "STIX Two Math", "Cambria Math", serif;
+  font-size: 12px;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+
+.equation-menu-button .icon {
+  margin-left: -3px;
+}
+
+.equation-menu-grid {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(6, 32px);
+  gap: 2px;
+  padding: 8px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: var(--menu-shadow);
+}
+
+.equation-menu[data-wide] .equation-menu-grid,
+.equation-menu-grid:has(.equation-preview) {
+  grid-template-columns: repeat(6, 44px);
+}
+
+.equation-menu-cell {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font-family: "STIX Two Math", "Cambria Math", serif;
+  font-size: 18px;
+}
+
+.equation-menu-grid:has(.equation-preview) .equation-menu-cell {
+  height: 44px;
+}
+
+.equation-preview math {
+  font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
+  font-size: 15px;
+}
+
+.equation-toolbar-hide {
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+}
+
+@media print {
+  .equation-toolbar,
+  .equation-caret {
+    display: none !important;
+  }
+
+  .equation.is-editing {
+    background: none;
+  }
+}
+
+/* The emoji picker (spec 20): a 370 × 404 card with a search pill, the category row and the grid. */
+
+.emoji-picker {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: 370px;
+  height: 404px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+
+.emoji-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  width: 310px;
+  height: 32px;
+  margin: 12px auto 4px;
+  padding: 0 12px;
+  border-radius: 16px;
+  background: var(--toolbar);
+  color: var(--text-secondary);
+}
+
+.emoji-search:focus-within {
+  outline: 2px solid var(--primary);
+}
+
+.emoji-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.emoji-categories {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 40px;
+  padding: 0 8px;
+  border-bottom: 1px solid #e1e3e1;
+}
+
+.emoji-category-row {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+.emoji-category,
+.emoji-scroll {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.emoji-scroll {
+  width: 24px;
+}
+
+.emoji-category:hover,
+.emoji-scroll:hover {
+  background: var(--hover);
+}
+
+.emoji-category[aria-selected="true"] {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+}
+
+.emoji-grid {
+  position: relative;
+  flex: 1;
+  padding: 0 4px 8px 5px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.emoji-section-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 8px 6px 4px;
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.emoji-section-cells {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 40px));
+}
+
+.emoji-cell {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  max-width: 100%;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 30px;
+  line-height: 1;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.emoji-cell:hover,
+.emoji-cell:focus-visible {
+  background: var(--hover);
+}
+
+.emoji-cell:focus-visible {
+  outline-offset: -2px;
+}
+
+.emoji-message {
+  margin: 24px 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: center;
+}
+
+.emoji-tones {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--menu-shadow);
+}
+
+/* The colon picker's list under the cursor. */
+
+.colon-picker {
+  position: fixed;
+  z-index: 1000;
+  min-width: 220px;
+  max-width: 320px;
+  margin: 0;
+  padding: 6px 0;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: var(--menu-shadow);
+  list-style: none;
+  font-size: 14px;
+}
+
+.colon-picker li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 32px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.colon-picker li.is-highlighted {
+  background: var(--primary-container);
+}
+
+.colon-picker-emoji {
+  font-size: 20px;
+}
+
+.colon-picker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Emoji reactions on comment messages (spec 20). */
+
+.comment-body-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+}
+
+.comment-body-row .comment-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-react {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: 2px -4px -4px 4px;
+  opacity: 0;
+}
+
+.comment-message:hover .comment-react,
+.comment-react:focus-visible {
+  opacity: 1;
+}
+
+.reaction-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #c4c7c5;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+}
+
+button.reaction-chip:hover {
+  background: #f1f4f8;
+}
+
+.reaction-chip.is-mine {
+  border-color: var(--primary);
+  background: var(--primary-container);
+}
+
+button.reaction-chip.is-mine:hover {
+  background: #c2d7fb;
+}
+
+.reaction-chip-emoji {
+  font-size: 14px;
+}
+
+.reaction-chip-add {
+  padding: 0 6px;
+  color: var(--text-secondary);
 }

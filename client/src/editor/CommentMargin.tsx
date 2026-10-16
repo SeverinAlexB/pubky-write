@@ -18,6 +18,11 @@ import { Menu } from "../components/Menu.tsx";
 import { formatCommentTime } from "../format.ts";
 import { getCommentAnchors } from "./commentAnchors.ts";
 import { layoutCards } from "./commentLayout.ts";
+import { lazyComponent } from "../components/lazyComponent.tsx";
+import type { PickerAnchor } from "./emoji/EmojiPicker.tsx";
+import { ReactionChips } from "./ReactionChips.tsx";
+
+const EmojiPicker = lazyComponent(() => import("./emoji/EmojiPicker.tsx").then((module) => module.EmojiPicker));
 
 /** Width of the margin: the 389px cards and the gap between them and the page. */
 export const COMMENT_MARGIN_WIDTH = 401;
@@ -37,6 +42,8 @@ export type CommentHandlers = {
   onEditMessage: (id: number, messageId: number, body: string) => Promise<void>;
   onDeleteReply: (id: number, messageId: number) => Promise<void>;
   onCopyLink: (id: number) => void;
+  /** Adds (`on`) or removes the user's emoji reaction to a message. */
+  onReact: (id: number, messageId: number, emoji: string, on: boolean) => Promise<void>;
 };
 
 export type SuggestionHandlers = {
@@ -102,6 +109,12 @@ export function CommentMargin({
   const margin = useRef<HTMLElement>(null);
   const cards = useRef(new Map<CardKey, HTMLElement>());
   const [tops, setTops] = useState<Map<CardKey, number>>(new Map());
+  // The emoji picker of "Add emoji reaction", for one message.
+  const [reactionPicker, setReactionPicker] = useState<{ threadId: number; messageId: number; anchor: PickerAnchor } | null>(null);
+  const openReactionPicker = (threadId: number, messageId: number, element: HTMLElement) => {
+    const { left, top, bottom } = element.getBoundingClientRect();
+    setReactionPicker((current) => (current?.messageId === messageId ? null : { threadId, messageId, anchor: { left, top, bottom } }));
+  };
 
   const entries: { key: CardKey; pos: number; suggestion?: Suggestion }[] = [
     ...visible.map(({ thread, anchor }) => ({ key: thread.id as CardKey, pos: anchor.from })),
@@ -192,8 +205,20 @@ export function CommentMargin({
           deleted={isCollapsed(anchor)}
           active={thread.id === activeId && !draft && activeSuggestion === null}
           handlers={handlers}
+          onAddReaction={(messageId, element) => openReactionPicker(thread.id, messageId, element)}
         />
       ))}
+      {reactionPicker && (
+        <EmojiPicker
+          anchor={reactionPicker.anchor}
+          label="Add emoji reaction"
+          onPick={(emoji) => {
+            setReactionPicker(null);
+            void handlers.onReact(reactionPicker.threadId, reactionPicker.messageId, emoji, true);
+          }}
+          onClose={() => setReactionPicker(null)}
+        />
+      )}
       {suggestions.map((suggestion) => (
         <SuggestionCard
           key={`s:${suggestion.id}`}
@@ -270,9 +295,11 @@ type ThreadCardProps = {
   deleted: boolean;
   active: boolean;
   handlers: CommentHandlers;
+  /** "Add emoji reaction" on a message: opens the emoji picker under `element`. */
+  onAddReaction: (messageId: number, element: HTMLElement) => void;
 };
 
-function ThreadCard({ cardRef, style, thread, deleted, active, handlers }: ThreadCardProps) {
+function ThreadCard({ cardRef, style, thread, deleted, active, handlers, onAddReaction }: ThreadCardProps) {
   const [editing, setEditing] = useState<number | null>(null);
   const [first, ...replies] = thread.messages;
 
@@ -282,6 +309,14 @@ function ThreadCard({ cardRef, style, thread, deleted, active, handlers }: Threa
   const removeReply = (message: CommentMessage) => {
     if (confirm("Delete this reply?")) void handlers.onDeleteReply(thread.id, message.id);
   };
+  // Reactions can be changed on the active card; idle cards show them.
+  const reactionProps = (message: CommentMessage) =>
+    active
+      ? {
+          onReact: (emoji: string, on: boolean) => void handlers.onReact(thread.id, message.id, emoji, on),
+          onAddReaction: (element: HTMLElement) => onAddReaction(message.id, element),
+        }
+      : {};
 
   const headerActions = active && (
     <div className="comment-header-actions">
@@ -339,6 +374,7 @@ function ThreadCard({ cardRef, style, thread, deleted, active, handlers }: Threa
           editing={editing === first.id}
           onSave={(body) => handlers.onEditMessage(thread.id, first.id, body)}
           onStopEditing={() => setEditing(null)}
+          {...reactionProps(first)}
         >
           {deleted && (
             <p className="comment-deleted">
@@ -369,6 +405,7 @@ function ThreadCard({ cardRef, style, thread, deleted, active, handlers }: Threa
           editing={editing === reply.id}
           onSave={(body) => handlers.onEditMessage(thread.id, reply.id, body)}
           onStopEditing={() => setEditing(null)}
+          {...reactionProps(reply)}
         />
       ))}
       {thread.resolved && <p className="comment-resolved-note">Resolved</p>}
@@ -517,10 +554,14 @@ type MessageProps = {
   editing: boolean;
   onSave: (body: string) => Promise<void>;
   onStopEditing: () => void;
+  /** Toggles the user's reaction (active card). */
+  onReact?: (emoji: string, on: boolean) => void;
+  /** "Add emoji reaction": the emoji picker under the element (active card). */
+  onAddReaction?: (element: HTMLElement) => void;
   children?: ReactNode;
 };
 
-function Message({ message, isReply = false, actions, editing, onSave, onStopEditing, children }: MessageProps) {
+function Message({ message, isReply = false, actions, editing, onSave, onStopEditing, onReact, onAddReaction, children }: MessageProps) {
   return (
     <div className={`comment-message${isReply ? " is-reply" : ""}`}>
       <div className="comment-message-header">
@@ -547,8 +588,27 @@ function Message({ message, isReply = false, actions, editing, onSave, onStopEdi
           onCancel={onStopEditing}
         />
       ) : (
-        <p className="comment-body">{message.body}</p>
+        <div className="comment-body-row">
+          <p className="comment-body">{message.body}</p>
+          {onAddReaction && (
+            <button
+              type="button"
+              className="icon-button comment-react"
+              aria-label="Add emoji reaction"
+              data-tooltip="Add emoji reaction"
+              // Not a click outside the picker it toggles.
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddReaction(event.currentTarget);
+              }}
+            >
+              <Icon name="add_reaction" size={18} />
+            </button>
+          )}
+        </div>
       )}
+      <ReactionChips reactions={message.reactions ?? []} onToggle={onReact} onAdd={onAddReaction} />
     </div>
   );
 }

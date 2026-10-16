@@ -121,6 +121,7 @@ export function contextMenuEntries(editor: Editor, actions: EditorActions, onCop
           { label: "Remove link", icon: "link_off" as const, onSelect: () => run().extendMarkRange("link").unsetLink().run() },
         ]
       : []),
+    { label: "Equation", icon: "function", onSelect: actions.insertEquation },
     "separator",
     {
       label: "Format options",

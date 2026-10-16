@@ -9,8 +9,9 @@ import { useEditorState } from "@tiptap/react";
 import { useRef, useState } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { lazyComponent } from "../components/lazyComponent.tsx";
 import { Menu, type MenuEntry } from "../components/Menu.tsx";
-import { useDismiss } from "../components/useDismiss.ts";
+import type { PickerAnchor } from "./emoji/EmojiPicker.tsx";
 import {
   addSubtab,
   canAddSubtab,
@@ -65,12 +66,7 @@ export function OutlineToggle({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-/** Emoji offered by Choose emoji. */
-const TAB_EMOJI = [
-  "📄", "📝", "📌", "📎", "📁", "📊", "📈", "📅", "✅", "⭐", "🔥", "💡",
-  "🚀", "🎯", "🎉", "❤️", "👍", "👋", "🙂", "🤔", "⚠️", "❗", "❓", "🔒",
-  "🔑", "🛠️", "⚙️", "🧪", "📚", "🎨", "🌍", "🏠", "💬", "📣", "🕒", "💰",
-];
+const EmojiPicker = lazyComponent(() => import("./emoji/EmojiPicker.tsx").then((module) => module.EmojiPicker));
 
 /** What the sidebar shows of a tab: comparable by value, so the sidebar renders only when it changes. */
 type TabRow = Pick<TabEntry, "id" | "name" | "emoji" | "depth" | "showOutline" | "parent"> & { hasChildren: boolean };
@@ -118,7 +114,8 @@ export function OutlinePanel({ editor, openComments, onClose, actions, onSwitch 
   });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [emojiFor, setEmojiFor] = useState<string | null>(null);
+  // Choose emoji: the tab and where its row is, for the emoji picker under it.
+  const [emojiFor, setEmojiFor] = useState<{ id: string; anchor: PickerAnchor } | null>(null);
   const [deleting, setDeleting] = useState<TabRow | null>(null);
   const switchTo = actions?.onSwitch ?? onSwitch ?? (() => {});
 
@@ -226,14 +223,19 @@ export function OutlinePanel({ editor, openComments, onClose, actions, onSwitch 
                       fixed
                       entries={tabMenu(editor, row, rows.length, actions, {
                         rename: () => setRenaming(row.id),
-                        chooseEmoji: () => setEmojiFor(row.id),
+                        chooseEmoji: () => {
+                          const box = document.querySelector(`[data-tab-id="${row.id}"] > .outline-tab`)?.getBoundingClientRect();
+                          if (box) setEmojiFor({ id: row.id, anchor: { left: box.left, top: box.top, bottom: box.bottom } });
+                        },
                         delete: () => setDeleting(row),
                       })}
                     />
                   )}
                 </div>
-                {emojiFor === row.id && actions && (
+                {emojiFor?.id === row.id && actions && (
                   <EmojiPicker
+                    anchor={emojiFor.anchor}
+                    label="Choose emoji"
                     onPick={(emoji) => {
                       setEmojiFor(null);
                       actions.onCommand((state) => setTabAttribute(state, row.id, "emoji", emoji));
@@ -345,20 +347,6 @@ function RenameField({ name, onDone }: { name: string; onDone: (name: string | n
       }}
       onBlur={() => finish(value)}
     />
-  );
-}
-
-function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
-  const root = useRef<HTMLDivElement>(null);
-  useDismiss(root, true, onClose);
-  return (
-    <div ref={root} className="tab-emoji-picker" role="dialog" aria-label="Choose emoji">
-      {TAB_EMOJI.map((emoji) => (
-        <button key={emoji} type="button" className="tab-emoji" aria-label={emoji} onClick={() => onPick(emoji)}>
-          {emoji}
-        </button>
-      ))}
-    </div>
   );
 }
 

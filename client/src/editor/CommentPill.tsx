@@ -1,4 +1,5 @@
-// The small floating pill that offers "Add comment" just right of the end of a text selection.
+// The small floating pill that offers "Add comment" and "Add emoji reaction" just right of the end
+// of a text selection.
 import type { Editor } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.tsx";
@@ -13,7 +14,15 @@ const OFFSET = 4;
  * Shown while the editor has focus and a selection with text, and no comment is being written.
  * Positions are relative to `column`, the element the pill is placed in, so it scrolls with the text.
  */
-export function CommentPill({ editor, column, onAddComment }: { editor: Editor; column: HTMLElement | null; onAddComment: () => void }) {
+type CommentPillProps = {
+  editor: Editor;
+  column: HTMLElement | null;
+  onAddComment: () => void;
+  /** "Add emoji reaction": a comment that is one emoji, chosen in the emoji picker under the button. */
+  onEmojiReaction: (button: HTMLElement) => void;
+};
+
+export function CommentPill({ editor, column, onAddComment, onEmojiReaction }: CommentPillProps) {
   const [position, setPosition] = useState<Position | null>(null);
 
   useEffect(() => {
@@ -75,8 +84,13 @@ export function CommentPill({ editor, column, onAddComment }: { editor: Editor; 
       <button type="button" className="icon-button" aria-label="Add comment" data-tooltip="Add comment" onClick={onAddComment}>
         <Icon name="add_comment" />
       </button>
-      {/* Emoji reactions are P2: shown, but not available yet. */}
-      <button type="button" className="icon-button" aria-label="Add emoji reaction" data-tooltip="Add emoji reaction" disabled>
+      <button
+        type="button"
+        className="icon-button"
+        aria-label="Add emoji reaction"
+        data-tooltip="Add emoji reaction"
+        onClick={(event) => onEmojiReaction(event.currentTarget)}
+      >
         <Icon name="add_reaction" />
       </button>
     </div>

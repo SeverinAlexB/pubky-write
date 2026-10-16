@@ -50,6 +50,7 @@ import formatPaintSvg from "@material-symbols/svg-400/outlined/format_paint.svg?
 import formatParagraphSvg from "@material-symbols/svg-400/outlined/format_paragraph.svg?raw";
 import formatSizeSvg from "@material-symbols/svg-400/outlined/format_size.svg?raw";
 import formatUnderlinedSvg from "@material-symbols/svg-400/outlined/format_underlined.svg?raw";
+import functionSvg from "@material-symbols/svg-400/outlined/function.svg?raw";
 import fullscreenSvg from "@material-symbols/svg-400/outlined/fullscreen.svg?raw";
 import gridViewSvg from "@material-symbols/svg-400/outlined/grid_view.svg?raw";
 import historySvg from "@material-symbols/svg-400/outlined/history.svg?raw";
@@ -167,6 +168,7 @@ const symbols = {
   format_size: formatSizeSvg,
   format_underlined: formatUnderlinedSvg,
   fullscreen: fullscreenSvg,
+  function: functionSvg,
   grid_view: gridViewSvg,
   history: historySvg,
   horizontal_rule: horizontalRuleSvg,

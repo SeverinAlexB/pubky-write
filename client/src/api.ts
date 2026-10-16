@@ -120,6 +120,16 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ body }),
     }),
+  /** Adds (`on`) or removes the user's emoji reaction to a comment message. */
+  setReaction: (id: string, commentId: number, messageId: number, emoji: string, on: boolean) =>
+    on
+      ? request<CommentThread>(`/api/documents/${id}/comments/${commentId}/messages/${messageId}/reactions`, {
+          method: "POST",
+          body: JSON.stringify({ emoji }),
+        })
+      : request<CommentThread>(`/api/documents/${id}/comments/${commentId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`, {
+          method: "DELETE",
+        }),
   deleteCommentReply: (id: string, commentId: number, messageId: number) =>
     request<CommentThread>(`/api/documents/${id}/comments/${commentId}/messages/${messageId}`, { method: "DELETE" }),
   /** Replies on a suggestion; each call returns all of the suggestion's replies. */
