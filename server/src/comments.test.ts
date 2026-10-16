@@ -1,4 +1,4 @@
-import { documentSchema } from "@docs/shared";
+import { documentSchema, type CommentThread } from "@docs/shared";
 import { Transform } from "@tiptap/pm/transform";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   editMessage,
   InvalidCommentError,
   listComments,
+  setReaction,
   setResolved,
 } from "./comments.ts";
 import { mkdtempSync } from "node:fs";
@@ -209,5 +210,61 @@ describe("restoring a version", () => {
     expect(doc.textContent).toBe("The quick brown fox");
     const [thread] = listComments(db, documentId);
     expect(doc.textBetween(thread!.from, thread!.to)).toBe("quick");
+  });
+});
+
+describe("emoji reactions", () => {
+  const app = () => createApp({ db, uploadsDir: mkdtempSync(join(tmpdir(), "docs-uploads-")) });
+  const send = (method: string, path: string, body?: unknown) =>
+    app().request(path, {
+      method,
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  const reactions = (path: string) => `/api/documents/${documentId}/comments/${path}/reactions`;
+
+  it("are added per message, counted per emoji, and removed again", async () => {
+    const { id, messages } = comment(4, 9, "First");
+    const reply = addReply(db, documentId, id, "Reply")!.messages[1]!;
+    let response = await send("POST", reactions(`${id}/messages/${messages[0]!.id}`), { emoji: "😀" });
+    expect(response.status).toBe(200);
+    // Adding the same reaction again changes nothing; another emoji follows it.
+    await send("POST", reactions(`${id}/messages/${messages[0]!.id}`), { emoji: "😀" });
+    response = await send("POST", reactions(`${id}/messages/${messages[0]!.id}`), { emoji: "👍🏽" });
+    const thread = (await response.json()) as CommentThread;
+    expect(thread.messages[0]!.reactions).toEqual([
+      { emoji: "😀", count: 1, mine: true },
+      { emoji: "👍🏽", count: 1, mine: true },
+    ]);
+    expect(thread.messages[1]!.reactions).toBeUndefined();
+    await send("POST", reactions(`${id}/messages/${reply.id}`), { emoji: "🎉" });
+    // Stored: the document opens with them.
+    expect(listComments(db, documentId)[0]!.messages.map((message) => message.reactions?.map((reaction) => reaction.emoji))).toEqual([["😀", "👍🏽"], ["🎉"]]);
+
+    response = await send("DELETE", `${reactions(`${id}/messages/${messages[0]!.id}`)}/${encodeURIComponent("😀")}`);
+    expect(((await response.json()) as CommentThread).messages[0]!.reactions).toEqual([{ emoji: "👍🏽", count: 1, mine: true }]);
+  });
+
+  it("must be one emoji on a message of the document", async () => {
+    const { id, messages } = comment(4, 9, "First");
+    for (const emoji of ["", "abc", "😀 x", "1", "😀".repeat(20), 5]) {
+      expect((await send("POST", reactions(`${id}/messages/${messages[0]!.id}`), { emoji })).status).toBe(400);
+    }
+    for (const emoji of ["🇨🇭", "1️⃣", "👨‍👩‍👧", "❤️"]) {
+      expect((await send("POST", reactions(`${id}/messages/${messages[0]!.id}`), { emoji })).status).toBe(200);
+    }
+    expect((await send("POST", reactions(`${id}/messages/999`), { emoji: "😀" })).status).toBe(404);
+    const other = createDocument(db, "Other", 0).id;
+    expect((await send("POST", `/api/documents/${other}/comments/${id}/messages/${messages[0]!.id}/reactions`, { emoji: "😀" })).status).toBe(404);
+  });
+
+  it("go with their message and thread", () => {
+    const { id, messages } = comment(4, 9, "First");
+    const reply = addReply(db, documentId, id, "Reply")!.messages[1]!;
+    setReaction(db, documentId, id, reply.id, "😀", true);
+    deleteReply(db, documentId, id, reply.id);
+    deleteComment(db, documentId, id);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM comment_reactions").get()).toEqual({ count: 0 });
+    void messages;
   });
 });

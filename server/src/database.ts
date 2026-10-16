@@ -64,6 +64,17 @@ export function openDatabase(path: string): Database {
       created_at INTEGER NOT NULL
     );
 
+    -- Emoji reactions to comment messages (spec 20): one row per user and emoji. Every reaction is
+    -- by the one local user ("You") for now.
+    CREATE TABLE IF NOT EXISTS comment_reactions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id INTEGER NOT NULL REFERENCES comment_messages(id) ON DELETE CASCADE,
+      emoji      TEXT    NOT NULL,
+      user       TEXT    NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE (message_id, emoji, user)
+    );
+
     -- Replies on a suggestion (see docs/design/suggesting.md). The suggestion itself lives in the
     -- document content; replies of suggestions that are gone are kept, so undo brings them back.
     CREATE TABLE IF NOT EXISTS suggestion_replies (

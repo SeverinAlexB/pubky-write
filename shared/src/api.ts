@@ -41,7 +41,12 @@ export type CommentMessage = {
   id: number;
   body: string;
   createdAt: number;
+  /** Emoji reactions to the message, in the order they were first added (comment messages only). */
+  reactions?: Reaction[];
 };
+
+/** One emoji's reactions to a message: how many, and whether the current user's is among them. */
+export type Reaction = { emoji: string; count: number; mine: boolean };
 
 export type CommentThread = {
   id: number;

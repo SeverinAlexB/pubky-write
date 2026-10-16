@@ -1,6 +1,6 @@
 // Comment threads. Anchors are kept in step with the document: applySteps calls mapComments
 // with the same steps it applies, so stored positions always refer to the current version.
-import { commentQuote, mapAnchor, type CommentMessage, type CommentThread, type CreateCommentRequest } from "@docs/shared";
+import { commentQuote, mapAnchor, type CommentMessage, type CommentThread, type CreateCommentRequest, type Reaction } from "@docs/shared";
 import type { Node } from "@tiptap/pm/model";
 import type { Mappable } from "@tiptap/pm/transform";
 import type { Database } from "./database.ts";
@@ -22,6 +22,10 @@ type CommentRow = {
 };
 
 type MessageRow = { id: number; comment_id: number; body: string; created_at: number };
+type ReactionRow = { message_id: number; emoji: string; user: string };
+
+/** The one local user, the author of every comment and reaction. */
+export const CURRENT_USER = "You";
 
 export function listComments(db: Database, documentId: string): CommentThread[] {
   const rows = db
@@ -33,7 +37,14 @@ export function listComments(db: Database, documentId: string): CommentThread[] 
        WHERE c.document_id = ? ORDER BY m.created_at, m.id`,
     )
     .all(documentId) as MessageRow[];
-  return rows.map((row) => toThread(row, messages.filter((message) => message.comment_id === row.id)));
+  const reactions = db
+    .prepare(
+      `SELECT r.message_id, r.emoji, r.user FROM comment_reactions r
+       JOIN comment_messages m ON m.id = r.message_id JOIN comments c ON c.id = m.comment_id
+       WHERE c.document_id = ? ORDER BY r.created_at, r.id`,
+    )
+    .all(documentId) as ReactionRow[];
+  return rows.map((row) => toThread(row, messages.filter((message) => message.comment_id === row.id), reactions));
 }
 
 export function getComment(db: Database, documentId: string, commentId: number): CommentThread | null {
@@ -44,7 +55,13 @@ export function getComment(db: Database, documentId: string, commentId: number):
   const messages = db
     .prepare("SELECT * FROM comment_messages WHERE comment_id = ? ORDER BY created_at, id")
     .all(commentId) as MessageRow[];
-  return toThread(row, messages);
+  const reactions = db
+    .prepare(
+      `SELECT r.message_id, r.emoji, r.user FROM comment_reactions r JOIN comment_messages m ON m.id = r.message_id
+       WHERE m.comment_id = ? ORDER BY r.created_at, r.id`,
+    )
+    .all(commentId) as ReactionRow[];
+  return toThread(row, messages, reactions);
 }
 
 /** Starts a thread on `from..to`, which must be a non-empty range in the document at `version`. */
@@ -164,7 +181,49 @@ function validateBody(body: unknown): string {
   return body.trim();
 }
 
-function toThread(row: CommentRow, messages: MessageRow[]): CommentThread {
+/** Reactions of one message, grouped by emoji in the order each emoji was first added. */
+function reactionsOf(messageId: number, rows: ReactionRow[]): Reaction[] {
+  const byEmoji = new Map<string, Reaction>();
+  for (const row of rows) {
+    if (row.message_id !== messageId) continue;
+    const reaction = byEmoji.get(row.emoji) ?? { emoji: row.emoji, count: 0, mine: false };
+    reaction.count++;
+    reaction.mine ||= row.user === CURRENT_USER;
+    byEmoji.set(row.emoji, reaction);
+  }
+  return [...byEmoji.values()];
+}
+
+const MAX_REACTION_LENGTH = 32;
+
+/** One emoji (with its modifiers and joiners), not text. */
+export function isReactionEmoji(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_REACTION_LENGTH &&
+    !/\s/.test(value) &&
+    /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3/u.test(value) &&
+    !/[\p{L}\p{N}]/u.test(value.replace(/[#*0-9]\uFE0F?\u20E3/gu, ""))
+  );
+}
+
+/**
+ * Adds (`on`) or removes the current user's reaction with `emoji` to a message of a thread in the
+ * document. Returns the thread, or null if the thread or the message is not found.
+ */
+export function setReaction(db: Database, documentId: string, commentId: number, messageId: number, emoji: unknown, on: boolean, now = Date.now()) {
+  if (!isReactionEmoji(emoji)) throw new InvalidCommentError("A reaction must be one emoji");
+  if (!findMessage(db, documentId, commentId, messageId)) return null;
+  if (on) {
+    db.prepare("INSERT OR IGNORE INTO comment_reactions (message_id, emoji, user, created_at) VALUES (?, ?, ?, ?)").run(messageId, emoji, CURRENT_USER, now);
+  } else {
+    db.prepare("DELETE FROM comment_reactions WHERE message_id = ? AND emoji = ? AND user = ?").run(messageId, emoji, CURRENT_USER);
+  }
+  return getComment(db, documentId, commentId);
+}
+
+function toThread(row: CommentRow, messages: MessageRow[], reactions: ReactionRow[] = []): CommentThread {
   return {
     id: row.id,
     from: row.anchor_from,
@@ -172,9 +231,10 @@ function toThread(row: CommentRow, messages: MessageRow[]): CommentThread {
     quote: row.quote,
     resolved: row.resolved === 1,
     createdAt: row.created_at,
-    messages: messages.map(
-      (message): CommentMessage => ({ id: message.id, body: message.body, createdAt: message.created_at }),
-    ),
+    messages: messages.map((message): CommentMessage => {
+      const messageReactions = reactionsOf(message.id, reactions);
+      return { id: message.id, body: message.body, createdAt: message.created_at, ...(messageReactions.length > 0 && { reactions: messageReactions }) };
+    }),
   };
 }
 

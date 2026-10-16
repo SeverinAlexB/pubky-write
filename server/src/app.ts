@@ -17,6 +17,7 @@ import {
   InvalidCommentError,
   listComments,
   setResolved,
+  setReaction,
 } from "./comments.ts";
 import { inTransaction, type Database } from "./database.ts";
 import {
@@ -222,6 +223,18 @@ export function createApp({
   app.delete("/api/documents/:id/comments/:commentId/messages/:messageId", (c) => {
     const { id, commentId, messageId } = c.req.param();
     return c.json(found(deleteReply(db, id, Number(commentId), Number(messageId))));
+  });
+
+  // Emoji reactions of the current user to a message: added (POST, body `emoji`) or removed (DELETE).
+  app.post("/api/documents/:id/comments/:commentId/messages/:messageId/reactions", async (c) => {
+    const { emoji } = await c.req.json<{ emoji?: unknown }>().catch(() => ({ emoji: undefined }));
+    const { id, commentId, messageId } = c.req.param();
+    return c.json(found(setReaction(db, id, Number(commentId), Number(messageId), emoji, true)));
+  });
+
+  app.delete("/api/documents/:id/comments/:commentId/messages/:messageId/reactions/:emoji", (c) => {
+    const { id, commentId, messageId, emoji } = c.req.param();
+    return c.json(found(setReaction(db, id, Number(commentId), Number(messageId), emoji, false)));
   });
 
   app.get("/api/documents/:id/comments/:commentId", (c) =>
