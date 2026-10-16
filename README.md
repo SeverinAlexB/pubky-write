@@ -129,7 +129,9 @@ To restore a backup:
   proportions, edge handles stretch one side (Shift keeps the proportions);
   the size is stored as the image's `width` and `height`. A pill under the
   image has Wrap text options (In line, Wrap text, Break text, Behind text, In
-  front of text), for placed images a margin ("3.2mm margin") and a position
+  front of text; Wrap text puts the text on both sides of the image when each side
+  has at least 1 cm of room, otherwise on the wider side), for placed images a
+  margin ("3.2mm margin") and a position
   menu (Move with text, Fix position on page), Image options and Add comment.
   Placed images can be dragged; they are anchored to the paragraph they are
   dropped at. Crop image (toolbar, or a double-click) shows crop handles; Enter
@@ -240,7 +242,8 @@ To restore a backup:
   suggestion has a card in the comment margin ("Add", "Delete", "Replace",
   "Format") with Accept, Reject and replies; the active one is outlined in the
   document. Tools > Review suggested edits (Ctrl+⌘O then Ctrl+⌘U) steps through
-  them, previews the document with all of them accepted or rejected, and
+  them, previews the document with all of them accepted or rejected (Preview reject all shows the
+  document with every suggestion rejected, formatting, paragraphs, lists and images included), and
   accepts or rejects one or all (each one undo step). Viewing mode shows the
   document read-only as if every suggestion were accepted. Inserting or
   deleting images, tables, table rows and columns, page and column breaks,
@@ -544,11 +547,14 @@ not report long tasks, and throttling and profiles need Chrome.
 ## Limitations
 
 - One user, no accounts or sharing.
-- Tables are not split across pages, and printed page breaks can differ
-  slightly from the screen because the browser paginates the printout.
-- Images are always in line with text; wrapping, rotation, cropping and image
-  borders are not available yet. Table alignment and fixed column widths in
-  Table options are not available yet either.
+- Without print layout, printed page breaks can differ slightly from the screen
+  because the browser paginates the printout.
+- Image borders are not available yet, and the wrapping of images in headers and
+  footers comes only from Word files (the image pill is the body's). With text on
+  both sides of an image, a line that would be beside it but moves to the next
+  page keeps its gap there, and the version history preview puts the text on one
+  side. Table alignment and fixed column widths in Table options are not
+  available yet either.
 - One section per document: no section breaks, so no different headers or
   page numbering per section; Header format (margins of the header and footer)
   is not available yet. Footnotes are paragraphs of text (no images or tables)
@@ -558,8 +564,8 @@ not report long tasks, and throttling and profiles need Chrome.
   are not imported from Word. The author is always "You"; emoji reactions are not available yet.
 - Find searches the shown tab only (no "All tabs" option), and tabs cannot be
   reordered by dragging (use Move up, Move down and Move into).
-- No real-time collaboration yet. Suggestions are always by "You"; the Preview
-  reject all view still shows suggested formatting and paragraph breaks.
+- No real-time collaboration yet. Suggestions are always by "You"; Preview reject all shows no
+  comments.
 - With the same document open in two windows: text typed into a cell in one
   window while the other merges that cell can end up twice (merging moves the
   cell's text), and an undo that had to be adjusted to the other window's edits

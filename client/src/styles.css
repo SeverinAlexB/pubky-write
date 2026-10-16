@@ -3603,22 +3603,19 @@ body.is-column-resizing * {
   text-decoration: line-through;
 }
 
-/* Viewing mode and Preview accept all: the document as if every suggestion were accepted. */
+/*
+ * Viewing mode and Preview accept all: the document as if every suggestion were accepted. (Preview
+ * reject all shows the rejected document itself, see editor/RejectPreview.tsx.)
+ */
 .suggestions-accepted .page-content :is(.suggestion-node-delete, [data-suggestion-delete]),
-.suggestions-rejected .page-content :is(.suggestion-node-insert, [data-suggestion-insert]),
-.suggestions-accepted .footnote-entry.is-suggested-delete,
-.suggestions-rejected .footnote-entry.is-suggested-insert {
+.suggestions-accepted .footnote-entry.is-suggested-delete {
   display: none;
 }
 
 .suggestions-accepted .page-content :is(.suggestion-node-insert, [data-suggestion-insert]),
-.suggestions-rejected .page-content :is(.suggestion-node-delete, [data-suggestion-delete]),
 .suggestions-accepted .page-content :is(.suggestion-node-insert, [data-suggestion-insert]) :is(td, th),
-.suggestions-rejected .page-content :is(.suggestion-node-delete, [data-suggestion-delete]) :is(td, th),
 .suggestions-accepted .page-content :is(tr, td, th):is(.suggestion-node-insert, [data-suggestion-insert]) > :is(td, th),
-.suggestions-rejected .page-content :is(tr, td, th):is(.suggestion-node-delete, [data-suggestion-delete]) > :is(td, th),
-.suggestions-accepted .footnote-entry .footnote-text,
-.suggestions-rejected .footnote-entry .footnote-text {
+.suggestions-accepted .footnote-entry .footnote-text {
   outline: none;
   color: inherit;
   text-decoration: inherit;
@@ -3626,33 +3623,26 @@ body.is-column-resizing * {
   box-shadow: none;
 }
 
-.suggestions-rejected .page-content :is(.suggestion-node-delete, [data-suggestion-delete])::after,
-.suggestions-rejected .page-content :is(.suggestion-node-delete, .suggestion-node-insert, [data-suggestion-delete], [data-suggestion-insert])::before,
 .suggestions-accepted .page-content :is(.suggestion-node-delete, .suggestion-node-insert, [data-suggestion-delete], [data-suggestion-insert])::before {
   content: none;
 }
 
-.suggestions-accepted .page-content :is(.page-break, .column-break, hr):is(.suggestion-node-insert, [data-suggestion-insert]),
-.suggestions-rejected .page-content :is(.page-break, .column-break, hr):is(.suggestion-node-delete, [data-suggestion-delete]) {
+.suggestions-accepted .page-content :is(.page-break, .column-break, hr):is(.suggestion-node-insert, [data-suggestion-insert]) {
   border-top-color: #9aa0a6;
   border-top-width: 1px;
   opacity: 1;
 }
 .suggestions-accepted .page-content .suggestion-delete,
-.suggestions-rejected .page-content .suggestion-insert,
-.suggestions-accepted .page-content .suggestion-break,
-.suggestions-rejected .page-content .suggestion-break {
+.suggestions-accepted .page-content .suggestion-break {
   display: none;
 }
 
-.suggestions-accepted .page-content :is(.suggestion-insert, .suggestion-format, [data-suggestion-format]),
-.suggestions-rejected .page-content :is(.suggestion-delete, .suggestion-format, [data-suggestion-format]) {
+.suggestions-accepted .page-content :is(.suggestion-insert, .suggestion-format, [data-suggestion-format]) {
   color: inherit;
   text-decoration: inherit;
 }
 
-.suggestions-accepted .page-content .suggestion-active,
-.suggestions-rejected .page-content .suggestion-active {
+.suggestions-accepted .page-content .suggestion-active {
   box-shadow: none;
 }
 

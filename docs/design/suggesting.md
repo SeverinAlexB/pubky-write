@@ -222,8 +222,19 @@ The mode (`editing`, `suggesting`, `viewing`) is stored per document in localSto
   the pagination skips hidden objects, so a deleted page break no longer breaks the page). Viewing mode
   also hides comment highlights and the margin and disables the toolbar's editing controls and the
   Insert and Format menus.
-- **Preview reject all**: read-only, inserted text and objects hidden, deleted ones shown normally. Formatting
-  changes and paragraph breaks are still shown as suggested (a CSS preview cannot revert them).
+- **Preview reject all**: the rejected document itself (`rejectedDocument`, `applySuggestions` with
+  "reject" on a copy: insertions removed, deletions kept, and text formatting, paragraph styles,
+  alignment, spacing, indents, lists, paragraph breaks and image settings restored, in the body,
+  headers, footers and footnotes). CSS on the editor could hide inserted text, but not give text
+  its earlier marks, a heading back its paragraph, an item back its place outside a list or an image
+  its earlier size. `RejectPreview.tsx` draws it in a read-only editor of its own (the document's
+  schema with the editor's views of images and tables, document tabs, tab stops and the pagination,
+  as the version history preview does), on page sheets of its own with headers, footers and
+  footnotes, in place of the editor's, which are hidden meanwhile (the editor keeps its state, undo
+  history and selection). It follows the shown tab, zoom and print layout, and is drawn again when
+  the document changes (rejecting a suggestion from the review card changes nothing in it, so it is
+  kept). Previous and Next scroll it to the selected suggestion, mapped into the rejected document.
+  The comment margin is hidden: its cards belong to the editor's pages.
 
 While read-only, the dispatch hook drops any transaction that would change the document (except
 accept/reject and synced steps), so menu commands cannot edit it. The pagination is laid out
@@ -283,8 +294,8 @@ again when the display state changes, because hidden text changes line breaks.
   Table", not the text typed in it).
 - An object put in place of an empty paragraph keeps that paragraph, with its break suggested for
   deletion, until the suggestion is accepted (it then goes) or rejected (it stays).
-- Image format changes are not shown in Preview reject all (as for text formatting, the preview
-  hides and shows content but cannot restore earlier attributes).
+- Preview reject all shows no comments, and Find, word count and the outline still read the
+  document with its suggestions.
 
 ## Property tests
 

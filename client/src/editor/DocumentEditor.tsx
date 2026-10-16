@@ -110,6 +110,7 @@ const ImageOptionsPanel = lazyComponent(() => import("./OptionsPanels.tsx").then
 const SplitCellDialog = lazyComponent(() => import("./SplitCellDialog.tsx").then((module) => module.SplitCellDialog));
 const PageNumbersDialog = lazyComponent(() => import("./PageNumbersDialog.tsx").then((module) => module.PageNumbersDialog));
 const ReviewSuggestions = lazyComponent(() => import("./ReviewSuggestions.tsx").then((module) => module.ReviewSuggestions));
+const RejectPreview = lazyComponent(() => import("./RejectPreview.tsx").then((module) => module.RejectPreview));
 const UnsavedChangesDialog = lazyComponent(() => import("./UnsavedChangesDialog.tsx").then((module) => module.UnsavedChangesDialog));
 const PreferencesDialog = lazyComponent(() => import("./PreferencesDialog.tsx").then((module) => module.PreferencesDialog));
 const KeyboardShortcutsDialog = lazyComponent(() =>
@@ -132,6 +133,7 @@ const onDemand = [
   SplitCellDialog,
   SpecialCharactersDialog,
   ReviewSuggestions,
+  RejectPreview,
   PreferencesDialog,
   KeyboardShortcutsDialog,
 ];
@@ -192,6 +194,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   // Tools > Review suggested edits, and its preview of accepting or rejecting all suggestions.
   const [reviewOpen, setReviewOpen] = useState(false);
   const [suggestionView, setSuggestionView] = useState<SuggestionView>("suggestions");
+  // The suggestion to scroll to in Preview reject all.
+  const [rejectPreviewTarget, setRejectPreviewTarget] = useState<{ suggestion: Suggestion } | null>(null);
   const [suggestionReplies, setSuggestionReplies] = useState(doc.suggestionReplies ?? {});
   const location = useLocation();
   // A notice from the document list, such as content an import left out.
@@ -578,12 +582,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     activateSuggestion(id);
     const suggestion = getSuggesting(editor.state).suggestions.find((candidate) => candidate.id === id);
     if (!suggestion) return;
-    if (suggestion.region) {
+    if (suggestion.region && display !== "rejected") {
       // A header's, footer's or footnote's suggestion: its region on the page.
       if (suggestion.region.key !== "footnote" && !printLayout) setPrintLayout(true);
       requestAnimationFrame(() => regionElement(suggestion)?.scrollIntoView({ block: "center" }));
       return;
     }
+    // Preview reject all shows the rejected document in place of the editor's pages.
+    if (display === "rejected") return setRejectPreviewTarget({ suggestion });
     const { node } = editor.view.domAtPos(Math.min(suggestion.from + 1, editor.state.doc.content.size));
     const element = node instanceof HTMLElement ? node : node.parentElement;
     element?.scrollIntoView({ block: "center" });
@@ -1152,6 +1158,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     !commentsHidden &&
     !historyOpen &&
     mode !== "viewing" &&
+    // Preview reject all shows other pages (RejectPreview), which the comments are not next to.
+    display !== "rejected" &&
     (tabOpenCommentCount > 0 || commentState.draft !== null || activeThread !== undefined || marginSuggestions.length > 0);
   const marginWidth = marginShown ? COMMENT_MARGIN_WIDTH : 0;
   const fitZoom = useFitZoom(geometry.width, marginWidth);
@@ -1291,10 +1299,14 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             <div className="editor-scroll" ref={fitZoom.ref} tabIndex={readOnly ? 0 : undefined}>
               {/* The pages and, right of them, the comment margin, centred together. */}
               <div ref={setColumn} className="page-column">
+                {display === "rejected" && !historyOpen && (
+                  <RejectPreview editor={editor} zoom={effectiveZoom} printLayout={printLayout} scrollTarget={rejectPreviewTarget} />
+                )}
                 <div
                   ref={setStack}
                   className={`page-stack${printLayout ? "" : " is-pageless"} suggestions-${display}${mode === "viewing" ? " is-viewing" : ""}`}
                   style={{ zoom: effectiveZoom }}
+                  hidden={display === "rejected"}
                 >
                   {/* One sheet per page, drawn by the pagination plugin. */}
                   <div className="page-sheets" aria-hidden />

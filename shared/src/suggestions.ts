@@ -8,7 +8,7 @@ import { Extension, Mark as TiptapMark, mergeAttributes, type JSONContent } from
 import { Fragment, Mark, Slice, type MarkType, type Node, type NodeType, type Schema } from "@tiptap/pm/model";
 import { liftListItem, sinkListItem, wrapInList } from "@tiptap/pm/schema-list";
 import { EditorState, TextSelection, type Command } from "@tiptap/pm/state";
-import { canSplit, Transform } from "@tiptap/pm/transform";
+import { canSplit, Transform, type Mapping } from "@tiptap/pm/transform";
 import { regionKeys, type RegionContent, type RegionKey } from "./pageElements.ts";
 
 export type SuggestionMeta = { id: string; author: string; createdAt: number };
@@ -1025,6 +1025,16 @@ function putInList(tr: Transform, pos: number, list: NonNullable<ListInfo>): voi
 export function acceptedDocument(doc: Node): Node {
   if (!hasSuggestions(doc)) return doc;
   return applySuggestions(new Transform(doc), "accept").doc;
+}
+
+/**
+ * The document as if every suggestion were rejected (Preview reject all): insertions removed,
+ * deletions kept, and earlier formatting, paragraphs, lists and image settings restored, in the
+ * body, headers, footers and footnotes. `mapping` maps positions of `doc` into it.
+ */
+export function rejectedDocument(doc: Node): { doc: Node; mapping: Mapping } {
+  const transform = applySuggestions(new Transform(doc), "reject");
+  return { doc: transform.doc, mapping: transform.mapping };
 }
 
 // Text as if suggestions were accepted -------------------------------------------------------

@@ -13,6 +13,7 @@ import {
   descriptionText,
   hasSuggestions,
   quoteText,
+  rejectedDocument,
   stripSuggestions,
 } from "./suggestions.ts";
 
@@ -239,6 +240,27 @@ describe("the accepted result", () => {
     expect(visible).toBe("Hello brave new world");
     // "world" starts after the 4 characters of the deleted "old ".
     expect(offsets![visible.indexOf("world")]).toBe("Hello brave new old ".length);
+  });
+});
+
+describe("the rejected result (Preview reject all)", () => {
+  it("removes insertions, keeps deletions and restores formatting, paragraphs and headers, with a mapping into it", () => {
+    const doc = Node.fromJSON(documentSchema, {
+      ...sample().toJSON(),
+      attrs: { header: [{ type: "paragraph", content: [text("Head"), text(" added", [insert("h")])] }] },
+    });
+    const { doc: rejected, mapping } = rejectedDocument(doc);
+    expect(hasSuggestions(rejected)).toBe(false);
+    // The inserted paragraph break joins "Split off" (inserted too) back: nothing of it is left.
+    expect(rejected.childCount).toBe(2);
+    expect(rejected.child(0).textContent).toBe("Hello new old world");
+    expect(rejected.child(0).lastChild!.marks.map((mark) => mark.type.name)).toEqual([]);
+    expect(rejected.child(1).type.name).toBe("paragraph");
+    expect(rejected.attrs.header).toMatchObject([{ type: "paragraph", content: [{ type: "text", text: "Head" }] }]);
+    // "world" in the document maps to "world" in the rejected one.
+    const world = doc.child(0).textContent.indexOf("world") + 1;
+    const mapped = mapping.map(world);
+    expect(rejected.textBetween(mapped, mapped + 5)).toBe("world");
   });
 });
 

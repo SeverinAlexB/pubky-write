@@ -345,10 +345,16 @@ test("Review suggested edits steps through suggestions and accepts all in one un
   await expect(editor(page).locator(".suggestion-insert")).toHaveCSS("color", "rgb(0, 0, 0)");
   await review.getByRole("button", { name: "Preview accept all" }).click();
   await page.getByRole("menuitemcheckbox", { name: "Preview reject all" }).click();
-  await expect(editor(page).locator(".suggestion-insert")).toBeHidden();
-  await expect(editor(page).locator(".suggestion-delete")).toHaveCSS("text-decoration-line", "none");
+  // The rejected document itself, in place of the editor's pages: the suggested bold is gone too.
+  const rejected = page.getByLabel("Preview of rejecting all suggestions");
+  await expect(rejected).toHaveAttribute("contenteditable", "false");
+  await expect(editor(page)).toBeHidden();
+  await expect(rejected.locator("p")).toHaveText(["First item", "Second item", "Third item here"]);
+  await expect(rejected.locator("strong")).toHaveCount(0);
+  await expect(rejected.locator(".suggestion-insert, .suggestion-delete, .suggestion-format")).toHaveCount(0);
   await review.getByRole("button", { name: "Preview reject all" }).click();
   await page.getByRole("menuitemcheckbox", { name: "Show suggested edits" }).click();
+  await expect(rejected).toHaveCount(0);
   await expect(editor(page)).toHaveAttribute("contenteditable", "true");
 
   await review.getByRole("button", { name: "More accept options" }).click();

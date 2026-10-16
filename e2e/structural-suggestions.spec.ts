@@ -348,3 +348,96 @@ test("Viewing mode hides a deleted table row and shows an inserted image without
   await expect(editor(page).locator("tr").first()).toBeHidden();
   await expect(editor(page).locator("tr").nth(1)).toBeVisible();
 });
+
+test("Preview reject all shows the rejected document: formatting, paragraphs, lists, images and headers as before", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("A title line");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Item one");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Item two");
+  await page.keyboard.press("Enter");
+  await uploadImage(page);
+  await page.evaluate(() => {
+    type View = { state: { tr: { setDocAttribute: (key: string, value: unknown) => unknown } }; dispatch: (tr: unknown) => void };
+    const view = (document.querySelector(".ProseMirror") as unknown as { editor: { view: View } }).editor.view;
+    view.dispatch(view.state.tr.setDocAttribute("header", [{ type: "paragraph", content: [{ type: "text", text: "Header text" }] }]));
+  });
+  await waitUntilSaved(page);
+  await suggest(page);
+
+  // A centred heading (one suggestion); a list; bold text; a word typed; the image breaking the text.
+  await editor(page).getByText("A title line").click();
+  await selectionSynced(page);
+  await page.getByRole("button", { name: "Styles" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Heading 1", exact: true }).click();
+  await expect(editor(page).locator("h1")).toHaveText("A title line");
+  await page.keyboard.press(`${mod}+Shift+e`);
+  await expect(editor(page).locator("h1")).toHaveCSS("text-align", "center");
+  await page.keyboard.press("ArrowDown");
+  await selectionSynced(page);
+  await page.keyboard.press(`${mod}+Shift+8`);
+  await expect(editor(page).locator("ul li")).toHaveText("Item one");
+  // Selects "two".
+  await page.evaluate(() => {
+    type Editor = {
+      state: { doc: { descendants: (visit: (node: { isText: boolean; text?: string }, pos: number) => void) => void } };
+      commands: { setTextSelection: (range: { from: number; to: number }) => boolean };
+    };
+    const instance = (document.querySelector(".ProseMirror") as unknown as { editor: Editor }).editor;
+    let at = -1;
+    instance.state.doc.descendants((node, pos) => {
+      if (node.isText && node.text?.includes("Item two")) at = pos + node.text.indexOf("two");
+    });
+    instance.commands.setTextSelection({ from: at, to: at + 3 });
+  });
+  await page.keyboard.press(`${mod}+b`);
+  await expect(editor(page).locator("strong")).toHaveText("two");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.type(" more");
+  await editor(page).locator(".image-frame img").click();
+  await page.getByRole("button", { name: "Wrap text options" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Break text" }).click();
+  await expect(editor(page).locator(".image-frame")).toHaveAttribute("data-wrap", "break");
+  await expect(suggestionCards(page)).toHaveCount(5);
+
+  await menuBarItem(page, "Tools").click();
+  await page.getByRole("menuitem", { name: "Review suggested edits" }).click();
+  const review = page.getByRole("dialog", { name: "Suggested edits" });
+  await review.getByRole("button", { name: "Show suggested edits" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Preview reject all" }).click();
+
+  const preview = page.getByLabel("Preview of rejecting all suggestions");
+  await expect(preview).toBeVisible();
+  await expect(editor(page)).toBeHidden();
+  // Everything as before the suggestions, and no suggestion styling or cards.
+  await expect(preview.locator("h1")).toHaveCount(0);
+  await expect(preview.locator(":scope > p").first()).toHaveText("A title line");
+  await expect(preview.locator(":scope > p").first()).toHaveCSS("text-align", "start");
+  await expect(preview.locator("ul")).toHaveCount(0);
+  await expect(preview.locator("strong")).toHaveCount(0);
+  await expect(preview).not.toContainText("more");
+  await expect(preview.locator(".image-frame")).toHaveAttribute("data-wrap", "inline");
+  await expect(preview.locator("[class*='suggestion'], [data-suggestion-insert], [data-suggestion-delete]")).toHaveCount(0);
+  await expect(suggestionCards(page)).toHaveCount(0);
+  // The pages have their header.
+  await expect(page.locator(".is-reject-preview .page-region-slot.is-header").first()).toContainText("Header text");
+  // Next selects a suggestion and scrolls the preview to it.
+  await review.getByRole("button", { name: "Next" }).click();
+  await expect(preview).toBeVisible();
+
+  // Back to the suggestions: the editor with all of them.
+  await review.getByRole("button", { name: "Preview reject all" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Show suggested edits" }).click();
+  await expect(preview).toHaveCount(0);
+  await expect(editor(page).locator("h1")).toHaveText("A title line");
+  await expect(suggestionCards(page)).toHaveCount(5);
+
+  // Rejecting all gives what the preview showed.
+  await review.getByRole("button", { name: "More reject options" }).click();
+  await page.getByRole("menuitem", { name: "Reject all (5)" }).click();
+  await expect(editor(page).locator("h1, ul, strong")).toHaveCount(0);
+  await expect(editor(page).locator(".image-frame")).toHaveAttribute("data-wrap", "inline");
+  await expect(editor(page)).not.toContainText("more");
+});
