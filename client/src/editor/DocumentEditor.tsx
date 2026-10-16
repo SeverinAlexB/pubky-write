@@ -163,6 +163,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const [columnOptionsOpen, setColumnOptionsOpen] = useState(false);
   const [splitCellOpen, setSplitCellOpen] = useState(false);
   const [stack, setStack] = useState<HTMLDivElement | null>(null);
+  // The pages of Preview reject all, which the rulers follow while they are shown.
+  const [previewStack, setPreviewStack] = useState<HTMLDivElement | null>(null);
   const [menusHidden, setMenusHidden] = useState(false);
   const [linkDialog, setLinkDialog] = useState<{ href: string } | null>(null);
   const [imageUrlDialog, setImageUrlDialog] = useState(false);
@@ -1165,6 +1167,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   const fitZoom = useFitZoom(geometry.width, marginWidth);
   const effectiveZoom = zoom === "fit" ? fitZoom.value : zoom;
 
+  const rulerStack = display === "rejected" && previewStack ? previewStack : stack;
+
   // Zoom, the print layout setting and showing the page again all change the layout from outside the editor.
   useEffect(() => {
     if (stack && !editor.isDestroyed) resetPagination(editor.view, printLayout);
@@ -1249,7 +1253,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           <HorizontalRuler
             editor={editor}
             paragraphEditor={activeEditor}
-            stack={stack}
+            stack={rulerStack}
             geometry={geometry}
             zoom={effectiveZoom}
             unit={unit}
@@ -1260,7 +1264,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
         )}
 
         <div className="editor-workspace">
-          {rulerVisible && printLayout && <VerticalRuler stack={stack} geometry={geometry} zoom={effectiveZoom} unit={unit} />}
+          {rulerVisible && printLayout && <VerticalRuler stack={rulerStack} geometry={geometry} zoom={effectiveZoom} unit={unit} />}
           {outlineOpen && !historyOpen && (
             <OutlinePanel editor={editor} openComments={openCommentsByTab} actions={tabActions} onClose={() => setOutlineOpen(false)} />
           )}
@@ -1300,7 +1304,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
               {/* The pages and, right of them, the comment margin, centred together. */}
               <div ref={setColumn} className="page-column">
                 {display === "rejected" && !historyOpen && (
-                  <RejectPreview editor={editor} zoom={effectiveZoom} printLayout={printLayout} scrollTarget={rejectPreviewTarget} />
+                  <RejectPreview
+                    editor={editor}
+                    zoom={effectiveZoom}
+                    printLayout={printLayout}
+                    scrollTarget={rejectPreviewTarget}
+                    onStack={setPreviewStack}
+                  />
                 )}
                 <div
                   ref={setStack}

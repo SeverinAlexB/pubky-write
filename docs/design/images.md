@@ -110,9 +110,12 @@ blocks and lines as before:
   starts, added to a float's or breaking image's top margin). The node view keeps those variables
   when it redraws the frame.
 
-The version preview uses the same styles: `renderHTML` writes a frame for images with a layout of
-their own (also used for copy and paste within the editor, which keeps the attributes as `data-`
-attributes). Without the editor's width, the preview always floats wrapped images left.
+The version history preview and Preview reject all use the editor's node view (read-only), so they
+lay images out as the editor does, text on both sides included. `renderHTML` writes a frame with the
+same styles for images with a layout of their own, for copy and paste within the editor (which keeps
+the attributes as `data-` attributes) and for the static copies of headers and footers; without the
+editor's width it floats wrapped images left, and the copies of headers and footers then work out
+the side themselves (below).
 
 ## Interaction
 
@@ -153,10 +156,10 @@ attributes). Without the editor's width, the preview always floats wrapped image
 
 - With text on both sides of an image, the gaps are measured without the page breaks: a line that
   would be beside the image but moves to the next page or column (the image fits, the line does not)
-  keeps its gap there. The version preview (and copies) always float wrapped images
-  left, without the editor's width. Images in headers and footers can be selected and resized,
-  but their wrapping is only set by Word files (the image pill is the body's). Text inside table cells beside the image is not split: the
-  table moves below the image.
+  keeps its gap there. Images in headers and footers can be selected and resized, but their
+  wrapping is only set by Word files (the image pill is the body's). Text inside table cells beside
+  the image is not split: the table moves below the image. A word wider than both sides of a line
+  moves below the image, leaving the lines beside it empty.
 - An image is anchored to a top-level block: dropped into a list or a table, it anchors to the
   whole list or table.
 - Behind-text images can be pressed only where there is no text over them (or selected with the

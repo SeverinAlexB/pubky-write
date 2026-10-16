@@ -50,13 +50,34 @@ export function measureColumnsFlat<T>(stack: HTMLElement, measure: () => T): T {
   const scroller = stack.closest<HTMLElement>(".editor-scroll");
   const scrollTop = scroller?.scrollTop;
   stack.classList.add("is-measuring-columns");
+  rebuildSplitTables(stack);
   try {
     return measure();
   } finally {
     stack.classList.remove("is-measuring-columns");
+    rebuildSplitTables(stack);
     // Scroll anchoring could have moved the view while the content was taller.
     if (scroller && scrollTop !== undefined && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
   }
+}
+
+/**
+ * Draws the tables broken into columns in `root` from scratch. Their parts are tables the browser
+ * makes around the rows between two spacers (see pagination.ts); WebKit does not join two of them
+ * again when the spacer between them goes or is hidden, so a part would keep column widths of its
+ * own. Taking the tables out of the layout for a moment makes the browser build the parts again.
+ * The tables' classes are their view's own (ProseMirror ignores changes outside the cells).
+ */
+export function rebuildSplitTables(root: HTMLElement): void {
+  const tables = root.querySelectorAll<HTMLElement>("table:has(> tbody > .table-column-spacer)");
+  if (tables.length === 0) return;
+  // Scroll anchoring could move the view while the tables are gone.
+  const scroller = root.closest<HTMLElement>(".editor-scroll");
+  const scrollTop = scroller?.scrollTop;
+  for (const table of tables) table.classList.add("is-rebuilding");
+  void root.offsetHeight;
+  for (const table of tables) table.classList.remove("is-rebuilding");
+  if (scroller && scrollTop !== undefined && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
 }
 
 /**

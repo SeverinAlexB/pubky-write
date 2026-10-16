@@ -47,6 +47,7 @@ import {
   drawColumnLines,
   drawnColumnHeights,
   measureColumnsFlat,
+  rebuildSplitTables,
   supportsColumnBreaks,
 } from "./columnLayout.ts";
 import { placeFixedImages } from "./imagePlacement.ts";
@@ -559,7 +560,9 @@ class PaginationView {
     flushPendingSelection(view);
     const tr = view.state.tr.setMeta(paginationKey, { spacers: rendered, layout } satisfies PaginationMeta).setMeta("addToHistory", false);
     if (state.scroll && view.hasFocus()) tr.scrollIntoView();
+    const splitsChanged = columns.count > 1 && changedTableSplits(view.state.doc, current, rendered);
     view.dispatch(tr);
+    if (splitsChanged) rebuildSplitTables(root);
     updatePageFields(view, stack, stride, scale);
     return true;
   }
@@ -785,6 +788,16 @@ function layoutBoxes(
     });
   }
   return boxes;
+}
+
+/** Whether the spacers between table rows (with columns) differ between `before` and `after`. */
+function changedTableSplits(doc: Node, before: readonly RenderedSpacer[], after: readonly RenderedSpacer[]): boolean {
+  const splits = (spacers: readonly RenderedSpacer[]) =>
+    spacers
+      .filter((spacer) => spacer.sizes !== undefined)
+      .map((spacer) => `${spacer.pos}:${spacer.sizes}`)
+      .join("|");
+  return splits(before) !== splits(after);
 }
 
 /** The rows of a table as drawn (the editor wraps the table in a div), without the copies of pinned rows. */

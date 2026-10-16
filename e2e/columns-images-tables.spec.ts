@@ -869,25 +869,34 @@ test("with columns a table breaks between rows into the next column and page, re
   expect(near(await placeOf(page, repeat.nth(1)), 1, 0)).toBe(true);
   await expect(repeat.first()).toContainText("Name");
 
-  // Every row is in a column, between the margins, and as wide as the column.
+  // Every row is in a column, between the margins, as wide as the column and with the same columns.
   const rows = editor(page).locator("tbody > tr:not(.table-size-row)");
   await expect(rows).toHaveCount(81);
-  const places = await rows.evaluateAll((elements) =>
-    elements.map((row) => {
-      const rect = [...row.getClientRects()].find((box) => box.width > 0 && box.height > 0)!;
-      return { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width };
-    }),
-  );
-  const stackBox = (await stack.boundingBox())!;
-  const columnLefts = [MARGIN, MARGIN + COLUMN_WIDTH + 48].map((left) => stackBox.x + left);
-  for (const place of places) {
-    expect(columnLefts.some((left) => Math.abs(place.left - left) <= 1)).toBe(true);
-    expect(Math.abs(place.width - COLUMN_WIDTH)).toBeLessThanOrEqual(1.5);
-    const y = place.top - stackBox.y;
-    const pageIndex = Math.floor(y / PAGE_STRIDE);
-    expect(y - pageIndex * PAGE_STRIDE).toBeGreaterThanOrEqual(MARGIN - 1);
-    expect(place.bottom - stackBox.y - pageIndex * PAGE_STRIDE).toBeLessThanOrEqual(1123 - MARGIN + 1);
-  }
+  const rowPlaces = () =>
+    rows.evaluateAll((elements) =>
+      elements.map((row) => {
+        const rect = [...row.getClientRects()].find((box) => box.width > 0 && box.height > 0)!;
+        const cell = [...row.firstElementChild!.getClientRects()].find((box) => box.width > 0)!;
+        return { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width, cell: cell.width };
+      }),
+    );
+  const checkRows = async () => {
+    const stackBox = (await stack.boundingBox())!;
+    const columnLefts = [MARGIN, MARGIN + COLUMN_WIDTH + 48].map((left) => stackBox.x + left);
+    const all = await rowPlaces();
+    expect(all).toHaveLength(81);
+    for (const place of all) {
+      expect(columnLefts.some((left) => Math.abs(place.left - left) <= 1)).toBe(true);
+      expect(Math.abs(place.width - COLUMN_WIDTH)).toBeLessThanOrEqual(1.5);
+      expect(Math.abs(place.cell - all[0]!.cell)).toBeLessThanOrEqual(1);
+      const y = place.top - stackBox.y;
+      const pageIndex = Math.floor(y / PAGE_STRIDE);
+      expect(y - pageIndex * PAGE_STRIDE).toBeGreaterThanOrEqual(MARGIN - 1);
+      expect(place.bottom - stackBox.y - pageIndex * PAGE_STRIDE).toBeLessThanOrEqual(1123 - MARGIN + 1);
+    }
+    return all;
+  };
+  const places = await checkRows();
   // The row after each repeated pinned row follows right under it.
   for (const index of [0, 1]) {
     const box = (await repeat.nth(index).boundingBox())!;
@@ -902,6 +911,32 @@ test("with columns a table breaks between rows into the next column and page, re
   await page.keyboard.type(" (moved)");
   await expect(editor(page).getByText("Person 60 (moved)")).toBeVisible();
   await expect(repeat).toHaveCount(2);
+  // Rows added and removed move the breaks; every part keeps the table's columns.
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Second line");
+  await expect(checkRows).toPass({ timeout: 3000 });
+  for (let index = 0; index <= "Second line".length; index++) await page.keyboard.press("Backspace");
+  await expect(editor(page).getByText("Second line")).toHaveCount(0);
+  await expect(checkRows).toPass({ timeout: 3000 });
+  // Lines above the table move every break.
+  await editor(page).getByText("Before the table").click();
+  await selectionSynced(page);
+  await page.keyboard.press(lineEnd);
+  for (const line of ["One", "Two", "Three"]) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(line);
+  }
+  await expect(checkRows).toPass({ timeout: 3000 });
+
+  // The version history preview breaks the table the same way.
+  await waitUntilSaved(page);
+  await page.getByRole("button", { name: "Version history" }).first().click();
+  const history = page.getByLabel("Version preview");
+  await expect(history).toContainText("Person 60 (moved)");
+  await expect(history.locator(".table-column-spacer")).toHaveCount(2);
+  await expect(history.locator(".table-repeat-row")).toHaveCount(2);
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(editor(page)).toBeVisible();
 
   // Printing lays the pages out without gaps: the table still starts page 2 under its pinned row.
   await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));

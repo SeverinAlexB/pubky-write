@@ -1,6 +1,8 @@
 // Version history mode: a top bar in place of the header and toolbar, the selected version as
 // read-only pages in the centre and the list of versions on the right (docs/spec/08-version-history.md).
 import {
+  DocsImage,
+  DocsTable,
   documentExtensions,
   documentSchema,
   documentTabs,
@@ -21,11 +23,13 @@ import { Menu } from "../components/Menu.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 import { formatDay, formatVersionTime, formatVersionTitle } from "../format.ts";
 import { currentTabId, DocumentTabs, switchTab } from "./documentTabs.ts";
+import { EditorImage } from "./imageView.ts";
 import { OutlinePanel, OutlineToggle } from "./OutlinePanel.tsx";
 import { PageElements } from "./PageElements.tsx";
 import { useFitZoom, usePrintPageRule } from "./pageView.ts";
 import { Pagination, resetPagination } from "./pagination.ts";
 import { TabLayout } from "./tabLayout.ts";
+import { EditorTable } from "./tables.ts";
 import { ToolButton } from "./toolbar/ToolButton.tsx";
 import { ZoomControl, type Zoom } from "./toolbar/ZoomControl.tsx";
 import { VersionHighlight } from "./versionHighlight.ts";
@@ -118,7 +122,10 @@ export function HistoryMode({ documentId, initialTab, loadRevisions, initialZoom
   const preview = useEditor(
     {
       extensions: [
-        ...documentExtensions,
+        // The editor's own views of tables and images, so they are laid out as in the editor.
+        ...documentExtensions.map((extension) =>
+          extension === DocsTable ? EditorTable : extension === DocsImage ? EditorImage : extension,
+        ),
         DocumentTabs.configure({ initialTab: previewTab.current }),
         TabLayout,
         Pagination,

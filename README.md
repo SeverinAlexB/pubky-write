@@ -552,9 +552,8 @@ not report long tasks, and throttling and profiles need Chrome.
 - Image borders are not available yet, and the wrapping of images in headers and
   footers comes only from Word files (the image pill is the body's). With text on
   both sides of an image, a line that would be beside it but moves to the next
-  page keeps its gap there, and the version history preview puts the text on one
-  side. Table alignment and fixed column widths in Table options are not
-  available yet either.
+  page keeps its gap there. Table alignment and fixed column widths in Table
+  options are not available yet either.
 - One section per document: no section breaks, so no different headers or
   page numbering per section; Header format (margins of the header and footer)
   is not available yet. Footnotes are paragraphs of text (no images or tables)

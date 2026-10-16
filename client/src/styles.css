@@ -2248,6 +2248,11 @@ button:disabled {
   display: contents;
 }
 
+/* For a moment, so the browser builds the parts again (see rebuildTableBoxes in pagination.ts). */
+.page-content table.is-rebuilding {
+  display: none !important;
+}
+
 .page-content .table-size-row > td {
   height: 0;
   padding: 0;

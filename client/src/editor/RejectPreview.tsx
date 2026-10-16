@@ -19,9 +19,11 @@ type RejectPreviewProps = {
   printLayout: boolean;
   /** A suggestion selected in Review suggested edits, to scroll to (a new object each time). */
   scrollTarget: { suggestion: Suggestion } | null;
+  /** The preview's page stack, for the rulers. */
+  onStack?: (stack: HTMLDivElement | null) => void;
 };
 
-export function RejectPreview({ editor, zoom, printLayout, scrollTarget }: RejectPreviewProps) {
+export function RejectPreview({ editor, zoom, printLayout, scrollTarget, onStack }: RejectPreviewProps) {
   const doc = useEditorState({ editor, selector: ({ editor: current }) => current.state.doc, equalityFn: (a, b) => a === b });
   const tabId = useEditorState({ editor, selector: ({ editor: current }) => currentTabId(current.state) });
   const rejected = useMemo(() => rejectedDocument(doc), [doc]);
@@ -58,6 +60,10 @@ export function RejectPreview({ editor, zoom, printLayout, scrollTarget }: Rejec
   }, [preview, zoom, printLayout]);
 
   const stack = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    onStack?.(stack.current);
+    return () => onStack?.(null);
+  }, [onStack]);
   useEffect(() => {
     if (!scrollTarget || preview.isDestroyed) return;
     const { suggestion } = scrollTarget;

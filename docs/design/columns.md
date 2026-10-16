@@ -124,7 +124,15 @@ column width): one widget at the table's start, and one in each spacer before th
 pinned rows. The wrapper takes the table's margin and `border-collapse`. While the pagination measures
 the flat layout, the spacers are hidden, so the whole table is one anonymous table with the same
 widths. Code that reads a table's rows skips the sizing rows; dragging a column border measures the
-wrapper when the table has no box.
+wrapper when the table has no box. The version history preview and Preview reject all use the same
+table view, so their tables have the wrapper too.
+
+WebKit does not join two of these anonymous tables when the spacer between them goes (or is hidden
+for measuring), so a part would keep column widths of its own and the drawn layout would no longer
+match the measured one. When the spacers in a table change, and when the pagination starts and ends
+measuring flat, the tables that hold spacers are taken out of the layout for a moment
+(`rebuildSplitTables`, a class with `display: none`), which makes every browser build the parts
+again.
 
 ## Exports and import
 

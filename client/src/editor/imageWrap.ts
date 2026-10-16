@@ -16,6 +16,7 @@ import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { rebuildSplitTables } from "./columnLayout.ts";
 import { currentTab, shownTabElement } from "./documentTabs.ts";
 import { boxNodes, paginationKey } from "./pagination.ts";
 import { flushPendingSelection } from "./pendingSelection.ts";
@@ -187,11 +188,13 @@ function measureFlat<T>(view: EditorView, stack: HTMLElement, flatColumns: boole
   observer?.stop();
   stack.classList.add("is-measuring-wraps");
   if (flatColumns) stack.classList.add("is-measuring-columns");
+  rebuildSplitTables(stack);
   try {
     return measure(restore);
   } finally {
     for (const undo of restore.reverse()) undo();
     stack.classList.remove("is-measuring-wraps", "is-measuring-columns");
+    rebuildSplitTables(stack);
     observer?.start();
     if (scroller && scrollTop !== undefined && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
   }
