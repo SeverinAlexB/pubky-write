@@ -1,7 +1,7 @@
 // Format > Text > Capitalisation: changes the selected characters themselves, keeping their
 // formatting, in one undo step.
 import type { Mark } from "@tiptap/pm/model";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import { TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import type { Capitalisation } from "./actions.ts";
 

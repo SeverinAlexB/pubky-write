@@ -859,22 +859,23 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
     );
     if (previous && joinable(doc, previous.end, pos + 1, removedObjects)) removals.push({ from: previous.end, to: pos + 1 });
   }
+  // Lists are put back first (paragraphs taken out of a list, or put in one), then the content goes:
+  // a join across lists then joins what was there before.
   const start = tr.steps.length;
-  for (const { from, to } of mergeRanges(removals).reverse()) tr.delete(from, to);
-
   for (const { pos, list } of listReverts) {
-    // The textblock itself, unless it was removed (joined with the one before): text deleted at
-    // its start does not count.
-    const mapped = tr.mapping.slice(start).mapResult(pos, 1);
-    if (!mapped.deletedAfter && tr.doc.nodeAt(mapped.pos)?.isTextblock) revertList(tr, mapped.pos + 1, list);
+    const mapped = tr.mapping.slice(start).map(pos, 1);
+    if (tr.doc.nodeAt(mapped)?.isTextblock) revertList(tr, mapped + 1, list);
   }
   for (const { pos, type, attrs } of typeRestores) {
-    const mapped = tr.mapping.slice(start).mapResult(pos, 1);
-    const node = tr.doc.nodeAt(mapped.pos);
-    if (mapped.deletedAfter || !node?.isTextblock) continue;
-    const $pos = tr.doc.resolve(mapped.pos);
-    if ($pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, type)) tr.setNodeMarkup(mapped.pos, type, { ...attrs, suggestionBreak: node.attrs.suggestionBreak }, node.marks);
+    const mapped = tr.mapping.slice(start).map(pos, 1);
+    const node = tr.doc.nodeAt(mapped);
+    if (!node?.isTextblock) continue;
+    const $pos = tr.doc.resolve(mapped);
+    if ($pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, type)) tr.setNodeMarkup(mapped, type, { ...attrs, suggestionBreak: node.attrs.suggestionBreak }, node.marks);
   }
+  const moved = tr.mapping.slice(start);
+  const ranges = mergeRanges(removals).map(({ from, to }) => ({ from: moved.map(from, 1), to: moved.map(to, -1) }));
+  for (const { from, to } of ranges.reverse()) if (to > from) tr.delete(from, to);
   return tr;
 }
 

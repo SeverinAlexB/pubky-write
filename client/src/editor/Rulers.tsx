@@ -8,7 +8,7 @@ import {
   type TabStop,
   type TabStopKind,
 } from "@docs/shared";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import type { Editor } from "@tiptap/react";
 import {
   useCallback,

@@ -2,7 +2,7 @@
 // the Format > Table and right-click commands that prosemirror-tables does not have.
 import { columnFractions, DocsTable, percent, tableStyle } from "@docs/shared";
 import { Extension } from "@tiptap/core";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import { Fragment, type Node } from "@tiptap/pm/model";
 import { Plugin, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { isInTable, selectedRect, TableMap } from "@tiptap/pm/tables";

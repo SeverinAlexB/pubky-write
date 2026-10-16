@@ -2,7 +2,6 @@
 // in-memory database), editors made of the real plugins and sync, a network that delays, fails
 // and loses answers, and an in-memory stand-in for the browser's IndexedDB that outlives crashes.
 import { documentSchema, type CommentThread } from "@docs/shared";
-import { history } from "@tiptap/pm/history";
 import { Node } from "@tiptap/pm/model";
 import { EditorState, type Plugin, type Selection, type Transaction } from "@tiptap/pm/state";
 import { SELECT_FIRST } from "./edits.ts";
@@ -11,6 +10,7 @@ import { Step } from "@tiptap/pm/transform";
 import { collab, getVersion, receiveTransaction, sendableSteps } from "../../client/src/editor/collab.ts";
 import { CommentAnchors, type CommentAnchor } from "../../client/src/editor/commentAnchors.ts";
 import { DocumentTabs } from "../../client/src/editor/documentTabs.ts";
+import { tabHistory } from "../../client/src/editor/tabHistory.ts";
 import { PendingPersister, restoreEntry, type PendingEntry, type PendingStore, type RestoreOutcome } from "../../client/src/editor/pendingSteps.ts";
 import { getSuggesting, Suggesting, suggestTransaction, type EditorMode } from "../../client/src/editor/suggesting.ts";
 import { DocumentSync, RejectedError, type CollabTarget, type StepsTransport, type SubmitResult } from "../../client/src/editor/sync.ts";
@@ -59,8 +59,8 @@ export function editorPlugins(options: { version: number; clientID: string; mode
     // Tiptap orders plugins by priority: the tabs first, as in the editor.
     ...call(DocumentTabs, { initialTab: null }),
     tableEditing(),
-    // The editor's UndoRedo extension: Tiptap's defaults.
-    history({ depth: 100, newGroupDelay: 500 }),
+    // The editor's undo and redo, per tab.
+    tabHistory(),
     ...call(CommentAnchors, { initial: options.comments, initiallyHidden: false, onActivate: () => {} }),
     ...call(Suggesting, { initialMode: options.mode, author: "You", onActivate: () => {} }),
     collab({ version: options.version, clientID: options.clientID }),

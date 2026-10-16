@@ -23,7 +23,7 @@ import {
   type SuggestionMeta,
 } from "@docs/shared";
 import { Extension, type Editor } from "@tiptap/core";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import { ChangeSet, type Change, type TokenEncoder } from "@tiptap/pm/changeset";
 import type { Mark, MarkType, Node, Schema, Slice } from "@tiptap/pm/model";
 import { EditorState, NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
@@ -220,6 +220,8 @@ function joinSuggestion(state: EditorState, tr: Transaction, context: SuggestCon
   if (!empty || !$from.parent.isTextblock || $from.parentOffset !== 0 || !("suggestionBreak" in $from.parent.attrs)) return null;
   if (textblockCount(tr.doc) !== textblockCount(state.doc) - 1 || tr.doc.textContent !== state.doc.textContent) return null;
   const pos = $from.before();
+  // The break is already suggested for deletion: nothing more to suggest.
+  if (($from.parent.attrs.suggestionBreak as BreakSuggestion | null)?.kind === "delete") return { tr: state.tr, group: context.group, made: null };
   if (!canJoinBackward(state.doc, pos) || $from.parent.attrs.suggestionBreak) return null;
   const types = suggestionTypes(state.schema);
   const meta = chooseSuggestion(state.doc, pos, $from.pos, context.group, context, types);

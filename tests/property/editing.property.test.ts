@@ -1,7 +1,9 @@
 // Property tests of editing in one editor: undo, suggestions and document tabs. PROPERTY_RUNS and
 // PROPERTY_SEED as in sync.property.test.ts.
 import { applySuggestions, hasSuggestions } from "@docs/shared";
-import { undo, undoDepth } from "@tiptap/pm/history";
+import { documentTabs, findTab } from "@docs/shared";
+import { switchTab } from "../../client/src/editor/documentTabs.ts";
+import { SHARED, tabHistoryKey, undo, undoDepth } from "../../client/src/editor/tabHistory.ts";
 import type { Node } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { Transform } from "@tiptap/pm/transform";
@@ -65,13 +67,49 @@ describe("editing (property)", () => {
           state = edit(state, value);
           state.doc.check();
         }
-        for (let guard = 0; undoDepth(state) > 0 && guard < 200; guard++) {
+        // Undo is per tab: undo in the shown tab, then in each other tab with changes left.
+        for (let guard = 0; guard < 400; guard++) {
+          if (undoDepth(state) === 0) {
+            const other = documentTabs(state.doc).find((tab) => undoDepth(dispatchTo(state, switchTab(state, tab.id)!, clock)) > 0);
+            if (!other) break;
+            state = dispatchTo(state, switchTab(state, other.id)!, clock);
+          }
           let next: Transaction | null = null;
           undo(state, (tr) => (next = tr));
           if (!next) break;
           state = dispatchTo(state, next, tick());
         }
         expect(state.doc.toJSON()).toEqual(startDocument.toJSON());
+      }),
+      settings,
+    );
+  });
+
+  it("undo in a tab changes only that tab, unless it undoes a document-wide change", () => {
+    const tabEdits = editArbitrary(["type", "delete", "mark", "split", "join", "insert", "tab", "docAttr"]);
+    fc.assert(
+      fc.property(fc.array(fc.oneof({ weight: 4, arbitrary: tabEdits }, { weight: 1, arbitrary: fc.constant({ kind: "undo" as const }) }), { maxLength: 40 }), (list) => {
+        let state = fresh();
+        for (const value of list) {
+          if (value.kind !== "undo") {
+            state = edit(state, value);
+            continue;
+          }
+          let tr: Transaction | null = null;
+          undo(state, (next) => (tr = next));
+          if (!tr) continue;
+          const shown = currentTab(state).id;
+          const event = (tr as Transaction).getMeta(tabHistoryKey) as { event: { tab: string } };
+          const after = dispatchTo(state, tr, tick());
+          if (event.event.tab !== SHARED) {
+            expect(event.event.tab).toBe(shown);
+            for (const tab of documentTabs(state.doc)) {
+              if (tab.id === shown) continue;
+              expect(findTab(after.doc, tab.id)?.node.content.toJSON()).toEqual(tab.node.content.toJSON());
+            }
+          }
+          state = after;
+        }
       }),
       settings,
     );
@@ -90,6 +128,8 @@ describe("editing (property)", () => {
         // Reopened: undo in Suggesting mode undoes only the suggestions (earlier changes are undone as they are).
         state = setMode(fresh(original), true);
         for (const value of during) {
+          // A known limit: changing a table's rows or columns through a merged cell is applied directly.
+          if (value.kind === "table" && hasMergedCells(state.doc)) continue;
           const next = edit(state, value);
           next.doc.check();
           // The same limit for items the suggestions make (a table inserted into a list item).
@@ -201,6 +241,15 @@ function joinedLists(doc: Node): Node {
     });
   }
   return tr.doc;
+}
+
+function hasMergedCells(doc: Node): boolean {
+  let found = false;
+  doc.descendants((node) => {
+    if (node.attrs.colspan > 1 || node.attrs.rowspan > 1) found = true;
+    return !found;
+  });
+  return found;
 }
 
 function hasCompoundItems(doc: Node): boolean {

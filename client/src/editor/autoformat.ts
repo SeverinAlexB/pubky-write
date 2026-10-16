@@ -6,7 +6,7 @@
 // change and leaves what was typed. In Suggesting mode both become suggestions (see
 // `suggestParts` in suggesting.ts).
 import { Extension } from "@tiptap/core";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import type { Mark, Node, ResolvedPos } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { findWrapping } from "@tiptap/pm/transform";

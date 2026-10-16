@@ -71,10 +71,11 @@ is computed before the plugins that read it (search, pagination).
   select all selects the tab's content, a cursor moved past the tab's edge (arrow keys, `focus("start")`)
   is put back. Searching for a valid position goes towards the inside of the tab, so it never
   lands in the next one.
-- **Undo and redo** can change a hidden tab (the history is per document). The same
+- **Undo and redo** are per tab (spec 18, round 5; `tabHistory.ts`, below). An undo of a
+  document-wide change can still change another tab (undoing Delete brings a tab back): the same
   `appendTransaction` finds the first position an undo or redo changed (from its step maps) and
-  shows that tab with the cursor there, so the change is visible. Tab commands are their own undo
-  steps (closed before and after).
+  shows that tab with the cursor there. Tab commands are their own undo steps (closed before and
+  after).
 - **Clipboard.** Copied content carries its tab as context; `transformPasted` unwraps tab nodes,
   so pasting never creates a tab.
 
@@ -128,8 +129,36 @@ separate suggestion). Comments are not copied (their anchors stay on the origina
 ## Known limits
 
 - Find has no "All tabs" option yet (P2), and drag and drop in the sidebar is not built (P2).
-- The undo history is shared by all tabs (undo can change a hidden tab; it then shows that tab).
 - A comment whose tab was deleted keeps its thread (as for deleted text) but is in no tab: it is
   listed in All comments without a tab name and not shown in any margin.
 - Moving tabs changes the sidebar order only; the order of tabs in the stored document (and so in
   search results' text and the plain text the server searches) stays the order they were created.
+
+## Undo per tab
+
+`client/src/editor/tabHistory.ts` replaces Tiptap's UndoRedo (prosemirror-history) with a
+history that has one timeline per tab and a shared one.
+
+- **Timelines.** Each recorded transaction goes to the timeline of the tab all its steps change
+  (`timelineOf`: the tab whose content holds the step's range). Document attribute steps (page
+  setup, columns, headers and footers, page numbering), attribute steps on tab nodes (rename,
+  emoji, Show outline, move), inserting or deleting tab nodes (add, duplicate, delete), wrapping a
+  document in its first tab, and transactions that change several tabs go to the shared timeline.
+  A document without tab nodes has one tab, `t.0`.
+- **Undo and redo** take the latest event of the shown tab's timeline together with the shared one
+  (`done` and `undone` are single lists ordered by a sequence number, filtered by timeline). So
+  edits in other tabs stay, and a document-wide change is undone when it is the latest change seen
+  from the shown tab. A new change ends what could be redone in its timeline (a shared change: in
+  all of them).
+- **Mapping.** An event keeps its steps' maps and inverses, and the history keeps a log of every
+  change's maps (with mirrors for steps that undo others). Undoing an event that is not the
+  document's latest change maps its inverses over the event's later steps, the log since it and
+  the inverses already applied, as prosemirror-history does with remote changes; a step that no
+  longer applies is left out. Received steps from the server and collab rebases are in the log
+  too.
+- **Grouping** follows prosemirror-history: changes in the same timeline within 500 ms that touch
+  the last change, with the same `composition` (typing in a header or footnote), or appended by a
+  plugin join the last event; `closeHistory` starts a new one. At most 100 events per timeline; the
+  log is trimmed to what the oldest event needs.
+- Undo transactions carry prosemirror-history's `history$` metadata, which the suggestion
+  rewriting, the collab plugin and the tab plugin look for.

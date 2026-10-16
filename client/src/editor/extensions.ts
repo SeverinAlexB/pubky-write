@@ -2,7 +2,6 @@ import { DocsImage, DocsTable, documentExtensions, paragraphStyleDefinitions, pa
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import { NodeSelection, Plugin } from "@tiptap/pm/state";
 import type { Mark, Node } from "@tiptap/pm/model";
-import { UndoRedo } from "@tiptap/extensions";
 import { collab } from "./collab.ts";
 import { clampFontSize, DEFAULT_FONT, parseFontSize, stepFontSize } from "./fonts.ts";
 import { keyBinding } from "../shortcuts.ts";
@@ -11,6 +10,7 @@ import { FocusSelection } from "./focusSelection.ts";
 import { PasteCleanup } from "./paste.ts";
 import { CommentAnchors, type CommentAnchor } from "./commentAnchors.ts";
 import { DocumentTabs } from "./documentTabs.ts";
+import { TabHistory } from "./tabHistory.ts";
 import { EditorImage } from "./imageView.ts";
 import { Pagination } from "./pagination.ts";
 import { Search } from "./search.ts";
@@ -57,7 +57,7 @@ export function editorExtensions({
       extension === DocsTable ? EditorTable : extension === DocsImage ? EditorImage : extension,
     ),
     TableColumnResize,
-    UndoRedo,
+    TabHistory,
     DocumentTabs.configure({ initialTab }),
     Search,
     TabLayout,

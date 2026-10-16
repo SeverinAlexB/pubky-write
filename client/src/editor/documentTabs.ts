@@ -17,7 +17,7 @@ import {
   type TabEntry,
 } from "@docs/shared";
 import { Extension, type JSONContent } from "@tiptap/core";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import { Fragment, Slice, type Node } from "@tiptap/pm/model";
 import { AllSelection, Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";

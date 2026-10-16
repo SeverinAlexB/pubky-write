@@ -4,7 +4,7 @@
 // the shown tab, so the same description works on any document.
 import { documentSchema, documentTabs, firstTab, type RegionContent } from "@docs/shared";
 import { deleteSelection, joinBackward, lift, setBlockType, splitBlock, toggleMark } from "@tiptap/pm/commands";
-import { redo, undo } from "@tiptap/pm/history";
+import { redo, undo } from "../../client/src/editor/tabHistory.ts";
 import type { Node } from "@tiptap/pm/model";
 import { liftListItem, splitListItem, wrapInList } from "@tiptap/pm/schema-list";
 import { EditorState, NodeSelection, TextSelection, type Command, type Selection, type Transaction } from "@tiptap/pm/state";

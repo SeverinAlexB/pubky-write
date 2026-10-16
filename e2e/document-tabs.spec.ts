@@ -313,10 +313,64 @@ test("Find, word count, undo and the scroll position follow the shown tab", asyn
   await switchTo(page, "Tab 1");
   await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(300);
 
-  // Undo changes Tab 2 (its last edit) and shows it.
+  // Undo is the shown tab's: Tab 2's typing is not undone from Tab 1. Adding Tab 2 was Tab 1's
+  // latest change (a document-wide one), so that is what ⌘Z undoes here.
   await page.keyboard.press(`${mod}+z`);
-  await expect(sidebar(page).getByRole("button", { name: "Tab 2", exact: true })).toHaveAttribute("aria-current", "page");
-  await shownText(page).not.toContain("three words more");
+  await expect(tabNames(page)).toHaveText(["Tab 1"]);
+  await shownText(page).toContain("bottom of tab one");
+});
+
+test("undo and redo act on the shown tab, and reach tab commands when they are the tab's latest change", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("One");
+  await openSidebar(page);
+  await addTab(page);
+  await page.keyboard.type("Two");
+  await switchTo(page, "Tab 1");
+  await focusEditor(page);
+  await selectionSynced(page);
+  await page.keyboard.press("End");
+  await page.keyboard.type(" more");
+  await waitUntilSaved(page);
+
+  // In Tab 2, ⌘Z undoes Tab 2's typing; Tab 1's later edit stays.
+  await switchTo(page, "Tab 2");
+  await page.keyboard.press(`${mod}+z`);
+  await shownText(page).toBe("");
+  await switchTo(page, "Tab 1");
+  await shownText(page).toBe("One more");
+
+  // In Tab 1: its own edit, then adding Tab 2 (a document-wide change after Tab 1's first edit), then its first edit.
+  await page.keyboard.press(`${mod}+z`);
+  await shownText(page).toBe("One");
+  await page.keyboard.press(`${mod}+z`);
+  await expect(tabNames(page)).toHaveText(["Tab 1"]);
+  await page.keyboard.press(`${mod}+z`);
+  await shownText(page).toBe("");
+
+  // Redo brings them back in order; the toolbar's Redo is the same.
+  await page.keyboard.press(`${mod}+y`);
+  await shownText(page).toBe("One");
+  await page.keyboard.press(`${mod}+Shift+z`);
+  await expect(tabNames(page)).toHaveText(["Tab 1", "Tab 2"]);
+  await page.getByRole("button", { name: /^Redo/ }).click();
+  await shownText(page).toBe("One more");
+  await expect(page.getByRole("button", { name: /^Redo/ })).toBeDisabled();
+  await switchTo(page, "Tab 2");
+  await expect(page.getByRole("button", { name: /^Redo/ })).toBeEnabled();
+  await page.getByRole("button", { name: /^Redo/ }).click();
+  await shownText(page).toBe("Two");
+
+  // Saved like any edit.
+  await waitUntilSaved(page);
+  await page.reload();
+  await expect(editor(page)).toBeVisible();
+  await openSidebar(page);
+  await switchTo(page, "Tab 2");
+  await shownText(page).toBe("Two");
+  await switchTo(page, "Tab 1");
+  await shownText(page).toBe("One more");
 });
 
 test("downloads offer the current tab or all tabs, print shows the current tab, and version history shows the tabs", async ({ page }) => {

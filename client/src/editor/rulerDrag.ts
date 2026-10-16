@@ -12,7 +12,7 @@ import {
   type LengthUnit,
   type TabStop,
 } from "@docs/shared";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import type { Node } from "@tiptap/pm/model";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 

@@ -213,7 +213,10 @@ To restore a backup:
   renames in place, sets or removes an emoji, copies a link that opens the tab
   (`?tab=<id>`), shows the tab's outline while another tab is shown, and moves the
   tab up, down or into another tab. Each tab remembers its scroll position and
-  cursor for the session. Find, word count, the comment margin, review of
+  cursor for the session. Undo and redo (⌘Z, ⌘Y) act on the shown tab only: edits
+  in other tabs stay, and document-wide changes (page setup, columns, headers and
+  footers, adding, deleting, moving or renaming tabs) are undone when they are the
+  latest change seen from the shown tab. Find, word count, the comment margin, review of
   suggestions and printing are of the shown tab; All comments lists every
   thread with its tab's name. See
   [docs/design/document-tabs.md](docs/design/document-tabs.md).
@@ -552,8 +555,7 @@ not report long tasks, and throttling and profiles need Chrome.
   history does not highlight changes in headers, footers or footnotes.
 - Comments are exported only to Word (with replies and the resolved state), and comment authors
   are not imported from Word. The author is always "You"; emoji reactions are not available yet.
-- Find searches the shown tab only (no "All tabs" option), tabs cannot be
-  reordered by dragging (use Move up, Move down and Move into), and undo is shared
-  by all tabs (undoing a change in another tab shows that tab).
+- Find searches the shown tab only (no "All tabs" option), and tabs cannot be
+  reordered by dragging (use Move up, Move down and Move into).
 - No real-time collaboration yet. Suggestions are always by "You"; the Preview
   reject all view still shows suggested formatting and paragraph breaks.

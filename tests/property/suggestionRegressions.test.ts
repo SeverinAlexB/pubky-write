@@ -39,6 +39,8 @@ describe("suggestions found by the property tests", () => {
     ["a heading turned into a list item", [], [{ kind: "blockType", at: 0, level: 0 }, { kind: "list", at: 0, list: "bulletList" }, { kind: "blockType", at: 0, level: 0 }]],
     ["a paragraph joined into an empty list item", [{ kind: "blockType", at: 0.6364, level: 1 }, { kind: "delete", from: 0.091, to: 0.6213 }], [{ kind: "list", at: 0.1936, list: "bulletList" }, { kind: "join", at: 0.6667 }]],
     ["a new column's cell deleted with text before the table", [], [{ kind: "table", at: 0.5152, op: "addColumn" }, { kind: "delete", from: 0, to: 0.5589 }]],
+    ["Backspace on a paragraph break already suggested for deletion", [{ kind: "delete", from: 0.0152, to: 0.6213 }, { kind: "split", at: 0 }], [{ kind: "list", at: 0, list: "bulletList" }, { kind: "delete", from: 0.0371, to: 0 }, { kind: "join", at: 0.3334 }]],
+    ["an empty list item taken out of its list and put in another kind", [], [{ kind: "split", at: 0.394 }, { kind: "join", at: 0.2 }, { kind: "list", at: 0.3881, list: "orderedList" }]],
   ];
   it.each(cases)("rejecting %s gives back the document", (_name, before, during) => {
     const { original, rejected } = rejectAfter(before, during);

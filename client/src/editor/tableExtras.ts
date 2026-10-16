@@ -5,7 +5,7 @@
 // Pinned rows are the header rows at the top of the table (rows whose cells are all header cells).
 // Word's "repeat as header row" rows are the same thing, so they export and import as such.
 import { storedColumnWidths } from "@docs/shared";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import type { Node, NodeType } from "@tiptap/pm/model";
 import { TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { isInTable, selectedRect } from "@tiptap/pm/tables";

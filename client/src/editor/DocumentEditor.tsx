@@ -20,7 +20,7 @@ import {
 } from "@docs/shared";
 import { getText, getTextSerializersFromSchema } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
-import { closeHistory as startUndoStep } from "@tiptap/pm/history";
+import { closeHistory as startUndoStep } from "./tabHistory.ts";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { getVersion } from "./collab.ts";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";

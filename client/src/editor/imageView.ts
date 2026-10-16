@@ -20,7 +20,7 @@ import {
   type ImageLayout,
 } from "@docs/shared";
 import { Extension } from "@tiptap/core";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView, type NodeView } from "@tiptap/pm/view";

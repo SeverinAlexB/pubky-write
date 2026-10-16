@@ -21,7 +21,7 @@ import { Editor, Extension, type JSONContent } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory } from "./tabHistory.ts";
 import { keyBinding, keyBindings } from "../shortcuts.ts";
 import { AUTOFORMAT, Autoformat } from "./autoformat.ts";
 import { FocusSelection } from "./focusSelection.ts";
