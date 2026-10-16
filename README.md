@@ -100,7 +100,7 @@ To restore a backup:
   and tables) and tab stops, page breaks
   (⌘↵), quotes, code blocks, horizontal lines, undo and redo, zoom (presets,
   typed or Fit).
-- **Special characters** (Insert > Symbols > Special characters, or Emoji): a
+- **Special characters** (Insert > Symbols > Special characters): a
   dialog that stays open near the bottom of the editor area. Pick a category
   (Symbol, Punctuation, Emoji, Number, Latin) and subcategory, hover a
   character for its code point and name, click to insert it at the cursor, or
@@ -109,6 +109,31 @@ To restore a backup:
   `scripts/build-characters.mjs` from the pinned `@unicode/unicode-16.0.0`
   package and loaded only when the dialog first opens. There is no
   handwriting area.
+- **Equations** (Insert > Symbols > Equation, the right-click menu, or New
+  equation on the equation toolbar): inline equations stored as LaTeX and drawn
+  as maths (native MathML, at the text's size). Type letters, digits and
+  operators; `^` and `_` start a superscript or subscript; a backslash command
+  and a space (`\alpha `, `\leq `, `\frac `, `\sqrt `, `\nroot `, `\sum `, `\int `,
+  `\lim `, `\hat `…) becomes its symbol or a structure with empty slots (dotted
+  boxes); `(`, `[` and `\{` close themselves. The arrow keys and Tab move
+  through the structure (↓ and ↑ between numerator and denominator), Backspace
+  in an empty slot removes the structure, and at the start of the equation
+  leaves it; an equation left empty disappears. The equation toolbar under the
+  main toolbar (View > Show equation toolbar, on after the first equation,
+  remembered) has menus of Greek letters, operations, relations, structures and
+  arrows. Equations are saved, undone, versioned, copied and pasted like text;
+  in Suggesting mode inserting one is "Add: Equation". Word export writes them
+  as Word equations (and the import reads Word equations), Markdown as `$…$`
+  (both ways), plain text as their LaTeX. See
+  [docs/design/equations.md](docs/design/equations.md).
+- **Emoji** (Insert > Symbols > Emoji): a picker at the cursor with a search
+  ("thumb" → 👍 👎), nine categories, Recently used, skin tones on a long press
+  and keyboard navigation; the same picker chooses tab emoji and comment
+  reactions. Typing `:` and two letters (`:smi`) after a space shows up to
+  eight matching emoji under the cursor; ↑ ↓ choose, Enter or Tab inserts
+  (Tools > Preferences > "Insert emoji using the colon character"). The emoji
+  data (emojibase-data, MIT) is loaded when first needed. See
+  [docs/design/emoji.md](docs/design/emoji.md).
 - **Tables:** Insert > Table picks the size in a grid that grows from 5 × 5 to
   20 × 20. Tables fill the width between the margins with equal columns; drag
   the border between two columns to change their widths (stored in the
@@ -232,6 +257,11 @@ To restore a backup:
   deleted. View > Comments > Show all comments (⌘⌥⇧A, or the header button)
   lists all, open or resolved threads, where resolved ones can be reopened;
   Hide comments (⌘⌥⇧J) hides the margin and highlights and is remembered.
+  Messages take emoji reactions: "Add emoji reaction" on the active card's
+  messages opens the emoji picker, and each emoji shows as a chip with its count
+  (yours highlighted; click it to remove it), also on idle cards and in All
+  comments. "Add emoji reaction" on the selection's pill starts a comment that
+  is the emoji.
 - **Suggesting mode** (the mode button at the right end of the toolbar, View >
   Mode, ⌘⌥⇧X to switch between Suggesting and Editing, ⌘⌥⇧Z for Editing and
   ⌘⌥⇧C for Viewing; remembered per document in the browser): typed text is
@@ -308,6 +338,7 @@ To restore a backup:
   format changes and paragraph marks, inserted and deleted table rows and cells,
   images, breaks and footnotes, also in headers, footers and footnotes);
   Markdown and plain text are written as if every suggestion were accepted.
+  Equations are Word equations (Office Math), `$…$` in Markdown and their LaTeX in plain text.
   In Markdown, Title becomes a level 1 heading, Subtitle a plain paragraph,
   checklists `- [ ]` / `- [x]`, superscript and subscript `<sup>` / `<sub>`,
   a page break the comment `<!-- page break -->`, footnotes `[^1]` with the
@@ -420,7 +451,8 @@ checks the result against it before creating the document.
   images (stored in `uploads/`) with their size, rotation and crop, and for anchored ones their
   text wrapping, margin and position; line, page and column breaks; columns; page size, orientation,
   margins and page colour; the default and first-page header and footer, the page number
-  start, PAGE and NUMPAGES fields, footnotes and endnotes (as footnotes); comments with their
+  start, PAGE and NUMPAGES fields, footnotes and endnotes (as footnotes); equations (Office Math, see
+  [docs/design/equations.md](docs/design/equations.md)); comments with their
   replies and whether they are resolved (a comment with only a reference mark is attached to the
   word before it; authors are not kept, as every comment here is by "You"). Tracked changes become
   suggestions, also in headers, footers and footnotes (insertions, deletions,
@@ -430,15 +462,14 @@ checks the result against it before creating the document.
 - **Markdown** (`markdown.ts`, with markdown-it): headings, emphasis,
   strikethrough, inline code, links, lists and `- [ ]` checklists, quotes, code
   blocks, horizontal lines, tables with column alignment, images (data URLs are
-  stored, web addresses kept), `<u>`, `<sup>`, `<sub>`, `<mark>` and
-  `<!-- page break -->`. A `#` heading becomes Heading 1, since Markdown cannot
+  stored, web addresses kept), `<u>`, `<sup>`, `<sub>`, `<mark>`,
+  `<!-- page break -->` and equations as `$…$` or `$$…$$` (a dollar amount such as "$5 or $10" stays
+  text). A `#` heading becomes Heading 1, since Markdown cannot
   tell it apart from a Title.
 
 Content the editor cannot represent keeps its text where it can, and the editor lists what was
 changed or left out after importing:
 
-- equations become linear text in the style of UnicodeMath (`(a+b)/2`, `x^2`, `√(x)`,
-  `∑_(i=1)^n▒i`, `■(1&0@0&1)` for a matrix);
 - the text of text boxes and shapes follows the paragraph they are anchored in;
 - tables nested more than five deep become their paragraphs; rows of different lengths are filled
   up with empty cells;
@@ -513,6 +544,8 @@ removed text, struck through, where it was.
 | `DELETE /api/documents/:id/comments/:commentId`      | Delete a thread                         |
 | `PATCH /api/documents/:id/comments/:commentId/messages/:messageId` | Edit a message's text     |
 | `DELETE /api/documents/:id/comments/:commentId/messages/:messageId` | Delete a reply (not the first message) |
+| `POST /api/documents/:id/comments/:commentId/messages/:messageId/reactions` | Add your emoji reaction to a message (body `emoji`) |
+| `DELETE /api/documents/:id/comments/:commentId/messages/:messageId/reactions/:emoji` | Remove your emoji reaction |
 | `POST /api/documents/:id/suggestions/:suggestionId/replies` | Reply to a suggestion                |
 | `DELETE /api/documents/:id/suggestions/:suggestionId/replies/:replyId` | Delete a reply to a suggestion |
 | `POST /api/uploads`                                  | Upload an image (PNG, JPEG, GIF, WebP)  |
@@ -531,7 +564,8 @@ npm run perf         # performance with a 60-page document, against the producti
 
 `npm test` includes property tests (`tests/property/`, with fast-check): random edits by two
 editors over a network that delays and fails requests and loses answers, crashes whose kept edits
-are restored, suggestions, document tabs and undo. Each property runs 100 cases;
+are restored, suggestions, document tabs and undo, and equations that must read back unchanged from
+their LaTeX, from a Word export's Office Math and from a Markdown export. Each property runs 100 cases;
 `PROPERTY_RUNS=20000 npx vitest run tests/property` runs more, and `PROPERTY_SEED=<seed>` replays
 a failure fast-check reported.
 
@@ -560,7 +594,8 @@ not report long tasks, and throttling and profiles need Chrome.
   and comments cannot be attached to header, footer or footnote text. Version
   history does not highlight changes in headers, footers or footnotes.
 - Comments are exported only to Word (with replies and the resolved state), and comment authors
-  are not imported from Word. The author is always "You"; emoji reactions are not available yet.
+  are not imported from Word. The author is always "You", also of every emoji reaction; reactions are
+  not exported to Word.
 - Find searches the shown tab only (no "All tabs" option), and tabs cannot be
   reordered by dragging (use Move up, Move down and Move into).
 - No real-time collaboration yet. Suggestions are always by "You"; Preview reject all shows no

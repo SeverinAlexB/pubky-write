@@ -6,7 +6,7 @@
 import { DocsEquation } from "@docs/shared";
 import type { Caret, MathRow } from "@docs/shared/equations";
 import type { Node } from "@tiptap/pm/model";
-import { NodeSelection, Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView, type NodeView } from "@tiptap/pm/view";
 import { closeHistory } from "../tabHistory.ts";
 import { resetPagination } from "../pagination.ts";
@@ -27,6 +27,15 @@ export function editingEquation(state: EditorState): EquationEditing | null {
 
 const isEquationNode = (node: Node | null | undefined) => node?.type.name === "equation";
 
+/** The editing state the plugin's decoration gives the equation being edited. */
+function editingOf(decorations: readonly Decoration[]): EquationEditing | null {
+  for (const decoration of decorations) {
+    const editing = (decoration.spec as { equation?: EquationEditing }).equation;
+    if (editing) return editing;
+  }
+  return null;
+}
+
 /** Views whose layout must be measured again once equations are drawn as maths. */
 const waitingViews = new WeakSet<EditorView>();
 
@@ -37,16 +46,18 @@ class EquationView implements NodeView {
   constructor(
     private node: Node,
     private readonly view: EditorView,
+    decorations: readonly Decoration[],
   ) {
     this.dom = document.createElement("span");
     this.dom.className = "equation";
+    this.editing = editingOf(decorations);
     this.render();
   }
 
   update(node: Node, decorations: readonly Decoration[]): boolean {
     if (node.type !== this.node.type) return false;
     this.node = node;
-    this.editing = (decorations.find((decoration) => (decoration.spec as { equation?: EquationEditing }).equation)?.spec as { equation?: EquationEditing } | undefined)?.equation ?? null;
+    this.editing = editingOf(decorations);
     this.dom.classList.toggle("is-editing", this.editing !== null);
     this.render();
     return true;
@@ -240,14 +251,9 @@ export const EditorEquation = DocsEquation.extend<{ editable: boolean }>({
     return { editable: true };
   },
   addNodeView() {
-    return ({ node, view }) => new EquationView(node, view);
+    return ({ node, view, decorations }) => new EquationView(node, view, decorations);
   },
   addProseMirrorPlugins() {
     return this.options.editable ? [equationsPlugin()] : [];
   },
 });
-
-/** A transaction that ends editing the equation (the toolbar's Hide button keeps the cursor). */
-export function stopEditing(tr: Transaction): Transaction {
-  return tr.setMeta(equationsKey, { editing: null });
-}

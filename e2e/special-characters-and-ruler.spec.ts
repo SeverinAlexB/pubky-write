@@ -14,7 +14,7 @@ function menu(page: Page, name: string) {
   return page.getByRole("menu", { name, exact: true });
 }
 
-async function openSymbols(page: Page, item: "Special characters" | "Emoji") {
+async function openSymbols(page: Page, item: "Special characters") {
   await menuBarItem(page, "Insert").click();
   await menu(page, "Insert").getByRole("menuitem", { name: "Symbols" }).hover();
   await menu(page, "Symbols").getByRole("menuitem", { name: item }).click();
@@ -142,7 +142,7 @@ test.describe("special characters", () => {
     await expect(editor(page)).toHaveText("Go →←€!");
   });
 
-  test("categories and subcategories pick the characters; Emoji opens on the emoji; Escape closes", async ({ page }) => {
+  test("categories and subcategories pick the characters; the Emoji category has the emoji; Escape closes", async ({ page }) => {
     await createDocument(page);
     await editor(page).click();
     const dialog = await openSymbols(page, "Special characters");
@@ -161,9 +161,9 @@ test.describe("special characters", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
 
-    const emoji = await openSymbols(page, "Emoji");
-    await expect(emoji.getByLabel("Category", { exact: true })).toHaveValue("Emoji");
-    await expect(emoji.getByRole("button", { name: "Grinning face U+1F600" })).toBeVisible();
+    const again = await openSymbols(page, "Special characters");
+    await again.getByLabel("Category", { exact: true }).selectOption("Emoji");
+    await expect(again.getByRole("button", { name: "Grinning face U+1F600" })).toBeVisible();
   });
 });
 

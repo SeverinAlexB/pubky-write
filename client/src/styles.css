@@ -5461,6 +5461,10 @@ body.is-column-resizing * {
   border-radius: 2px;
   text-indent: 0;
   white-space: nowrap;
+  /* The editor draws an equation's caret; the browser's selection highlight is not drawn in it
+     (Safari leaves it on MathML after the selection has moved on). */
+  -webkit-user-select: none;
+  user-select: none;
   line-height: normal;
   vertical-align: baseline;
 }
@@ -5479,6 +5483,17 @@ body.is-column-resizing * {
 
 .equation.is-editing {
   background: #f1f3f4;
+}
+
+/* An equation suggested for deletion is struck through like text (text-decoration does not reach into it). */
+.page-content .suggestion-delete .equation::after {
+  position: absolute;
+  top: 55%;
+  right: 0;
+  left: 0;
+  border-top: 1px solid currentColor;
+  content: "";
+  pointer-events: none;
 }
 
 .equation.is-empty:not(.is-editing) {

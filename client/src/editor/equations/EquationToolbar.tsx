@@ -117,6 +117,19 @@ function EquationMenu({ label, sample, choices, disabled, onChoose }: EquationMe
   const grid = useRef<HTMLDivElement>(null);
   const fromKeyboard = useRef(false);
 
+  // Escape closes the menu, before the equation (which has the focus after a click) sees it.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || grid.current?.contains(document.activeElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open, close]);
+
   useEffect(() => {
     if (disabled) close();
   }, [disabled, close]);

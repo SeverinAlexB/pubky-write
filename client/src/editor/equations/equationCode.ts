@@ -19,7 +19,6 @@ import {
   parseLatex,
   pathKey,
   previousSlot,
-  rowAt,
   startOf,
   toLatex,
   typeChar,
@@ -147,7 +146,7 @@ function caretPoint(dom: HTMLElement, position: Caret): { x: number; top: number
   const before = atom(position.offset - 1)?.getBoundingClientRect();
   const after = atom(position.offset)?.getBoundingClientRect();
   const slot = (rowElement.querySelector(".eq-slot") ?? rowElement).getBoundingClientRect();
-  const x = before ? before.right : after ? after.left : slot.left + Math.min(2, slot.width / 2);
+  const x = before ? before.right : after ? after.left : slot.left + slot.width / 2;
   const neighbour = before ?? after ?? slot;
   return { x, top: neighbour.top, bottom: neighbour.bottom };
 }
@@ -282,14 +281,4 @@ export function typeText(view: EditorView, editing: EquationEditing, text: strin
   applyEdit(view, editing, state);
 }
 
-/** The row being edited at the caret's path (for the toolbar). */
-export function rowAtCaret(editing: EquationEditing): MathRow {
-  return rowAt(editing.row, editing.caret.path);
-}
-
 registerEquationRenderer(staticEquation);
-
-/** For the equation plugin: the editing state of the plugin. */
-export function editingOf(view: EditorView): EquationEditing | null {
-  return equationsKey.getState(view.state)?.editing ?? null;
-}

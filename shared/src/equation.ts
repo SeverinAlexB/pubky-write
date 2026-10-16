@@ -2,6 +2,7 @@
 // source. The editor edits it in place (client/src/editor/equations/); see docs/design/equations.md.
 import { Node as TiptapNode } from "@tiptap/core";
 import type { DOMOutputSpec, Node } from "@tiptap/pm/model";
+import type { TokenEncoder } from "@tiptap/pm/changeset";
 
 export const EQUATION = "equation";
 export const MAX_EQUATION_LENGTH = 10_000;
@@ -71,3 +72,15 @@ export const DocsEquation = TiptapNode.create({
     return node.attrs.latex as string;
   },
 });
+
+/**
+ * Tokens for comparing documents (prosemirror-changeset) in which an equation is equal only to
+ * an equation with the same LaTeX, so a changed equation is a change: in version history and when
+ * an edit becomes a suggestion. Everything else is compared as by the default encoder.
+ */
+export const equationTokens: TokenEncoder<unknown> = {
+  encodeCharacter: (char) => char,
+  encodeNodeStart: (node) => (node.type.name === EQUATION ? `${EQUATION} ${String(node.attrs.latex)}` : node.type.name),
+  encodeNodeEnd: (node) => `/${node.type.name}`,
+  compareTokens: (a, b) => a === b,
+};

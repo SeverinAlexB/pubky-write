@@ -272,10 +272,11 @@ test("a real Word file's comments and equations are imported and the document sa
   await expect(card).toContainText("Parent");
   await expect(card).toContainText("Child");
 
-  // An equation is kept as linear text, and the notice says so.
+  // An equation is an equation, drawn as maths.
   await upload("libreoffice/math-matrix.docx", "Matrix.docx");
-  await expect(editor(page)).toContainText("■(1&2@3&4)");
-  await expect(page.locator(".snackbar")).toContainText("Equations (kept as text)");
+  await expect(editor(page).locator(".equation math mtable")).toHaveCount(1);
+  await expect(editor(page).locator(".equation")).toHaveAttribute("data-latex", /1 & 2 \\\\ 3 & 4/);
+  await expect(page.locator(".snackbar")).toHaveCount(0);
   await editor(page).click();
   await page.keyboard.press(`${mod}+End`);
   await page.keyboard.type(" and more");

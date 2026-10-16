@@ -248,6 +248,7 @@ test.describe("automatic formatting", () => {
       "Automatically detect lists",
       "Enable Markdown",
       "Show link details",
+      "Insert emoji using the colon character",
     ]) {
       await expect(dialog.getByRole("checkbox", { name })).toBeChecked();
       await dialog.getByRole("checkbox", { name }).uncheck();

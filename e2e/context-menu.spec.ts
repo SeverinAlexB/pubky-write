@@ -57,6 +57,7 @@ test("right-click shows the app's menu with the specified items; Cut, Copy and D
     "Comment",
     "—",
     "Insert link",
+    "Equation",
     "—",
     "Format options",
     "Clear formatting",

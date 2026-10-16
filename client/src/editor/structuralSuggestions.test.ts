@@ -364,3 +364,36 @@ function nodePosAfter(doc: Node, type: string, index: number): number {
   });
   return found;
 }
+
+describe("equations in Suggesting mode", () => {
+  const equation = (latex: string) => ({ type: "equation", attrs: { latex } });
+
+  it("an inserted equation is Add: Equation, edited in place while it is pending; rejecting removes it", () => {
+    const session = new Session(makeDoc(paragraph("Area ")), 6);
+    session.edit((state) => state.tr.replaceSelectionWith(documentSchema.nodes.equation!.create({ latex: "" })));
+    expect(session.descriptions()).toEqual(["Add: Equation"]);
+    session.edit((state) => state.tr.setNodeMarkup(6, undefined, { latex: "x^2" }));
+    expect(session.descriptions()).toEqual(["Add: Equation"]);
+    expect(session.state.doc.child(0).child(1).attrs.latex).toBe("x^2");
+    session.resolve("reject");
+    expect(session.state.doc.textContent).toBe("Area ");
+    expect(session.state.doc.child(0).childCount).toBe(1);
+  });
+
+  it("changing an existing equation replaces it: rejecting brings back the old one, accepting keeps the new one", () => {
+    const doc = makeDoc({ type: "paragraph", content: [text("E = "), equation("mc^2")] });
+    const session = new Session(doc, 5);
+    session.edit((state) => state.tr.setNodeMarkup(5, undefined, { latex: "mc^3" }));
+    expect(session.descriptions()).toEqual(["Replace: Equation with Equation"]);
+    const latexes = (state: EditorState) => {
+      const result: string[] = [];
+      state.doc.descendants((node) => void (node.type.name === "equation" && result.push(node.attrs.latex)));
+      return result;
+    };
+    expect(latexes(session.state)).toEqual(["mc^2", "mc^3"]);
+    const rejected = session.state.apply(resolveSuggestions(session.state, "reject", null)!);
+    expect(latexes(rejected)).toEqual(["mc^2"]);
+    const accepted = session.state.apply(resolveSuggestions(session.state, "accept", null)!);
+    expect(latexes(accepted)).toEqual(["mc^3"]);
+  });
+});

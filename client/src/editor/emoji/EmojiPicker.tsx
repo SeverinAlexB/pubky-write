@@ -75,7 +75,7 @@ export function EmojiPicker({ anchor, label = "Emoji picker", onPick, onClose }:
 
   useEffect(() => {
     if (!categories) void loadEmoji().then(setCategories);
-    search.current?.focus();
+    search.current?.focus({ preventScroll: true });
   }, []);
 
   // Recently used (P2) comes first once emoji have been chosen.

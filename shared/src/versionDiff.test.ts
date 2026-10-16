@@ -103,3 +103,21 @@ describe("versionEdits in long documents", () => {
     expect(edits[1]!.deleted).toContain("Paragraph 41 with");
   });
 });
+
+describe("equations in version history", () => {
+  const withEquation = (latex: string) =>
+    Node.fromJSON(documentSchema, {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "E = " }, { type: "equation", attrs: { latex } }] }],
+    });
+
+  it("a changed equation is an edit, an unchanged one is not", () => {
+    expect(versionEdits(withEquation("mc^2"), withEquation("mc^3"))).toHaveLength(1);
+    expect(versionEdits(withEquation("mc^2"), withEquation("mc^2"))).toHaveLength(0);
+  });
+
+  it("restoring a version restores its equation", () => {
+    const target = withEquation("mc^2");
+    expect(replaceDifference(withEquation("x"), target).doc.eq(target)).toBe(true);
+  });
+});

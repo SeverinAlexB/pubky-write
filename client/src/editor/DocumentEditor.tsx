@@ -97,8 +97,9 @@ import { Toolbar } from "./toolbar/Toolbar.tsx";
 import type { Zoom } from "./toolbar/ZoomControl.tsx";
 import { LiveWordCount, useLiveCountSetting } from "./LiveWordCount.tsx";
 import { insertEquation } from "./equations/equations.ts";
+import { loadEquationCode } from "./equations/load.ts";
 import type { PickerAnchor } from "./emoji/EmojiPicker.tsx";
-import { ColonPicker } from "./emoji/ColonPicker.tsx";
+import { colonState } from "./emoji/colonEmoji.ts";
 
 // Parts used now and then are in their own chunks, fetched once the editor is idle (or when
 // first opened, if that is sooner), so they are not in the way of opening the document.
@@ -120,6 +121,7 @@ const KeyboardShortcutsDialog = lazyComponent(() =>
   import("./KeyboardShortcutsDialog.tsx").then((module) => module.KeyboardShortcutsDialog),
 );
 const EmojiPicker = lazyComponent(() => import("./emoji/EmojiPicker.tsx").then((module) => module.EmojiPicker));
+const ColonPicker = lazyComponent(() => import("./emoji/ColonPicker.tsx").then((module) => module.ColonPicker));
 const EquationToolbar = lazyComponent(() => import("./equations/EquationToolbar.tsx").then((module) => module.EquationToolbar));
 const SpecialCharactersDialog = lazyComponent(() =>
   import("./characters/SpecialCharactersDialog.tsx").then((module) => module.SpecialCharactersDialog),
@@ -431,7 +433,11 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   }, [printLayout]);
 
   useEffect(() => {
-    const preload = () => onDemand.forEach((component) => void component.preload());
+    const preload = () => {
+      onDemand.forEach((component) => void component.preload());
+      // So the first equation inserted is ready for typing at once.
+      void loadEquationCode();
+    };
     // Safari has no requestIdleCallback.
     if (typeof requestIdleCallback !== "function") {
       const timer = setTimeout(preload, 1000);
@@ -1143,6 +1149,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
 
   const openCommentCount = threads.filter((thread) => !thread.resolved).length;
   const commentState = useCommentAnchors(editor);
+  // The colon picker's list, while `:` and two letters are typed (its code loads the first time).
+  const colonActive = useEditorState({ editor: activeEditor, selector: ({ editor: current }) => colonState(current.state)?.match != null });
   // The tab of each thread's text (null when its tab was deleted); changes only when a thread moves to another tab.
   const threadTabs = useEditorState({
     editor,
@@ -1456,7 +1464,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
           )}
         </div>
 
-        {!historyOpen && !readOnly && <ColonPicker editor={activeEditor} />}
+        {colonActive && !historyOpen && !readOnly && <ColonPicker editor={activeEditor} />}
 
         {!historyOpen && <ContextMenu editor={editor} actions={actions} onCopyLink={(href) => void copyLink(href)} />}
 
@@ -1578,11 +1586,13 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
             onPick={(emoji) => {
               setEmojiPicker(null);
               if (emojiPicker.purpose === "comment") return void reactWithComment(emoji);
-              activeEditor.chain().focus().insertContent(emoji).run();
+              activeEditor.commands.insertContent(emoji);
+              // Now, not in the next frame (the focus command), so keys typed right after reach the document.
+              activeEditor.view.focus();
             }}
             onClose={() => {
               setEmojiPicker(null);
-              activeEditor.commands.focus();
+              activeEditor.view.focus();
             }}
           />
         )}

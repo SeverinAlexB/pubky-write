@@ -316,7 +316,7 @@ test("menus list their items in order without omitted ones", async ({ page }) =>
     "Comment",
   ]);
   await menu(page, "Insert").getByRole("menuitem", { name: "Symbols" }).hover();
-  await items("Symbols").toEqual(["Special characters", "Emoji"]);
+  await items("Symbols").toEqual(["Special characters", "Equation", "Emoji"]);
 
   await menuBarItem(page, "Tools").hover();
   await items("Tools").toEqual(["Word count", "Review suggested edits", "Preferences", "Keyboard shortcuts"]);

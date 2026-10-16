@@ -4,11 +4,24 @@
 import type { Reaction } from "@docs/shared";
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.tsx";
-import { emojiName, loadedEmoji, loadEmoji } from "./emoji/emojiData.ts";
+
+type EmojiNames = (emoji: string) => string | null;
+
+/** The emoji names come with the emoji data, which is loaded when reactions are first shown. */
+let names: EmojiNames | null = null;
+let namesLoading: Promise<EmojiNames> | null = null;
+
+function loadNames(): Promise<EmojiNames> {
+  namesLoading ??= import("./emoji/emojiData.ts").then(async (module) => {
+    await module.loadEmoji();
+    return (names = module.emojiName);
+  });
+  return namesLoading;
+}
 
 /** "You reacted with :grinning_face:", once the emoji names have loaded. */
 function reactedText(reaction: Reaction): string {
-  const name = emojiName(reaction.emoji);
+  const name = names?.(reaction.emoji);
   const label = name ? `:${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_|_$/g, "")}:` : reaction.emoji;
   return reaction.mine ? `You reacted with ${label}` : `Reacted with ${label}`;
 }
@@ -22,11 +35,11 @@ type ReactionChipsProps = {
 };
 
 export function ReactionChips({ reactions, onToggle, onAdd }: ReactionChipsProps) {
-  // The tooltips name the emoji: their names come with the emoji data.
-  const [, setNamesLoaded] = useState(() => loadedEmoji() !== null);
+  // The tooltips name the emoji.
+  const [, setNamesLoaded] = useState(() => names !== null);
   useEffect(() => {
-    if (!loadedEmoji()) void loadEmoji().then(() => setNamesLoaded(true));
-  }, []);
+    if (!names && reactions.length > 0) void loadNames().then(() => setNamesLoaded(true));
+  }, [reactions.length]);
   if (reactions.length === 0) return null;
   return (
     <div className="reaction-chips" role="group" aria-label="Reactions">

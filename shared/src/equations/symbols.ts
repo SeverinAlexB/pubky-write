@@ -146,6 +146,14 @@ export const largeOperators: MathSymbol[] = [
   { char: "∮", command: "\\oint", class: "integral" },
   { char: "∬", command: "\\iint", class: "integral" },
   { char: "∭", command: "\\iiint", class: "integral" },
+  { char: "∯", command: "\\oiint", class: "integral" },
+  { char: "∰", command: "\\oiiint", class: "integral" },
+  { char: "⋁", command: "\\bigvee", class: "large" },
+  { char: "⋀", command: "\\bigwedge", class: "large" },
+  { char: "⨀", command: "\\bigodot", class: "large" },
+  { char: "⨁", command: "\\bigoplus", class: "large" },
+  { char: "⨂", command: "\\bigotimes", class: "large" },
+  { char: "⨄", command: "\\biguplus", class: "large" },
 ];
 
 /** Other symbols LaTeX writers use, recognised when reading LaTeX and typing commands. */
@@ -269,13 +277,13 @@ export const namesWithLimitsUnder = new Set(["lim", "liminf", "limsup", "max", "
 
 /** Accents and other one-argument wrappers, by command. */
 export const accents = {
-  "\\hat": { char: "^", over: true },
-  "\\widehat": { char: "^", over: true },
-  "\\bar": { char: "‾", over: true },
+  "\\hat": { char: "ˆ", over: true },
+  "\\widehat": { char: "ˆ", over: true },
+  "\\bar": { char: "¯", over: true },
   "\\overline": { char: "‾", over: true, stretch: true },
   "\\underline": { char: "_", over: false, stretch: true },
-  "\\tilde": { char: "~", over: true },
-  "\\widetilde": { char: "~", over: true },
+  "\\tilde": { char: "˜", over: true },
+  "\\widetilde": { char: "˜", over: true },
   "\\vec": { char: "→", over: true },
   "\\dot": { char: "˙", over: true },
   "\\ddot": { char: "¨", over: true },

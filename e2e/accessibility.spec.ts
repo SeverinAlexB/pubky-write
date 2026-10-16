@@ -383,7 +383,8 @@ test("document tabs: the sidebar, the tab menu, the emoji picker and the delete 
   await page.getByRole("menuitem", { name: "Choose emoji" }).click();
   await expect(page.getByRole("dialog", { name: "Choose emoji" })).toBeVisible();
   await expectAccessible(page, "Choose emoji");
-  await page.getByRole("dialog", { name: "Choose emoji" }).getByRole("button", { name: "⭐" }).click();
+  await page.getByRole("dialog", { name: "Choose emoji" }).getByRole("textbox", { name: "Search" }).fill("star");
+  await page.getByRole("dialog", { name: "Choose emoji" }).getByRole("button", { name: "Star", exact: true }).click();
   await expectAccessible(page, "Tabs with a subtab and an emoji");
   await options("Tab 1").click();
   await page.getByRole("menuitem", { name: "Rename" }).click();
@@ -399,4 +400,43 @@ test("document tabs: the sidebar, the tab menu, the emoji picker and the delete 
   await page.getByRole("button", { name: "Version history" }).click();
   await expect(page.locator(".history-mode").getByRole("complementary", { name: "Tabs and outlines" })).toBeVisible();
   await expectAccessible(page, "Version history with tabs");
+});
+
+test("equations, the equation toolbar, the emoji picker, the colon picker and reactions have no serious accessibility violations", async ({ page }) => {
+  await createDocument(page);
+  await editor(page).click();
+  await page.keyboard.type("Area ");
+  await menuBarItem(page, "Insert").click();
+  await page.getByRole("menu", { name: "Insert", exact: true }).getByRole("menuitem", { name: "Symbols" }).hover();
+  await page.getByRole("menu", { name: "Symbols", exact: true }).getByRole("menuitem", { name: "Equation" }).click();
+  await expect(editor(page).locator(".equation.is-editing")).toHaveCount(1);
+  await page.keyboard.type("\\frac a");
+  await expectAccessible(page, "An equation being edited and the equation toolbar");
+  await page.getByRole("toolbar", { name: "Equation" }).getByRole("button", { name: "Maths operations" }).click();
+  await expectAccessible(page, "Maths operations");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.type(" :smi");
+  await expect(page.getByRole("listbox", { name: "Emoji suggestions" })).toBeVisible();
+  await expectAccessible(page, "The colon picker");
+  await page.keyboard.press("Enter");
+
+  await menuBarItem(page, "Insert").click();
+  await page.getByRole("menu", { name: "Insert", exact: true }).getByRole("menuitem", { name: "Symbols" }).hover();
+  await page.getByRole("menu", { name: "Symbols", exact: true }).getByRole("menuitem", { name: "Emoji" }).click();
+  await expect(page.getByRole("dialog", { name: "Insert emoji" }).locator(".emoji-cell").first()).toBeVisible();
+  await expectAccessible(page, "The emoji picker");
+  await page.getByRole("dialog", { name: "Insert emoji" }).getByRole("button", { name: "Grinning face", exact: true }).first().click();
+
+  await page.keyboard.press("Shift+Home");
+  await page.getByRole("toolbar", { name: "Selection actions" }).getByRole("button", { name: "Add comment" }).click();
+  await page.getByRole("complementary", { name: "Comments" }).getByLabel("Comment", { exact: true }).fill("Nice");
+  await page.getByRole("complementary", { name: "Comments" }).getByRole("button", { name: "Comment", exact: true }).click();
+  const card = page.getByRole("complementary", { name: "Comments" }).locator(".comment-card");
+  await card.locator(".comment-message").first().hover();
+  await card.getByRole("button", { name: "Add emoji reaction" }).click();
+  await page.getByRole("dialog", { name: "Add emoji reaction" }).getByRole("button", { name: "Grinning face", exact: true }).first().click();
+  await expect(card.getByRole("button", { name: "😀 1" })).toBeVisible();
+  await expectAccessible(page, "Reactions on a comment");
 });

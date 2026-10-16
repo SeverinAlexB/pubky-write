@@ -8,6 +8,7 @@ import { documentTabs, hasTabNodes, wrapInTab } from "./documentTabs.ts";
 import { columnKeys } from "./columns.ts";
 import { pageElementKeys } from "./pageElements.ts";
 import { pageSetupKeys } from "./pageSetup.ts";
+import { equationTokens } from "./equation.ts";
 
 /**
  * A transform that turns `doc` into `target` by replacing only the ranges where they differ,
@@ -103,7 +104,7 @@ function blockEdits(before: Node, after: Node): VersionEdit[] {
   for (const run of changedBlockRuns(before, after).reverse()) {
     transform.replace(run.fromA, run.toA, after.slice(run.fromB, run.toB));
   }
-  const changes = ChangeSet.create(before).addSteps(transform.doc, transform.mapping.maps, null).changes;
+  const changes = ChangeSet.create(before, undefined, equationTokens).addSteps(transform.doc, transform.mapping.maps, null).changes;
   return simplifyChanges(changes, transform.doc).map((change) => ({
     from: change.fromB,
     to: change.toB,

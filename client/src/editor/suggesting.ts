@@ -21,6 +21,7 @@ import {
   type MarkJSON,
   type Suggestion,
   type SuggestionMeta,
+  equationTokens,
 } from "@docs/shared";
 import { Extension, type Editor } from "@tiptap/core";
 import { closeHistory } from "./tabHistory.ts";
@@ -487,7 +488,7 @@ type ChangeRecord = {
  */
 const blockTokensDiffer: TokenEncoder<unknown> = {
   encodeCharacter: (char) => char,
-  encodeNodeStart: (node) => (node.isInline ? node.type.name : {}),
+  encodeNodeStart: (node) => (node.isInline ? equationTokens.encodeNodeStart(node) : {}),
   encodeNodeEnd: () => ({}),
   compareTokens: (a, b) => a === b,
 };
@@ -510,7 +511,7 @@ function suggestableChanges(state: EditorState, tr: Transaction, insert: MarkTyp
     changes.every(
       (change) => suggestableRange(state.doc, change.fromA, change.toA, insert) && suggestableRange(tr.doc, change.fromB, change.toB, insert),
     );
-  const changes = ChangeSet.create(state.doc).addSteps(tr.doc, tr.mapping.maps, null).changes;
+  const changes = ChangeSet.create(state.doc, undefined, equationTokens).addSteps(tr.doc, tr.mapping.maps, null).changes;
   if (suggestable(changes)) return changes;
   // The diff may have matched structure across an inserted or deleted object.
   const coarse = ChangeSet.create(state.doc, undefined, blockTokensDiffer).addSteps(tr.doc, tr.mapping.maps, null).changes;

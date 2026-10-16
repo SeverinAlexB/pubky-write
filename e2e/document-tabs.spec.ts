@@ -137,7 +137,8 @@ test("Rename, Choose emoji, Add subtab, Duplicate, Move up and down, Move into a
 
   // Choose emoji replaces the document icon; Remove emoji appears once one is set.
   await tabOption(page, "Plan", "Choose emoji");
-  await page.getByRole("dialog", { name: "Choose emoji" }).getByRole("button", { name: "🚀" }).click();
+  await page.getByRole("dialog", { name: "Choose emoji" }).getByRole("textbox", { name: "Search" }).fill("rocket");
+  await page.getByRole("dialog", { name: "Choose emoji" }).getByRole("button", { name: "Rocket" }).click();
   await expect(tabRow(page, "Plan").locator(".outline-tab-emoji")).toHaveText("🚀");
   await tabRow(page, "Plan").getByRole("button", { name: "Tab options" }).click();
   await expect(page.getByRole("menuitem", { name: "Remove emoji" })).toBeVisible();

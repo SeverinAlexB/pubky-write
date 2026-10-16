@@ -85,10 +85,9 @@ test("a selected image shows an outline, eight handles, a rotation handle and th
   const pillBox = (await pill.boundingBox())!;
   expect(Math.round(pillBox.x)).toBe(Math.round(imageBox.x));
   expect(Math.round(pillBox.y - (imageBox.y + imageBox.height))).toBe(8);
-  for (const name of ["Wrap text options", "Image options", "Add comment"]) {
+  for (const name of ["Wrap text options", "Image options", "Add comment", "Add emoji reaction"]) {
     await expect(pill.getByRole("button", { name })).toBeEnabled();
   }
-  await expect(pill.getByRole("button", { name: "Add emoji reaction" })).toBeDisabled();
 
   await pill.getByRole("button", { name: "Wrap text options" }).click();
   const wrap = page.getByRole("menu", { name: "Wrap text options" });

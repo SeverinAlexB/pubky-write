@@ -205,4 +205,4 @@ page.
   shows as a broken image until it is uploaded.
 - "a. " starts the closest numbered preset ("A. a. i."), as there is no lower-case letter preset;
   "- " and "* " both start the first bullet preset.
-- The Emoji colon picker (P2) and spelling correction are not built.
+- Spelling correction is not built. The emoji colon picker is described in [emoji.md](emoji.md).

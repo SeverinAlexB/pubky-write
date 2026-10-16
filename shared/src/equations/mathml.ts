@@ -105,7 +105,8 @@ function renderAtom(atom: MathAtom, index: number, path: PathStep[], options: Re
     case "text":
       return atom.style === "rm" ? element("mi", { mathvariant: "normal" }, atom.text) : element("mtext", {}, atom.text);
     case "frac":
-      return element("mfrac", {}, slot("num", atom.num), slot("den", atom.den));
+      // Full-size numerator and denominator, as in displayed maths, also in the text line.
+      return element("mstyle", { displaystyle: "true" }, element("mfrac", {}, slot("num", atom.num), slot("den", atom.den)));
     case "sqrt":
       return atom.index ? element("mroot", {}, slot("body", atom.body), slot("index", atom.index)) : element("msqrt", {}, slot("body", atom.body));
     case "fence":
