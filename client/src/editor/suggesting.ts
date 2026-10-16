@@ -25,12 +25,13 @@ import {
 import { Extension, type Editor } from "@tiptap/core";
 import { closeHistory } from "./tabHistory.ts";
 import { ChangeSet, type Change, type TokenEncoder } from "@tiptap/pm/changeset";
-import type { Mark, MarkType, Node, Schema, Slice } from "@tiptap/pm/model";
+import type { Mark, MarkType, Node, NodeType, Schema, Slice } from "@tiptap/pm/model";
 import { EditorState, NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import {
   AddMarkStep,
   AttrStep,
   DocAttrStep,
+  insertPoint,
   Mapping,
   RemoveMarkStep,
   ReplaceAroundStep,
@@ -491,6 +492,18 @@ const blockTokensDiffer: TokenEncoder<unknown> = {
   compareTokens: (a, b) => a === b,
 };
 
+/** The first position after the end of the nodes `pos` is at the end of where a `type` node fits, if any. */
+function pointAfter(doc: Node, pos: number, type: NodeType): number | null {
+  const $pos = doc.resolve(pos);
+  if ($pos.parentOffset !== $pos.parent.content.size) return null;
+  for (let depth = $pos.depth - 1; depth >= 0; depth--) {
+    const index = $pos.indexAfter(depth);
+    if ($pos.node(depth).canReplaceWith(index, index, type)) return $pos.after(depth + 1);
+    if (index < $pos.node(depth).childCount) return null;
+  }
+  return null;
+}
+
 /** The changes of a transaction, in ranges suggestions can express, or null. */
 function suggestableChanges(state: EditorState, tr: Transaction, insert: MarkType): readonly Change[] | null {
   const suggestable = (changes: readonly Change[]) =>
@@ -542,7 +555,15 @@ function rewriteContent(state: EditorState, tr: Transaction, context: SuggestCon
     // fit the deletion, not content. Suggested, the text stays, and so does the list it is in.
     if (change.toB > change.fromB && !(to > from && wrapperTokensOnly(tr.doc, change.fromB, change.toB))) {
       const before = out.steps.length;
-      out.replace(deletedTo, deletedTo, tr.doc.slice(change.fromB, change.toB));
+      const slice = tr.doc.slice(change.fromB, change.toB);
+      out.replace(deletedTo, deletedTo, slice);
+      // The deletion removed the paragraph the insertion was in (an empty paragraph this author had
+      // suggested, replaced by a table at the end of a tab): it goes where it fits, before that end.
+      const block = slice.openStart === 0 && slice.content.childCount === 1 ? slice.content.firstChild! : null;
+      if (out.steps.length === before && block && !block.isInline) {
+        const at = pointAfter(out.doc, afterDeletion.map(to, -1), block.type) ?? insertPoint(out.doc, afterDeletion.map(to, -1), block.type);
+        if (at !== null) out.insert(at, block);
+      }
       const step = out.steps[before];
       if (out.steps.length !== before + 1 || !(step instanceof ReplaceStep)) return null;
       step.getMap().forEach((_oldStart, _oldEnd, newStart, newEnd) => {

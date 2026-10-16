@@ -33,6 +33,8 @@ type HistoryEvent = {
   at: number;
   /** The selection before it, restored when it is undone. */
   selection: SelectionBookmark;
+  /** Steps the collab plugin dropped when it rebased them (they no longer applied): not undone. */
+  dropped?: readonly number[];
   /** Order of the events: the latest of a timeline is undone first. */
   seq: number;
 };
@@ -45,6 +47,11 @@ type HistoryState = {
   base: number;
   /** How many of `log`'s maps belong to this state (later states may have appended more). */
   logLength: number;
+  /**
+   * The unconfirmed steps as the collab plugin last rebased them: the log index of each rebased
+   * copy to the log index of the step as first made (which its event knows).
+   */
+  copies: ReadonlyMap<number, number>;
   seq: number;
   /** The event the next change may join: within the group delay, adjacent, in the same tab. */
   prev: { seq: number; time: number; composition: unknown; ranges: number[] } | null;
@@ -133,13 +140,16 @@ function historyCommand(redo: boolean): Command {
     const event = list[index]!;
     // The event's own maps, then everything since: each inverse is mapped over the steps after its
     // own, the changes since and the inverses already applied (which mirror their steps).
-    const remap = new Mapping([...event.maps]);
-    appendSince(remap, history, event.at);
+    // The event's own maps as the log has them (with the rebases that mirror them), then everything since.
+    const own = event.at - event.maps.length;
+    const remap = new Mapping(own >= history.base ? [] : [...event.maps]);
+    appendSince(remap, history, own >= history.base ? own : event.at);
     const tr = state.tr;
     const maps: StepMap[] = [];
     const inverses: Step[] = [];
     const mirrors: number[] = [];
     for (let k = event.maps.length - 1; k >= 0; k--) {
+      if (event.dropped?.includes(k)) continue;
       const step = event.inverses[k]!.map(remap.slice(k + 1));
       if (!step) continue;
       const before = tr.doc;
@@ -182,8 +192,13 @@ function withLog(history: HistoryState, tr: Transaction, mirrorOf: (index: numbe
     appendSince(copy, history, history.base);
     log = copy;
   }
+  const start = log.maps.length;
+  // The collab plugin's rebase starts with the inverses of the unconfirmed steps, which are the
+  // last changes in the log (latest first): they mirror them, like the steps redone after.
+  const rebased = (tr.getMeta("rebased") as number | undefined) ?? 0;
   tr.mapping.maps.forEach((map, index) => {
-    const mirror = mirrorOf(index);
+    const internal = tr.mapping.getMirror(index);
+    const mirror = mirrorOf(index) ?? (index < rebased ? start - 1 - index : internal !== undefined && internal < index ? start + internal : undefined);
     log.appendMap(map, mirror !== undefined && mirror >= 0 ? mirror : undefined);
   });
   return { ...history, log, logLength: log.maps.length };
@@ -204,6 +219,32 @@ function isAdjacent(tr: Transaction, ranges: number[]): boolean {
     for (let index = 0; index < ranges.length; index += 2) if (start <= ranges[index + 1]! && stop >= ranges[index]!) adjacent = true;
   });
   return adjacent;
+}
+
+/**
+ * After the collab plugin rebased the unconfirmed steps (the last `count` changes in the log before
+ * `logEnd`), the ones it dropped have no redone step mirroring their inverse: the events they
+ * belong to must not undo them any more (their undo would put back text that was never removed).
+ */
+function withDropped(history: HistoryState, tr: Transaction, count: number, logEnd: number): HistoryState {
+  const dropped: number[] = [];
+  // Each rebase rebases all unconfirmed steps, so only the copies it makes are needed later.
+  const copies = new Map<number, number>();
+  for (let index = 0; index < count; index++) {
+    const step = logEnd - 1 - index;
+    const original = history.copies.get(step) ?? step;
+    const mirror = tr.mapping.getMirror(index);
+    if (mirror === undefined || mirror < count) dropped.push(original);
+    else copies.set(logEnd + mirror, original);
+  }
+  history = { ...history, copies };
+  if (dropped.length === 0) return history;
+  const mark = (event: HistoryEvent): HistoryEvent => {
+    const first = event.at - event.maps.length;
+    const steps = dropped.filter((index) => index >= first && index < event.at).map((index) => index - first);
+    return steps.length === 0 ? event : { ...event, dropped: [...(event.dropped ?? []), ...steps] };
+  };
+  return { ...history, done: history.done.map(mark), undone: history.undone.map(mark) };
 }
 
 /** Keeps at most DEPTH events per timeline and drops the log nobody needs any more. */
@@ -247,6 +288,8 @@ function apply(tr: Transaction, value: HistoryState, oldState: EditorState): His
   if (!tr.docChanged) return history;
   const before = history;
   history = withLog(history, tr);
+  const rebased = (tr.getMeta("rebased") as number | undefined) ?? 0;
+  if (rebased > 0) history = withDropped(history, tr, rebased, end(before));
   const rootMeta = appended?.getMeta(tabHistoryKey) as HistoryMeta | undefined;
   if (rootMeta) {
     // Changes appended to an undo or redo (a table fixed up) go with the event it made.
@@ -332,7 +375,7 @@ export function tabHistory(): Plugin<HistoryState> {
   return new Plugin<HistoryState>({
     key: tabHistoryKey,
     state: {
-      init: () => ({ done: [], undone: [], log: new Mapping(), base: 0, logLength: 0, seq: 0, prev: null }),
+      init: () => ({ done: [], undone: [], log: new Mapping(), base: 0, logLength: 0, copies: new Map(), seq: 0, prev: null }),
       apply: (tr, value, oldState) => apply(tr, value, oldState),
     },
     // Tells the collab plugin's rebasing to keep steps apart (as prosemirror-history asks).

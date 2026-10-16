@@ -7,9 +7,10 @@
 //    not for a step rebased over text that has the mark already: undoing it while rebasing again
 //    removed the other session's formatting, and if the step was then dropped the editor kept
 //    showing text without formatting the server had.
-// 2. When a step no longer applies after rebasing (a deletion that now starts inside a list another
-//    session made) and is dropped, a later undo or redo of that step is dropped too. The library
-//    kept it: an undo of the dropped deletion then inserted its text a second time.
+// 2. An undo or redo among the unconfirmed steps is redone as the exact inverse of what the step it
+//    undoes became after rebasing (or dropped when that step no longer applies, as a deletion that
+//    now starts inside a list another session made). The library mapped the original undo: it
+//    inserted text a second time, or put back text the other session had deleted.
 //
 // The rest (versions, client ids, sendable steps, the transaction metadata the history plugin
 // reads) is unchanged, so the history, the sync and the server see the same plugin.
@@ -18,7 +19,7 @@ import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Editor
 import {
   AddMarkStep,
   RemoveMarkStep,
-  ReplaceStep,
+  ReplaceAroundStep,
   Step,
   StepMap,
   StepResult,
@@ -31,8 +32,16 @@ class Rebaseable {
     readonly step: Step,
     readonly inverted: Step,
     readonly origin: Transform,
+    /** Made by undo or redo. */
+    readonly history: boolean,
   ) {}
 }
+
+/**
+ * Transaction metadata: which of its steps were made by undo or redo, for steps that are not an
+ * undo transaction themselves (kept edits restored after a crash).
+ */
+export const HISTORY_STEPS = "collabHistorySteps";
 
 /** Sets the marks of the inline content of a range back to what they were: the exact inverse of a mark step. */
 export class RestoreMarksStep extends Step {
@@ -122,57 +131,48 @@ export function exactInverse(step: Step, doc: Node): Step {
 
 /**
  * Undoes `steps`, applies `over`, and redoes `steps` mapped over them. A step that no longer
- * applies is dropped, and with it a later undo or redo of that very step (a history step equal to
- * its inverse or to itself), which would otherwise insert its text a second time. A step that now
- * changes less than it did (part of the text it deleted was deleted by the other session) is undone
- * by the inverse of what it now does, for the same reason.
+ * applies is dropped. An undo or redo (a history step that is the inverse of an earlier unconfirmed
+ * step) is redone as the exact inverse of what that step became after rebasing, or dropped with
+ * it: undoing the original would put back text the other session deleted, or text that was never
+ * removed, a second time.
  */
 export function rebaseSteps(steps: readonly Rebaseable[], over: readonly Step[], transform: Transform): Rebaseable[] {
   for (let index = steps.length - 1; index >= 0; index--) transform.step(steps[index]!.inverted);
   for (const step of over) transform.step(step);
   const result: Rebaseable[] = [];
-  /** The dropped steps and their inverses, as JSON. */
-  const dropped = new Set<string>();
-  /** For steps that changed when rebased: their original inverse (JSON) → the inverse of what they now do. */
-  const changed = new Map<string, { inverse: Step; at: number }>();
   const json = (step: Step) => JSON.stringify(step.toJSON());
+  /** Each step so far: its original inverse (JSON), and what it became (its index in `transform` and exact inverse), or null if dropped. */
+  const done: { inverted: string; applied: { index: number; inverse: Step } | null }[] = [];
   for (let index = 0, mapFrom = steps.length; index < steps.length; index++) {
     const original = steps[index]!;
-    const history = isHistoryStep(original);
-    const key = history ? json(original.step) : "";
-    const substitute = history ? changed.get(key) : undefined;
-    const mapped =
-      history && dropped.has(key)
-        ? null
-        : substitute
-          ? substitute.inverse.map(transform.mapping.slice(substitute.at))
-          : original.step.map(transform.mapping.slice(mapFrom));
+    const undoes = original.history ? done.findLast((record) => record.inverted === json(original.step)) : undefined;
+    const mapped = !undoes
+      ? original.step.map(transform.mapping.slice(mapFrom))
+      : undoes.applied && undoes.applied.inverse.map(transform.mapping.slice(undoes.applied.index + 1));
     mapFrom--;
     const before = transform.doc;
-    if (mapped && !transform.maybeStep(mapped).failed) {
-      // The redone step mirrors its inverse, so positions in content it deleted map back (internal API, as in the library).
-      if (!substitute) (transform.mapping as unknown as { setMirror(n: number, m: number): void }).setMirror(mapFrom, transform.steps.length - 1);
+    if (mapped && wellFormed(mapped) && !transform.maybeStep(mapped).failed) {
+      // The redone step mirrors its inverse, so positions in content it deleted map back (internal
+      // API, as in the library). Not a recomputed undo: it is not the exact image of its original.
+      if (!undoes) (transform.mapping as unknown as { setMirror(n: number, m: number): void }).setMirror(mapFrom, transform.steps.length - 1);
       const inverse = exactInverse(mapped, before);
-      result.push(new Rebaseable(mapped, inverse, original.origin));
-      if (!history && changesLess(original.step, mapped)) changed.set(json(original.inverted), { inverse, at: transform.steps.length });
+      result.push(new Rebaseable(mapped, inverse, original.origin, original.history));
+      done.push({ inverted: json(original.inverted), applied: { index: transform.steps.length - 1, inverse } });
     } else {
-      dropped.add(json(original.step));
-      dropped.add(json(original.inverted));
+      done.push({ inverted: json(original.inverted), applied: null });
     }
   }
   return result;
 }
 
-/** Whether a rebased replacement deletes or inserts a different amount than the step it came from. */
-function changesLess(original: Step, mapped: Step): boolean {
-  if (!(original instanceof ReplaceStep) || !(mapped instanceof ReplaceStep)) return false;
-  return mapped.to - mapped.from !== original.to - original.from || mapped.slice.size !== original.slice.size;
+/**
+ * Mapping can turn a ReplaceAroundStep inside out (its gap outside its range) when the range was
+ * deleted around it; such a step still applies but cannot be inverted. It is dropped.
+ */
+function wellFormed(step: Step): boolean {
+  return !(step instanceof ReplaceAroundStep) || (step.from <= step.gapFrom && step.gapFrom <= step.gapTo && step.gapTo <= step.to);
 }
 
-/** A step made by undo or redo. */
-function isHistoryStep(rebaseable: Rebaseable): boolean {
-  return (rebaseable.origin as Transaction).getMeta?.("history$") !== undefined;
-}
 
 class CollabState {
   constructor(
@@ -183,8 +183,10 @@ class CollabState {
   ) {}
 }
 
-function unconfirmedFrom(transform: Transform): Rebaseable[] {
-  return transform.steps.map((step, index) => new Rebaseable(step, exactInverse(step, transform.docs[index]!), transform));
+function unconfirmedFrom(tr: Transaction): Rebaseable[] {
+  const undo = tr.getMeta("history$") !== undefined;
+  const flags = tr.getMeta(HISTORY_STEPS) as readonly boolean[] | undefined;
+  return tr.steps.map((step, index) => new Rebaseable(step, exactInverse(step, tr.docs[index]!), tr, undo || flags?.[index] === true));
 }
 
 export const collabKey = new PluginKey<CollabState>("collab");
@@ -262,6 +264,11 @@ export function receiveTransaction(
     (tr as unknown as { updated: number }).updated &= ~1;
   }
   return tr.setMeta("rebased", nUnconfirmed).setMeta("addToHistory", false).setMeta(collabKey, newCollabState);
+}
+
+/** The unconfirmed steps with their exact inverses, and whether each was made by undo or redo (kept with them in the browser). */
+export function unconfirmedSteps(state: EditorState): { step: Step; inverted: Step; history: boolean }[] {
+  return collabKey.getState(state)!.unconfirmed.map((rebaseable) => ({ step: rebaseable.step, inverted: rebaseable.inverted, history: rebaseable.history }));
 }
 
 /** The unconfirmed steps to send, or null when there are none. */

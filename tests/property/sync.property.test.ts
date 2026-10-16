@@ -254,6 +254,90 @@ describe("saving and collaboration (property)", () => {
     const world = await run(shrunk, { seed: 0, tokens });
     checkConverged(world);
     for (const token of tokens.all) expect(countOf(world.serverDoc(), token)).toBeLessThanOrEqual(1);
+
+    // An undo after the edit was rebased: the history maps it over the rebase (which mirrors it).
+    const rebasedTokens = new Tokens();
+    const rebasedUndo: Action[] = [
+      { kind: "edit", client: 0, edit: { kind: "type", at: 0.0152, text: "a" } },
+      { kind: "edit", client: 0, edit: { kind: "docAttr", attr: "columns", value: 0 } },
+      { kind: "edit", client: 1, edit: { kind: "list", at: 0.6364, list: "bulletList" } },
+      { kind: "edit", client: 0, edit: { kind: "delete", from: 0.6418, to: 0.015 } },
+      { kind: "wait", ms: 300 },
+      { kind: "edit", client: 0, edit: { kind: "undo" } },
+      { kind: "edit", client: 0, edit: { kind: "list", at: 0, list: "bulletList" } },
+    ];
+    const second = await run(rebasedUndo, { seed: 0, tokens: rebasedTokens });
+    checkConverged(second);
+    for (const token of rebasedTokens.all) expect(countOf(second.serverDoc(), token)).toBeLessThanOrEqual(1);
+
+    // A step turned inside out by the rebase (it could not be inverted).
+    const insideOut: Action[] = [
+      { kind: "edit", client: 0, edit: { kind: "delete", from: 0.0152, to: 0.5607 } },
+      { kind: "edit", client: 1, edit: { kind: "insert", at: 0.8637, object: "pageBreak" } },
+      { kind: "network", failure: 0, lostAnswer: 0, maxDelayMs: 800 },
+      { kind: "offline", offline: false },
+      { kind: "wait", ms: 1251 },
+      { kind: "edit", client: 0, edit: { kind: "delete", from: 0, to: 0.7097 } },
+      { kind: "wait", ms: 450 },
+      { kind: "edit", client: 1, edit: { kind: "split", at: 0 } },
+      { kind: "edit", client: 0, edit: { kind: "undo" } },
+      { kind: "wait", ms: 300 },
+      { kind: "offline", offline: false },
+    ];
+    checkConverged(await run(insideOut, { seed: -1360023753, tokens: new Tokens(), comments: true }));
+
+    // Delete, undo, redo, undo while the other editor typed inside the deleted text.
+    const chainTokens = new Tokens();
+    const chain: Action[] = [
+      { kind: "edit", client: 1, edit: { kind: "delete", from: 0, to: 0.6364 } },
+      { kind: "edit", client: 1, edit: { kind: "undo" } },
+      { kind: "edit", client: 0, edit: { kind: "type", at: 0, text: "a" } },
+      { kind: "edit", client: 1, edit: { kind: "redo" } },
+      { kind: "edit", client: 1, edit: { kind: "undo" } },
+      { kind: "wait", ms: 0 },
+    ];
+    const third = await run(chain, { seed: 0, tokens: chainTokens });
+    checkConverged(third);
+    for (const token of chainTokens.all) expect(countOf(third.serverDoc(), token)).toBeLessThanOrEqual(1);
+
+    // Kept edits with an undo, restored after a crash over the other editor's deletion of everything.
+    const restoredTokens = new Tokens();
+    const restored: Action[] = [
+      { kind: "edit", client: 0, edit: { kind: "type", at: 0, text: "a" } },
+      { kind: "edit", client: 0, edit: { kind: "delete", from: 0.0299, to: 0.0448 } },
+      { kind: "edit", client: 0, edit: { kind: "delete", from: 0.0304, to: 0 } },
+      { kind: "edit", client: 0, edit: { kind: "undo" } },
+      { kind: "edit", client: 1, edit: { kind: "delete", from: 0, to: 0.9849 } },
+      { kind: "offline", offline: false },
+      { kind: "crash", client: 0 },
+      { kind: "wait", ms: 0 },
+    ];
+    const fourth = await run(restored, { seed: 0, tokens: restoredTokens });
+    checkConverged(fourth);
+    for (const token of restoredTokens.all) expect(countOf(fourth.serverDoc(), token)).toBeLessThanOrEqual(1);
+
+    // A deletion rebased once, then dropped by a second rebase, then undone: the undo puts nothing back.
+    const twiceTokens = new Tokens();
+    const twice: Action[] = [
+      { kind: "edit", client: 1, edit: { kind: "type", at: 0.0152, text: "a" } },
+      { kind: "edit", client: 0, edit: { kind: "mark", from: 0, to: 0.0152, mark: "bold" } },
+      { kind: "network", failure: 0.6, lostAnswer: 0, maxDelayMs: 800 },
+      { kind: "wait", ms: 667 },
+      { kind: "wait", ms: 1727 },
+      { kind: "edit", client: 1, edit: { kind: "delete", from: 0.6418, to: 0.015 } },
+      { kind: "crash", client: 0 },
+      { kind: "wait", ms: 226 },
+      { kind: "edit", client: 1, edit: { kind: "list", at: 0.6418, list: "bulletList" } },
+      { kind: "wait", ms: 300 },
+      { kind: "edit", client: 1, edit: { kind: "docAttr", attr: "columns", value: 0 } },
+      { kind: "wait", ms: 1293 },
+      { kind: "wait", ms: 3000 },
+      { kind: "edit", client: 0, edit: { kind: "undo" } },
+      { kind: "edit", client: 0, edit: { kind: "table", at: 0, op: "addRow" } },
+    ];
+    const fifth = await run(twice, { seed: -2106568517, tokens: twiceTokens });
+    checkConverged(fifth);
+    for (const token of twiceTokens.all) expect(countOf(fifth.serverDoc(), token)).toBeLessThanOrEqual(1);
   });
 
   it("comment anchors in the editors match the server's after concurrent edits", { timeout: 600_000 }, async () => {

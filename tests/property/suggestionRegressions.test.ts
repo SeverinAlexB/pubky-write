@@ -43,6 +43,17 @@ describe("suggestions found by the property tests", () => {
     ["an empty list item taken out of its list and put in another kind", [], [{ kind: "split", at: 0.394 }, { kind: "join", at: 0.2 }, { kind: "list", at: 0.3881, list: "orderedList" }]],
     ["a selection of only a paragraph boundary into a nested list item", [], [{ kind: "split", at: 0.4091 }, { kind: "list", at: 0.418, list: "bulletList" }, { kind: "delete", from: 0.3732, to: 0.3881 }]],
     ["a selection of text already suggested for deletion deleted again", [], [{ kind: "list", at: 0.091, list: "bulletList" }, { kind: "delete", from: 0, to: 0.6364 }, { kind: "delete", from: 0.6364, to: 0.1061 }]],
+    [
+      "lists started in and around a nested list, then an image",
+      [{ kind: "split", at: 0.0758 }, { kind: "list", at: 0.0896, list: "bulletList" }, { kind: "join", at: 0.2 }],
+      [{ kind: "list", at: 0.1045, list: "bulletList" }, { kind: "list", at: 0.403, list: "bulletList" }, { kind: "image", at: 0, width: 20 }],
+    ],
+    ["a nested list lifted out of its list", [{ kind: "list", at: 0.4546, list: "bulletList" }], [{ kind: "list", at: 0.394, list: "lift" }]],
+    [
+      "a table put in place of an empty suggested paragraph at the end of a tab",
+      [{ kind: "delete", from: 0.6213, to: 0 }, { kind: "tab", op: "add", index: 0 }],
+      [{ kind: "split", at: 0.96 }, { kind: "list", at: 0.0385, list: "bulletList" }, { kind: "insert", at: 0.9616, object: "table" }],
+    ],
   ];
   it.each(cases)("rejecting %s gives back the document", (_name, before, during) => {
     const { original, rejected } = rejectAfter(before, during);

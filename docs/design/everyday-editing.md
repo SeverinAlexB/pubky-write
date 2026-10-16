@@ -162,17 +162,27 @@ the same case (the answer to a batch is lost and it is sent again) is recognised
 the batch, from the same client, so the client treats it as accepted. Otherwise it is a normal
 conflict, and the collab plugin confirms the client's own steps by their client id.
 
-**Rebasing.** `collab.ts` is prosemirror-collab with two changes the property tests
+**Rebasing.** `collab.ts` is prosemirror-collab with changes the property tests
 (`tests/property/`) called for. Unconfirmed steps keep exact inverses: a mark step rebased over
 text that already has the mark is undone by restoring each part's marks (`RestoreMarksStep`, a
 step that never leaves the editor) instead of removing the mark from all of it, which lost another
-session's formatting. And when a rebased step no longer applies and is dropped, the undo and redo
-steps after it are dropped too, since one of them may be its undo (which re-inserted its text a
-second time). A step that changes less after rebasing (the other session deleted part of the text it
-deleted) is undone by the inverse of what it now does. A selected node whose position the rebase
-maps badly is reselected only if it is still there. Restoring kept steps (`rebasePending`) has no
-inverses to compare, so it recognises an undo by its shape: a replacement of exactly the range a
-dropped step produced, by as much as it took out (also for a group undone in reverse order).
+session's formatting. Each unconfirmed step knows whether it was made by undo or redo. An undo or
+redo among them (a history step equal to the original inverse of an earlier unconfirmed step) is
+redone as the exact inverse of what that step became after rebasing, or dropped with it when it no
+longer applies; mapping the original undo instead put text back a second time, or put back text
+the other session had deleted. A ReplaceAroundStep that mapping turned inside out (its gap outside
+its range) is dropped, and a selected node whose position the rebase maps badly is reselected
+only if it is still there.
+
+Kept steps in the browser store their exact inverses and undo flags too, so restoring them after a
+crash (`rebasePending`) follows the same rule, and the restored steps keep their flags for the
+next rebase. Entries saved before that have no inverses: an undo is then recognised by its shape,
+a replacement of exactly the range an earlier step produced, by as much as it took out (also for a
+group undone in reverse order).
+
+The per-tab history (`tabHistory.ts`) learns from each rebase which unconfirmed steps were dropped
+(no redone step mirrors their inverse) and no longer undoes them; it follows a step through
+several rebases by the log index of its latest copy.
 Comment anchors in the editor are kept as of the confirmed version and moved through
 the confirmed steps in the server's order (`commentAnchors.ts`), so they end where the server's
 do even when rebasing maps a range differently.

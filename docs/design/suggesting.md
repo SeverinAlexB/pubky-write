@@ -267,7 +267,8 @@ again when the display state changes, because hidden text changes line breaks.
 ## Known limits
 
 - Rejecting a change of list restores the paragraph's list kind, preset and nesting depth, and joins
-  it with lists of the same kind around it; it does not restore what else its list item held (a
+  it with lists of the same kind around it (all reverted paragraphs leave their lists first, last
+  one first, then go into theirs, first one first, so nesting finds the item before it); it does not restore what else its list item held (a
   second paragraph, a table) or nesting under a list of another kind.
 - Accepting a deleted paragraph break keeps the first paragraph's style; in Editing mode the same
   deletion keeps one or the other depending on how the selection lies.

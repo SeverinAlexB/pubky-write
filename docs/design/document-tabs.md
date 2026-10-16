@@ -155,7 +155,8 @@ history that has one timeline per tab and a shared one.
   document's latest change maps its inverses over the event's later steps, the log since it and
   the inverses already applied, as prosemirror-history does with remote changes; a step that no
   longer applies is left out. Received steps from the server and collab rebases are in the log
-  too.
+  too: a rebase's inverses mirror the unconfirmed steps they undo, and a step the rebase dropped
+  is marked in its event so undo leaves it out (see everyday-editing.md, Rebasing).
 - **Grouping** follows prosemirror-history: changes in the same timeline within 500 ms that touch
   the last change, with the same `composition` (typing in a header or footnote), or appended by a
   plugin join the last event; `closeHistory` starts a new one. At most 100 events per timeline; the

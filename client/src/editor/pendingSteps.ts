@@ -8,7 +8,7 @@
 import { documentSchema } from "@docs/shared";
 import type { Node, Schema } from "@tiptap/pm/model";
 import { Mapping, ReplaceStep, Step, Transform } from "@tiptap/pm/transform";
-import { getVersion, receiveTransaction, sendableSteps } from "./collab.ts";
+import { exactInverse, getVersion, HISTORY_STEPS, receiveTransaction, sendableSteps, unconfirmedSteps } from "./collab.ts";
 import { flushPendingSelection } from "./pendingSelection.ts";
 import type { CollabTarget } from "./sync.ts";
 
@@ -21,6 +21,9 @@ export type PendingEntry = {
   /** The server version the steps are built on. */
   version: number;
   steps: unknown[];
+  /** Each step's exact inverse and whether it was an undo or redo (entries saved before these existed have neither). */
+  inverses?: unknown[];
+  undos?: boolean[];
   /** The document's text when last saved here, for downloading if the edits cannot be restored. */
   text: string;
   savedAt: number;
@@ -128,12 +131,15 @@ export class PendingPersister {
   entry(): PendingEntry | null {
     const sendable = sendableSteps(this.target.state);
     if (!sendable) return null;
+    const unconfirmed = unconfirmedSteps(this.target.state);
     return {
       key: this.key,
       documentId: this.documentId,
       clientId: this.clientId,
       version: sendable.version,
       steps: sendable.steps.map((step) => step.toJSON()),
+      inverses: unconfirmed.map(({ inverted }) => inverted.toJSON()),
+      undos: unconfirmed.map(({ history }) => history),
       text: this.text,
       savedAt: Date.now(),
     };
@@ -182,6 +188,8 @@ export class PendingPersister {
 export type RebaseResult = {
   /** The pending steps that were not on the server yet, mapped onto `doc`. */
   steps: Step[];
+  /** For each of `steps`, whether it was made by undo or redo. */
+  undos: boolean[];
   /** Pending steps the server had already applied (sent just before the session ended). */
   alreadySaved: number;
   /** Pending steps that no longer apply. */
@@ -201,6 +209,8 @@ export function rebasePending(
   pendingClientId: string,
   server: { steps: readonly Step[]; clientIds: readonly string[] },
   local: readonly Step[],
+  /** The pending steps' exact inverses and which were undo or redo, when the entry has them. */
+  history?: { inverses: readonly Step[]; undos: readonly boolean[] },
 ): RebaseResult {
   let alreadySaved = 0;
   while (alreadySaved < pending.length && alreadySaved < server.clientIds.length && server.clientIds[alreadySaved] === pendingClientId) {
@@ -215,19 +225,37 @@ export function rebasePending(
   for (const step of over) mapping.appendMap(step.getMap());
   const transform = new Transform(doc);
   const steps: Step[] = [];
-  const undoing = inversePairs(remaining);
+  const inverses = history?.inverses.slice(alreadySaved);
+  const undos = history?.undos.slice(alreadySaved);
+  // Without the inverses (an older entry), undo steps are recognised by their shape.
+  const undoing = inverses ? new Map<number, number>() : inversePairs(remaining);
   const dropped = new Set<number>();
+  // As the collab plugin does (collab.ts, rebaseSteps): an undo or redo is redone as the exact
+  // inverse of what the step it undoes became, or dropped with it.
+  const json = (step: Step) => JSON.stringify(step.toJSON());
+  const done: { inverted: string; applied: { mapIndex: number; inverse: Step } | null }[] = [];
+  const kept: boolean[] = [];
   remaining.forEach((step, index) => {
     const undone = undoing.get(index);
-    const mapped = undone !== undefined && dropped.has(undone) ? null : step.map(mapping.slice(remaining.length - index));
+    const undoes = undos?.[index] ? done.findLast((record) => record.inverted === json(step)) : undefined;
+    const mapped =
+      undone !== undefined && dropped.has(undone)
+        ? null
+        : undoes
+          ? undoes.applied && undoes.applied.inverse.map(mapping.slice(undoes.applied.mapIndex + 1))
+          : step.map(mapping.slice(remaining.length - index));
+    const before = transform.doc;
     if (mapped && !transform.maybeStep(mapped).failed) {
-      mapping.appendMap(mapped.getMap(), remaining.length - 1 - index);
+      mapping.appendMap(mapped.getMap(), undoes ? undefined : remaining.length - 1 - index);
       steps.push(mapped);
+      kept.push(undos?.[index] === true);
+      if (inverses) done.push({ inverted: json(inverses[index]!), applied: { mapIndex: mapping.maps.length - 1, inverse: exactInverse(mapped, before) } });
     } else {
       dropped.add(index);
+      if (inverses) done.push({ inverted: json(inverses[index]!), applied: null });
     }
   });
-  return { steps, alreadySaved, dropped: remaining.length - steps.length };
+  return { steps, undos: kept, alreadySaved, dropped: remaining.length - steps.length };
 }
 
 /**
@@ -303,18 +331,21 @@ export async function restoreEntry(target: CollabTarget, entry: PendingEntry, op
     target.dispatch(receiveTransaction(target.state, steps.slice(fromEditor), server.clientIds.slice(fromEditor), { mapSelectionBackward: true }));
   }
   const fromEntry = entry.version - since;
+  const inverses = entry.inverses && entry.undos?.length === pending.length ? parseSteps(entry.inverses, schema) : null;
   const result = rebasePending(
     target.state.doc,
     pending,
     entry.clientId,
     { steps: steps.slice(fromEntry), clientIds: server.clientIds.slice(fromEntry) },
     sendableSteps(target.state)?.steps ?? [],
+    inverses && inverses.length === pending.length ? { inverses, undos: entry.undos! } : undefined,
   );
   if (result.steps.length > 0) {
     const tr = target.state.tr;
     for (const step of result.steps) tr.step(step);
-    // Raw steps: not an undo step, and not rewritten into suggestions again.
-    target.dispatch(tr.setMeta("addToHistory", false));
+    // Raw steps: not an undo step, and not rewritten into suggestions again. The collab plugin
+    // keeps which were undo or redo, for its next rebase.
+    target.dispatch(tr.setMeta("addToHistory", false).setMeta(HISTORY_STEPS, result.undos));
   }
   // The restored steps are this session's unsaved steps now; the old entry goes in the same write.
   await options.replaceEntry(entry.key).catch(() => {});

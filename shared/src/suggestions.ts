@@ -860,11 +860,18 @@ export function applySuggestions(tr: Transform, action: "accept" | "reject", ids
     if (previous && joinable(doc, previous.end, pos + 1, removedObjects)) removals.push({ from: previous.end, to: pos + 1 });
   }
   // Lists are put back first (paragraphs taken out of a list, or put in one), then the content goes:
-  // a join across lists then joins what was there before.
+  // a join across lists then joins what was there before. All the paragraphs come out of their
+  // lists first, last one first (a nested item cannot be lifted out while a later list in the same
+  // item follows it); then they go into their lists, first one first (an item is nested under the
+  // one before it, which must be back already).
   const start = tr.steps.length;
+  for (const { pos } of [...listReverts].sort((a, b) => b.pos - a.pos)) {
+    const mapped = tr.mapping.slice(start).map(pos, 1);
+    if (tr.doc.nodeAt(mapped)?.isTextblock) liftOutOfLists(tr, mapped + 1);
+  }
   for (const { pos, list } of listReverts) {
     const mapped = tr.mapping.slice(start).map(pos, 1);
-    if (tr.doc.nodeAt(mapped)?.isTextblock) revertList(tr, mapped + 1, list);
+    if (list && tr.doc.nodeAt(mapped)?.isTextblock) putInList(tr, mapped + 1, list);
   }
   for (const { pos, type, attrs } of typeRestores) {
     const mapped = tr.mapping.slice(start).map(pos, 1);
@@ -952,18 +959,19 @@ export function joinable(doc: Node, from: number, to: number, removed: ReadonlyS
   return ok;
 }
 
-/** Puts the textblock with content at `pos` back into the list it was in (or out of any list). */
-function revertList(tr: Transform, pos: number, list: ListInfo): void {
-  const schema = tr.doc.type.schema;
-  const run = (command: Command, at: number) => {
-    const state = EditorState.create({ doc: tr.doc, selection: TextSelection.create(tr.doc, at) });
-    let applied = false;
-    command(state, (result) => {
-      for (const step of result.steps) tr.step(step);
-      applied = result.steps.length > 0;
-    });
-    return applied;
-  };
+/** Runs a command with the cursor at `at`, adding its steps to `tr`. Whether it did something. */
+function runAt(tr: Transform, command: Command, at: number): boolean {
+  const state = EditorState.create({ doc: tr.doc, selection: TextSelection.create(tr.doc, at) });
+  let applied = false;
+  command(state, (result) => {
+    for (const step of result.steps) tr.step(step);
+    applied = result.steps.length > 0;
+  });
+  return applied;
+}
+
+/** Takes the textblock with content at `pos` out of every list it is in. */
+function liftOutOfLists(tr: Transform, pos: number): void {
   let current = pos;
   for (let depth = 0; depth < 10; depth++) {
     const $pos = tr.doc.resolve(current);
@@ -977,14 +985,18 @@ function revertList(tr: Transform, pos: number, list: ListInfo): void {
       current = tr.mapping.slice(before).map(current);
       continue;
     }
-    if (!run(liftListItem(item.type), current)) break;
+    if (!runAt(tr, liftListItem(item.type), current)) break;
     current = tr.mapping.slice(before).map(current);
   }
-  if (!list) return;
-  const listType = schema.nodes[list.type];
+}
+
+/** Puts the textblock with content at `pos` (in no list) into the list it was in. */
+function putInList(tr: Transform, pos: number, list: NonNullable<ListInfo>): void {
+  const listType = tr.doc.type.schema.nodes[list.type];
   if (!listType) return;
+  let current = pos;
   const before = tr.steps.length;
-  if (!run(wrapInList(listType, { listPreset: list.preset }), current)) return;
+  if (!runAt(tr, wrapInList(listType, { listPreset: list.preset }), current)) return;
   // Join it with lists of the same kind right after and before it, as it was before.
   const mapped = tr.mapping.slice(before).map(current);
   const $pos = tr.doc.resolve(mapped);
@@ -1004,7 +1016,7 @@ function revertList(tr: Transform, pos: number, list: ListInfo): void {
     const $item = tr.doc.resolve(current);
     const item = $item.node($item.depth - 1);
     const steps = tr.steps.length;
-    if (!listItemTypes.has(item.type.name) || !run(sinkListItem(item.type), current)) break;
+    if (!listItemTypes.has(item.type.name) || !runAt(tr, sinkListItem(item.type), current)) break;
     current = tr.mapping.slice(steps).map(current);
   }
 }
