@@ -19,3 +19,4 @@ export * from "./tableOfContents.ts";
 export * from "./tabStops.ts";
 export * from "./suggestions.ts";
 export * from "./documentTabs.ts";
+export * from "./equation.ts";

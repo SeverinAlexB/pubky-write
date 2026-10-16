@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { commentQuote, documentSchema, emptyDocument, footnotesOf, pageElementsOf, regionKeys, replaceDifference } from "@docs/shared";
+import { mathPlainText, parseLatex } from "@docs/shared/equations";
 import { Node } from "@tiptap/pm/model";
 import JSZip from "jszip";
 import { xml2js } from "xml-js";
@@ -51,9 +52,16 @@ function imageStore() {
 /** Text with every run of white space as one space: what a reader sees, regardless of breaks. */
 const normalise = (text: string) => text.replace(/[\s ]+/g, " ").trim();
 
+/** What a leaf node reads as: a space for tabs and line breaks, an equation's characters in reading order. */
+function leafText(leaf: Node): string {
+  if (leaf.type.name === "tab" || leaf.type.name === "hardBreak") return " ";
+  if (leaf.type.name === "equation") return mathPlainText(parseLatex(leaf.attrs.latex as string));
+  return "";
+}
+
 /** The text of the body, the footnotes and the headers and footers, each normalised. */
 function texts(doc: Node): { body: string; footnotes: string[]; regions: string[] } {
-  const text = (node: Node) => normalise(node.textBetween(0, node.content.size, " ", (leaf) => (leaf.type.name === "tab" || leaf.type.name === "hardBreak" ? " " : "")));
+  const text = (node: Node) => normalise(node.textBetween(0, node.content.size, " ", leafText));
   const region = (content: unknown) => (Array.isArray(content) ? text(documentSchema.nodeFromJSON({ type: "doc", content })) : "");
   const settings = pageElementsOf(doc);
   return {
@@ -146,7 +154,7 @@ async function wordsOfPart(data: Uint8Array, part: string): Promise<string[]> {
 
 /**
  * The words of `expected` that `actual` does not have (as many times). Words are compared by their
- * letters and digits, so an equation kept as linear text ("(a)/(b)") still has the equation's words.
+ * letters and digits, so an equation's words count however its structure is written.
  */
 function missingWords(expected: string[], actual: string): string[] {
   const key = (word: string) => word.replace(/[^\p{L}\p{N}]/gu, "");

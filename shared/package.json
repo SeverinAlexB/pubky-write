@@ -5,7 +5,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./markdown": "./src/markdown.ts"
+    "./markdown": "./src/markdown.ts",
+    "./equations": "./src/equations/index.ts"
   },
   "dependencies": {
     "@tiptap/core": "^3.32.0",

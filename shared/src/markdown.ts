@@ -5,7 +5,8 @@
 // keeps one top-level heading per title. A page break becomes an HTML comment, which keeps
 // it in the file without drawing anything. Footnotes become `[^1]` references with the notes
 // at the end, a table of contents a list of links to the headings; headers, footers and page
-// number fields are left out. Suggestions are written as if they were accepted.
+// number fields are left out. Equations are written as `$LaTeX$` (and a dollar sign in the text
+// as `\$`). Suggestions are written as if they were accepted.
 import { documentSchema } from "./schema.ts";
 import { acceptedDocument } from "./suggestions.ts";
 import { headingSlug, tocTarget } from "./tableOfContents.ts";
@@ -74,6 +75,10 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
       state.write(`[^${notes.length}]`);
     },
     pageField() {},
+    equation(state, node) {
+      const latex = (node.attrs.latex as string).trim();
+      if (latex) state.write(`$${latex}$`);
+    },
     // Exports pick their tabs with tabsDocument first; a tab node elsewhere (a copied selection) is its blocks.
     documentTab(state, node) {
       state.renderContent(node);
@@ -98,6 +103,8 @@ const serializer: MarkdownSerializer = new MarkdownSerializer(
     suggestionDelete: { open: "", close: "", mixable: true },
     suggestionFormat: { open: "", close: "", mixable: true },
   },
+  // A dollar sign would start an equation when the file is read again.
+  { escapeExtraCharacters: /\$/g },
 );
 
 /** Footnote texts of the document being serialized, in reference order. */

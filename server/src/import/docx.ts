@@ -12,10 +12,10 @@
 // - The default and first-page header and footer of the last section ("different first page"),
 //   the page number start, PAGE and NUMPAGES fields, footnotes, and endnotes as footnotes.
 // - Comments with their range (or the word at their reference mark), replies and resolved state.
+// - Equations (Office Math) as equations (see ../omml.ts).
 //
-// What the editor cannot show keeps its text: equations become linear text ("(a)/(b)"), text in
-// text boxes and shapes follows its paragraph, tables nested more than five deep become their
-// paragraphs, embedded objects show their preview picture. Even-page headers, charts, shapes
+// What the editor cannot show keeps its text: text in text boxes and shapes follows its
+// paragraph, tables nested more than five deep become their paragraphs, embedded objects show their preview picture. Even-page headers, charts, shapes
 // without text and pictures in other formats are dropped. All of these are reported. Rows of
 // different lengths are filled up to rectangles. Tracked changes in the body, headers, footers and footnotes become
 // suggestions: insertions (w:ins, w:moveTo), deletions (w:del, w:moveFrom), run format changes
@@ -32,6 +32,7 @@ import {
   isMargin,
   isPageColor,
   isPageNumberStart,
+  MAX_EQUATION_LENGTH,
   MAX_COLUMNS,
   MAX_IMAGE_MARGIN_PT,
   normalizeRotation,
@@ -47,8 +48,10 @@ import type { JSONContent } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
 import type { TabStopKind } from "@docs/shared";
+import { toLatex } from "@docs/shared/equations";
 import JSZip from "jszip";
 import { xml2js } from "xml-js";
+import { ommlToMath } from "../omml.ts";
 import {
   DroppedContent,
   emptyParagraph,
@@ -328,90 +331,6 @@ function find(element: Element | undefined | null, name: string): Element | unde
     for (let index = candidate.children.length - 1; index >= 0; index--) stack.push(candidate.children[index]!);
   }
   return undefined;
-}
-
-/** Groups a part of an equation in brackets unless it is a single character. */
-const grouped = (text: string) => ([...text].length <= 1 ? text : `(${text})`);
-
-/**
- * An Office Math equation as linear text in the style of UnicodeMath: fractions as `(a)/(b)`,
- * scripts as `x^2` and `x_i`, roots as `√(x)`, large operators as `∑_(i=1)^n`, matrices as
- * `■(a&b@c&d)`. The text of every part stays in its order.
- */
-function linearMath(element: Element): string {
-  const part = (name: string, of = element) => {
-    const found = child(of, name);
-    return found ? linearMath(found) : "";
-  };
-  const property = (properties: string, name: string, fallback: string) => {
-    const value = val(child(child(element, properties), name));
-    return value === undefined ? fallback : value;
-  };
-  const all = (elements = element.children) => elements.map(linearMath).join("");
-  switch (element.name) {
-    case "t":
-      return element.text;
-    case "f":
-      return `${grouped(part("num"))}/${grouped(part("den"))}`;
-    case "sSup":
-      return `${part("e")}^${grouped(part("sup"))}`;
-    case "sSub":
-      return `${part("e")}_${grouped(part("sub"))}`;
-    case "sSubSup":
-      return `${part("e")}_${grouped(part("sub"))}^${grouped(part("sup"))}`;
-    case "sPre":
-      return `_${grouped(part("sub"))}^${grouped(part("sup"))}${part("e")}`;
-    case "rad": {
-      const degree = part("deg");
-      return `${degree ? `${grouped(degree)}` : ""}√${grouped(part("e"))}`;
-    }
-    case "nary": {
-      const sub = part("sub");
-      const sup = part("sup");
-      return `${property("naryPr", "chr", "∫")}${sub ? `_${grouped(sub)}` : ""}${sup ? `^${grouped(sup)}` : ""}▒${part("e")}`;
-    }
-    case "d": {
-      const parts = element.children.filter((candidate) => candidate.name === "e").map(linearMath);
-      return `${property("dPr", "begChr", "(")}${parts.join(property("dPr", "sepChr", "|"))}${property("dPr", "endChr", ")")}`;
-    }
-    case "m":
-      return `■(${element.children
-        .filter((row) => row.name === "mr")
-        .map((row) => row.children.filter((cell) => cell.name === "e").map(linearMath).join("&"))
-        .join("@")})`;
-    case "eqArr":
-      return `█(${element.children.filter((row) => row.name === "e").map(linearMath).join("@")})`;
-    case "func":
-      return `${part("fName")}${grouped(part("e"))}`;
-    case "limLow":
-      return `${part("e")}_${grouped(part("lim"))}`;
-    case "limUpp":
-      return `${part("e")}^${grouped(part("lim"))}`;
-    case "acc":
-      return `${part("e")}${property("accPr", "chr", "\u0302")}`;
-    case "groupChr":
-      return `${part("e")}${property("groupChrPr", "chr", "\u23df")}`;
-    case "bar":
-      return `${part("e")}\u0305`;
-    case "oMath":
-    case "oMathPara":
-    case "e":
-    case "num":
-    case "den":
-    case "sub":
-    case "sup":
-    case "deg":
-    case "lim":
-    case "fName":
-    case "box":
-    case "borderBox":
-    case "phant":
-    case "r":
-      return all();
-    default:
-      // Properties (…Pr) and anything unknown hold no text of their own.
-      return element.name.endsWith("Pr") ? "" : all();
-  }
 }
 
 /** The descendants named `name`, in document order, not looking inside the ones found. */
@@ -771,15 +690,28 @@ class DocxConverter {
           result.push(...(await this.inlineContent([child(element, "Choice") ?? child(element, "Fallback")].filter((e) => !!e), context, style)));
           break;
         case "oMath":
+          result.push(...this.equation(element, context, style));
+          break;
         case "oMathPara":
-          // The editor has no equations: they are kept as linear text, "(a+b)/2", "x^2", "√(x)".
-          this.dropped.add("Equations (kept as text)");
-          result.push(...textNode(linearMath(element), this.runMarks(undefined, context, style)));
+          // A displayed equation (or several): each one an equation of its own.
+          for (const math of element.children) if (math.name === "oMath") result.push(...this.equation(math, context, style));
           break;
         // Bookmarks, proofing marks and paragraph properties are left out.
       }
     }
     return result;
+  }
+
+  /** An Office Math equation as an equation node with its LaTeX (see omml.ts). */
+  private equation(element: Element, context: InlineContext, style: ParagraphStyleId): JSONContent[] {
+    const latex = toLatex(ommlToMath(element));
+    if (!latex) return [];
+    if (latex.length > MAX_EQUATION_LENGTH) {
+      this.dropped.add("Equations too long to edit (kept as text)");
+      return textNode(latex, this.runMarks(undefined, context, style));
+    }
+    const marks = this.runMarks(undefined, context, style);
+    return [{ type: "equation", attrs: { latex }, ...(marks.length > 0 && { marks }) }];
   }
 
   private async run(run: Element, context: InlineContext, style: ParagraphStyleId): Promise<JSONContent[]> {

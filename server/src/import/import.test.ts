@@ -647,16 +647,22 @@ describe("docxToDocument: real-world structures", () => {
     expect((await docxToDocument(single, store())).comments[0]).toMatchObject({ resolved: true, messages: [{ body: "Done" }] });
   });
 
-  it("keeps equations as linear text", async () => {
+  it("reads Office Math equations as equations", async () => {
     const run = (text: string) => `<m:r><m:t>${text}</m:t></m:r>`;
     const word = await rawDocx(
       `<w:body><w:p><w:r><w:t xml:space="preserve">Area </w:t></w:r><m:oMath><m:f><m:num>${run("a+b")}</m:num><m:den>${run("2")}</m:den></m:f><m:sSup><m:e>${run("x")}</m:e><m:sup>${run("2")}</m:sup></m:sSup><m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>${run("y")}</m:e></m:rad></m:oMath></w:p>
        <w:p><m:oMathPara><m:oMath><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub>${run("i=1")}</m:sub><m:sup>${run("n")}</m:sup><m:e>${run("i")}</m:e></m:nary><m:d><m:e>${run("1")}</m:e><m:e>${run("2")}</m:e></m:d><m:m><m:mr><m:e>${run("1")}</m:e><m:e>${run("0")}</m:e></m:mr><m:mr><m:e>${run("0")}</m:e><m:e>${run("1")}</m:e></m:mr></m:m></m:oMath></m:oMathPara></w:p></w:body>`,
     );
     const { doc, dropped } = await docxToDocument(word, store());
-    expect(doc.child(0).textContent).toBe("Area (a+b)/2x^2√y");
-    expect(doc.child(1).textContent).toBe("∑_(i=1)^n▒i(1|2)■(1&0@0&1)");
-    expect(dropped).toEqual(["Equations (kept as text)"]);
+    const latex = (paragraph: number) => {
+      const result: string[] = [];
+      doc.child(paragraph).forEach((node) => node.type.name === "equation" && result.push(node.attrs.latex));
+      return result;
+    };
+    expect(doc.child(0).textContent).toBe("Area ");
+    expect(latex(0)).toEqual(["\\frac{a+b}{2}x^2\\sqrt{y}"]);
+    expect(latex(1)).toEqual(["\\sum_{i=1}^ni\\left(1|2\\right)\\begin{matrix}1 & 0 \\\\ 0 & 1\\end{matrix}"]);
+    expect(dropped).toEqual([]);
   });
 
   it("keeps the text of text boxes and shapes after their paragraph", async () => {

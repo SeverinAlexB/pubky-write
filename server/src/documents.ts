@@ -326,10 +326,10 @@ function applyStep(step: Step, doc: Node): Node {
   return result.doc;
 }
 
-/** The text searched in the document list: the document as if its suggestions were accepted. */
+/** The text searched in the document list: the document as if its suggestions were accepted (equations as their LaTeX). */
 function plainText(source: Node): string {
   const doc = acceptedDocument(source);
-  return doc.textBetween(0, doc.content.size, "\n", " ");
+  return doc.textBetween(0, doc.content.size, "\n", (leaf) => (leaf.type.name === "equation" ? ` ${String(leaf.attrs.latex)} ` : " "));
 }
 
 function previewJson(doc: Node): string {

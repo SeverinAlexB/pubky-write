@@ -58,6 +58,7 @@ const objectLabels: Record<string, string> = {
   horizontalRule: "Horizontal line",
   tableOfContents: "Table of contents",
   footnote: "Footnote",
+  equation: "Equation",
 };
 
 /** Image attributes a "Format: image" suggestion may restore. */

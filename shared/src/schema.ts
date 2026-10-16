@@ -10,6 +10,7 @@ import Superscript from "@tiptap/extension-superscript";
 import StarterKit from "@tiptap/starter-kit";
 import { ColumnAttributes, ColumnBreak } from "./columns.ts";
 import { DocsImage } from "./images.ts";
+import { DocsEquation } from "./equation.ts";
 import { DOCUMENT_TAB, DocumentTab } from "./documentTabs.ts";
 import { checklistExtensions, ListPreset } from "./lists.ts";
 import { PageBreak } from "./pageBreak.ts";
@@ -72,6 +73,7 @@ export const documentExtensions: AnyExtension[] = [
   TocEntry,
   TabStops,
   Tab,
+  DocsEquation,
   // Last, so suggestion marks are the innermost spans and their colour wins.
   ...suggestionExtensions,
 ];

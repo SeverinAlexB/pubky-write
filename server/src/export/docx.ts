@@ -19,6 +19,7 @@ import {
   FootnoteReferenceRun,
   Header,
   HeadingLevel,
+  ImportedXmlComponent,
   HeightRule,
   HorizontalPositionRelativeFrom,
   ImageRun,
@@ -51,7 +52,10 @@ import {
   type IRunOptions,
   type IStylesOptions,
   type ParagraphChild,
+  type XmlComponent,
 } from "docx";
+import { parseLatex } from "@docs/shared/equations";
+import { mathToOmml, type XmlTree } from "../omml.ts";
 import { imageSize } from "image-size";
 import JSZip from "jszip";
 import { Fragment, Mark, type Node } from "@tiptap/pm/model";
@@ -453,9 +457,9 @@ class DocxConverter {
     return tracked.kind === "insert" ? { insertion: this.revision(tracked.meta) } : { deletion: this.revision(tracked.meta) };
   }
 
-  /** A run that is not a text run (a page break, a footnote reference) inside w:ins or w:del. */
-  private trackedRun(tracked: Tracked | null, run: PageBreak | ColumnBreak | FootnoteReferenceRun): ParagraphChild {
-    if (!tracked) return run;
+  /** A run that is not a text run (a page break, a footnote reference, an equation) inside w:ins or w:del. */
+  private trackedRun(tracked: Tracked | null, run: PageBreak | ColumnBreak | FootnoteReferenceRun | XmlComponent): ParagraphChild {
+    if (!tracked) return run as ParagraphChild;
     const revision = this.revision(tracked.meta);
     // The library writes these as an empty w:ins / w:del with the revision's attributes.
     const wrapper = tracked.kind === "insert" ? new InsertedTableRow(revision) : new DeletedTableRow(revision);
@@ -888,6 +892,14 @@ class DocxConverter {
           : this.tracked;
         const id = await this.within(tracked, () => this.footnote(node.attrs.content as RegionContent));
         runs.push(this.trackedRun(tracked, new FootnoteReferenceRun(id)));
+      } else if (node.type.name === "equation") {
+        // A native Word equation (Office Math); an inserted or deleted one inside w:ins or w:del.
+        const mark = node.marks.find((candidate) => candidate.type.name === "suggestionInsert" || candidate.type.name === "suggestionDelete");
+        const tracked: Tracked | null = mark
+          ? { kind: mark.type.name === "suggestionInsert" ? "insert" : "delete", meta: mark.attrs as SuggestionMeta }
+          : this.tracked;
+        const latex = node.attrs.latex as string;
+        if (latex) runs.push(this.trackedRun(tracked, xmlComponent(mathToOmml(parseLatex(latex)))));
       } else if (node.isText) {
         const run = this.run({ text: node.text ?? "", ...runOptions(node.marks, strike) }, node.marks);
         const link = node.marks.find((mark) => mark.type.name === "link");
@@ -1032,4 +1044,11 @@ function safeImageSize(data: Buffer): { width: number; height: number; type: "pn
   } catch {
     return null;
   }
+}
+
+/** An element made from an XML tree (Office Math, which the library has no complete model of). */
+function xmlComponent(tree: XmlTree): XmlComponent {
+  const component = new ImportedXmlComponent(tree.name, tree.attributes);
+  for (const child of tree.children ?? []) component.push(typeof child === "string" ? child : xmlComponent(child));
+  return component;
 }

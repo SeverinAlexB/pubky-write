@@ -1,10 +1,12 @@
 // Converts a Markdown file (CommonMark with GitHub tables, strikethrough and task lists) into a
 // document. It reads what the Markdown export writes: `<u>`, `<sup>`, `<sub>` and `<mark>`, and
-// `<!-- page break -->`. Other HTML is dropped.
+// `<!-- page break -->`, and `$…$` (or `$$…$$`) as an equation. Other HTML is dropped.
 //
 // A level 1 heading stays Heading 1: Markdown cannot tell it apart from a Title.
+import { MAX_EQUATION_LENGTH } from "@docs/shared";
 import type { JSONContent } from "@tiptap/core";
 import MarkdownIt from "markdown-it";
+import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
 import type Token from "markdown-it/lib/token.mjs";
 import {
   DroppedContent,
@@ -18,6 +20,31 @@ import {
 } from "./content.ts";
 
 const markdown = new MarkdownIt("default", { html: true, linkify: false });
+markdown.inline.ruler.after("escape", "math_inline", mathInline);
+
+/**
+ * `$LaTeX$` and `$$LaTeX$$`. As in Pandoc, a single dollar sign opens only before a non-space and
+ * closes only after a non-space and not before a digit, so "costs $5 or $10" stays text.
+ */
+function mathInline(state: StateInline, silent: boolean): boolean {
+  const { src, pos, posMax } = state;
+  if (src[pos] !== "$") return false;
+  const delimiter = src[pos + 1] === "$" ? "$$" : "$";
+  const start = pos + delimiter.length;
+  if (start >= posMax || (delimiter === "$" && /\s/.test(src[start]!))) return false;
+  let end = start;
+  for (;;) {
+    end = src.indexOf(delimiter, end);
+    if (end < 0 || end >= posMax) return false;
+    const escaped = src[end - 1] === "\\";
+    const single = delimiter === "$" && (/\s/.test(src[end - 1]!) || /[0-9]/.test(src[end + 1] ?? ""));
+    if (end > start && !escaped && !single) break;
+    end++;
+  }
+  if (!silent) state.push("math_inline", "math", 0).content = src.slice(start, end).trim();
+  state.pos = end + delimiter.length;
+  return true;
+}
 
 const htmlMarks: Record<string, MarkJSON> = {
   u: { type: "underline" },
@@ -177,6 +204,9 @@ class MarkdownConverter {
         case "code_inline":
           result.push(...textNode(token.content, [{ type: "code" }]));
           break;
+        case "math_inline":
+          if (token.content.length <= MAX_EQUATION_LENGTH) result.push({ type: "equation", attrs: { latex: token.content }, ...(marks.length > 0 && { marks }) });
+          break;
         case "strong_open":
         case "em_open":
         case "s_open":
@@ -232,7 +262,7 @@ class MarkdownConverter {
   }
 }
 
-const isInline = (node: JSONContent) => node.type === "text" || node.type === "hardBreak" || node.type === "tab";
+const isInline = (node: JSONContent) => node.type === "text" || node.type === "hardBreak" || node.type === "tab" || node.type === "equation";
 
 /** A paragraph or heading with images in it becomes the text before, the image and the text after. */
 function splitAroundBlocks(node: JSONContent, content: JSONContent[]): JSONContent[] {
@@ -240,7 +270,7 @@ function splitAroundBlocks(node: JSONContent, content: JSONContent[]): JSONConte
   const blocks: JSONContent[] = [];
   let run: JSONContent[] = [];
   const flush = () => {
-    if (run.some((part) => part.type === "text")) blocks.push({ ...node, content: run });
+    if (run.some((part) => part.type === "text" || part.type === "equation")) blocks.push({ ...node, content: run });
     run = [];
   };
   for (const part of content) {
