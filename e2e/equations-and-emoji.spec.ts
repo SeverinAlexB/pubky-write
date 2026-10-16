@@ -3,9 +3,27 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import JSZip from "jszip";
-import { allowClipboard, chooseDownload, createDocument, editor, focusEditor, lineStart, menuBarItem, mod, waitUntilSaved } from "./helpers.ts";
+import {
+  allowClipboard,
+  chooseDownload,
+  createDocument as createBlankDocument,
+  editor,
+  focusEditor,
+  lineStart,
+  menuBarItem,
+  mod,
+  selectionSynced,
+  waitUntilSaved,
+} from "./helpers.ts";
 
 test.use({ viewport: { width: 1440, height: 900 } });
+
+/** A new document with the cursor in it, ready for typing (Firefox can lose keys typed sooner). */
+async function createDocument(page: Page) {
+  await createBlankDocument(page);
+  await focusEditor(page);
+  await selectionSynced(page);
+}
 
 function menu(page: Page, name: string) {
   return page.getByRole("menu", { name, exact: true });

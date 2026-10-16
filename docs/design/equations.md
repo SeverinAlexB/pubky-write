@@ -62,9 +62,12 @@ equation holds `raw` LaTeX: its MathML for that part is put in place of the raw 
 | Chunk | Size (min / gzip) | Loaded |
 | --- | --- | --- |
 | The `equation` node, the editing plugin and the node view (`equations.ts`, `load.ts`) | about 3 KB in the editor's bundle | with the editor |
-| The model, LaTeX, MathML and editing (`equationCode.ts` and `@docs/shared/equations`) | 28 KB / 10 KB | before a document with an equation is shown (`EditorPage`, which checks the content and the headers, footers and footnotes); otherwise with the first equation inserted, pasted or opened in version history |
-| The equation toolbar | 4.5 KB / 1.7 KB | while it is shown |
+| The model, LaTeX, MathML and editing (`equationCode.ts` and `@docs/shared/equations`) | 28.5 KB / 9.8 KB | before a document with an equation is shown (`EditorPage`, which checks the content and the headers, footers and footnotes); otherwise when the editor is idle (like the dialogs), or with the first equation inserted, pasted or opened in version history if that is sooner |
+| The equation toolbar | 4.7 KB / 1.8 KB | while it is shown |
 | temml | 204 KB / 60 KB | only for LaTeX the model does not cover |
+
+Equations and emoji (spec 20) together added 12.7 KB (3.0 KB gzip, 0.8%) to the JavaScript loaded
+to open a document, now 1,202 KB (378 KB gzip).
 
 Until the code has loaded an equation shows its LaTeX; once it is there the node views draw maths
 and the pages are laid out again. Static copies (headers on other pages) use the renderer the code

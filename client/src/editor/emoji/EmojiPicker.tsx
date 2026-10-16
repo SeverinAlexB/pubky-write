@@ -74,7 +74,7 @@ export function EmojiPicker({ anchor, label = "Emoji picker", onPick, onClose }:
   useDismiss(root, true, onClose);
 
   useEffect(() => {
-    if (!categories) void loadEmoji().then(setCategories);
+    if (!categories) loadEmoji().then(setCategories, () => {});
     search.current?.focus({ preventScroll: true });
   }, []);
 

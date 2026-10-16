@@ -80,7 +80,10 @@ class EquationView implements NodeView {
         if (!this.view.isDestroyed) resetPagination(this.view);
       });
     }
-    void loadEquationCode().then(() => this.render());
+    loadEquationCode().then(
+      () => this.render(),
+      () => {},
+    );
   }
 
   selectNode(): void {
@@ -203,7 +206,7 @@ function equationsPlugin(): Plugin<EquationsState> {
         if (!isEquationNode(node) || !view.editable) return false;
         const code = equationCode();
         if (!code) {
-          void loadEquationCode();
+          loadEquationCode().catch(() => {});
           return false;
         }
         // Into the equation (drawn for editing), then the caret where it was clicked.

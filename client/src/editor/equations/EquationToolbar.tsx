@@ -77,7 +77,7 @@ export function EquationToolbar({ editor, onHide }: EquationToolbarProps) {
         type="button"
         className={`equation-new${inEquation ? " is-active" : ""}`}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => void insertEquation(editor.view)}
+        onClick={() => insertEquation(editor.view).catch(() => {})}
       >
         New equation
       </button>

@@ -435,8 +435,8 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
   useEffect(() => {
     const preload = () => {
       onDemand.forEach((component) => void component.preload());
-      // So the first equation inserted is ready for typing at once.
-      void loadEquationCode();
+      // So the first equation inserted is ready for typing at once (a failure is retried when needed).
+      loadEquationCode().catch(() => {});
     };
     // Safari has no requestIdleCallback.
     if (typeof requestIdleCallback !== "function") {
@@ -1063,7 +1063,7 @@ export function DocumentEditor({ document: doc, onReload }: DocumentEditorProps)
     insertEquation: () => {
       if (readOnly) return;
       setEquationToolbar(true);
-      void insertEquation(activeEditor.view);
+      insertEquation(activeEditor.view).catch(() => setNotice("Couldn't load equations. Try again."));
     },
     toggleEquationToolbar: () => setEquationToolbar((shown) => !shown),
     insertEmoji: () => {

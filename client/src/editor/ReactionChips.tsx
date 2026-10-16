@@ -12,10 +12,16 @@ let names: EmojiNames | null = null;
 let namesLoading: Promise<EmojiNames> | null = null;
 
 function loadNames(): Promise<EmojiNames> {
-  namesLoading ??= import("./emoji/emojiData.ts").then(async (module) => {
-    await module.loadEmoji();
-    return (names = module.emojiName);
-  });
+  namesLoading ??= import("./emoji/emojiData.ts").then(
+    async (module) => {
+      await module.loadEmoji();
+      return (names = module.emojiName);
+    },
+    (error: unknown) => {
+      namesLoading = null;
+      throw error;
+    },
+  );
   return namesLoading;
 }
 
@@ -38,7 +44,7 @@ export function ReactionChips({ reactions, onToggle, onAdd }: ReactionChipsProps
   // The tooltips name the emoji.
   const [, setNamesLoaded] = useState(() => names !== null);
   useEffect(() => {
-    if (!names && reactions.length > 0) void loadNames().then(() => setNamesLoaded(true));
+    if (!names && reactions.length > 0) loadNames().then(() => setNamesLoaded(true), () => {});
   }, [reactions.length]);
   if (reactions.length === 0) return null;
   return (

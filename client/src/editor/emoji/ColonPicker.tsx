@@ -20,7 +20,7 @@ export function ColonPicker({ editor }: { editor: Editor }) {
   const [categories, setCategories] = useState<EmojiCategory[] | null>(loadedEmoji);
   const active = match !== null;
   useEffect(() => {
-    if (active && !categories) void loadEmoji().then(setCategories);
+    if (active && !categories) loadEmoji().then(setCategories, () => {});
   }, [active, categories]);
 
   const results = match && categories ? searchEmoji(categories, match.query, MAX_RESULTS) : [];
