@@ -168,7 +168,12 @@ text that already has the mark is undone by restoring each part's marks (`Restor
 step that never leaves the editor) instead of removing the mark from all of it, which lost another
 session's formatting. And when a rebased step no longer applies and is dropped, the undo and redo
 steps after it are dropped too, since one of them may be its undo (which re-inserted its text a
-second time). Comment anchors in the editor are kept as of the confirmed version and moved through
+second time). A step that changes less after rebasing (the other session deleted part of the text it
+deleted) is undone by the inverse of what it now does. A selected node whose position the rebase
+maps badly is reselected only if it is still there. Restoring kept steps (`rebasePending`) has no
+inverses to compare, so it recognises an undo by its shape: a replacement of exactly the range a
+dropped step produced, by as much as it took out (also for a group undone in reverse order).
+Comment anchors in the editor are kept as of the confirmed version and moved through
 the confirmed steps in the server's order (`commentAnchors.ts`), so they end where the server's
 do even when rebasing maps a range differently.
 

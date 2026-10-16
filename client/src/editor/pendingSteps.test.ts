@@ -2,7 +2,8 @@ import { documentSchema } from "@docs/shared";
 import { Node } from "@tiptap/pm/model";
 import { Step, Transform } from "@tiptap/pm/transform";
 import { describe, expect, it } from "vitest";
-import { EditorState, type Transaction } from "@tiptap/pm/state";
+import { wrapInList } from "@tiptap/pm/schema-list";
+import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { collab, receiveTransaction, sendableSteps } from "./collab.ts";
 import { entryText, parseSteps, PendingPersister, rebasePending, type PendingEntry, type PendingStore } from "./pendingSteps.ts";
 
@@ -62,6 +63,41 @@ describe("rebasePending", () => {
     const result = rebasePending(serverDoc, pending.steps, "old", { steps: pending.steps, clientIds: ["someone else"] }, []);
     expect(result.alreadySaved).toBe(0);
     expect(textOf(applyAll(serverDoc, result.steps))).toBe("Hello!!");
+  });
+});
+
+describe("rebasePending with steps that no longer apply", () => {
+  it("drops the undo of a dropped deletion, so its text is not inserted twice", () => {
+    const paragraph = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+    const base = Node.fromJSON(documentSchema, { type: "doc", content: [paragraph("A"), paragraph("B"), paragraph("C")] });
+    // Kept offline: "A" and "B" deleted, then the deletion undone.
+    const deleted = new Transform(base).delete(0, 6);
+    const pending = [...deleted.steps, deleted.steps[0]!.invert(base)];
+    // Meanwhile this editor turned "A" into a list item, which the deletion no longer fits.
+    const state = EditorState.create({ doc: base, selection: TextSelection.create(base, 1) });
+    let local: Transaction | null = null;
+    wrapInList(documentSchema.nodes.bulletList!)(state, (tr) => (local = tr));
+    const doc = local!.doc;
+    const result = rebasePending(doc, pending, "old", { steps: [], clientIds: [] }, local!.steps);
+    expect(result.dropped).toBe(2);
+    expect(applyAll(doc, result.steps).textContent).toBe("ABC");
+  });
+
+  it("also when the undo of a group of deletions undoes them in reverse order", () => {
+    const paragraph = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+    const base = Node.fromJSON(documentSchema, { type: "doc", content: [paragraph("A"), paragraph("B"), paragraph("Cde")] });
+    // Two deletions undone together: the second one's undo first.
+    const deleted = new Transform(base).delete(0, 6);
+    deleted.delete(2, 3);
+    const undo = new Transform(deleted.doc);
+    undo.step(deleted.steps[1]!.invert(deleted.docs[1]!));
+    undo.step(deleted.steps[0]!.invert(base));
+    const pending = [...deleted.steps, ...undo.steps];
+    const state = EditorState.create({ doc: base, selection: TextSelection.create(base, 1) });
+    let local: Transaction | null = null;
+    wrapInList(documentSchema.nodes.bulletList!)(state, (tr) => (local = tr));
+    const result = rebasePending(local!.doc, pending, "old", { steps: [], clientIds: [] }, local!.steps);
+    expect(applyAll(local!.doc, result.steps).textContent).toBe("ABCde");
   });
 });
 

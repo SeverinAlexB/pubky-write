@@ -1,5 +1,5 @@
 import { documentSchema } from "@docs/shared";
-import { history, undo } from "@tiptap/pm/history";
+import { closeHistory as closeLibraryHistory, history, undo } from "@tiptap/pm/history";
 import { Node } from "@tiptap/pm/model";
 import { wrapInList } from "@tiptap/pm/schema-list";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
@@ -71,6 +71,20 @@ describe("receiveTransaction", () => {
     for (const step of sendableSteps(state)?.steps ?? []) server.step(step);
     expect(state.doc.eq(server.doc)).toBe(true);
     expect(state.doc.textContent).toBe("ABC");
+  });
+
+  it("keeps the undo of a later edit when an earlier step is dropped", () => {
+    const base = docOf(paragraph("A"), paragraph("B"), paragraph("C"));
+    const other = EditorState.create({ doc: base, selection: TextSelection.create(base, 1) });
+    let theirs: Transaction | null = null;
+    wrapInList(documentSchema.nodes.bulletList!)(other, (tr) => (theirs = tr));
+    let state = stateOf(base);
+    // A deletion that will no longer apply, then typing and its undo.
+    state = apply(state, state.tr.delete(0, 6));
+    state = apply(state, closeLibraryHistory(state.tr.insertText("x", state.doc.content.size - 1)));
+    undo(state, (tr) => (state = apply(state, tr)));
+    state = apply(state, receiveTransaction(state, theirs!.steps, ["other"]));
+    expect(state.doc.textContent).not.toContain("x");
   });
 });
 

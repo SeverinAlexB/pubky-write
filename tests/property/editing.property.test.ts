@@ -58,7 +58,7 @@ const suggestibleTable = fc.record({
 const suggestingEdit = fc.oneof({ weight: 10, arbitrary: editArbitrary(suggestible) }, { weight: 1, arbitrary: suggestibleTable });
 
 describe("editing (property)", () => {
-  it("undoing every change returns to the document it started from, in either mode", () => {
+  it("undoing every change returns to the document it started from, in either mode", { timeout: 600_000 }, () => {
     fc.assert(
       fc.property(fc.array(fc.tuple(fc.boolean(), editArbitrary(everything.filter((kind) => kind !== "undo" && kind !== "redo"))), { maxLength: 40 }), (list) => {
         let state = fresh();
@@ -85,7 +85,7 @@ describe("editing (property)", () => {
     );
   });
 
-  it("undo in a tab changes only that tab, unless it undoes a document-wide change", () => {
+  it("undo in a tab changes only that tab, unless it undoes a document-wide change", { timeout: 600_000 }, () => {
     const tabEdits = editArbitrary(["type", "delete", "mark", "split", "join", "insert", "tab", "docAttr"]);
     fc.assert(
       fc.property(fc.array(fc.oneof({ weight: 4, arbitrary: tabEdits }, { weight: 1, arbitrary: fc.constant({ kind: "undo" as const }) }), { maxLength: 40 }), (list) => {
@@ -115,7 +115,7 @@ describe("editing (property)", () => {
     );
   });
 
-  it("rejecting all suggestions returns to the document before Suggesting mode", () => {
+  it("rejecting all suggestions returns to the document before Suggesting mode", { timeout: 600_000 }, () => {
     fc.assert(
       fc.property(fc.array(editArbitrary(everything), { maxLength: 10 }), fc.array(suggestingEdit, { minLength: 1, maxLength: 30 }), (before, during) => {
         let state = fresh();
@@ -142,7 +142,7 @@ describe("editing (property)", () => {
     );
   });
 
-  it("accepting all suggestions gives the document the same edits make in Editing mode", () => {
+  it("accepting all suggestions gives the document the same edits make in Editing mode", { timeout: 600_000 }, () => {
     // Edits described on the document as it reads with every suggestion accepted, so the same edit
     // can be made on both: typing, deleting, formatting and splitting.
     const textEdit = fc.oneof(

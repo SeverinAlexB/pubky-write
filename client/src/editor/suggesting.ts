@@ -216,8 +216,12 @@ function rewriteInRuns(state: EditorState, tr: Transaction, context: SuggestCont
  * out of its structure (into an empty list item): the paragraph break is suggested for deletion.
  */
 function joinSuggestion(state: EditorState, tr: Transaction, context: SuggestContext): SuggestResult | null {
-  const { $from, empty } = state.selection;
-  if (!empty || !$from.parent.isTextblock || $from.parentOffset !== 0 || !("suggestionBreak" in $from.parent.attrs)) return null;
+  // A selection of nothing but the boundary between two paragraphs counts as Backspace before the second.
+  const { selection } = state;
+  const boundaryOnly = !selection.empty && state.doc.textBetween(selection.from, selection.to, "", "\ufffc") === "";
+  if (!selection.empty && !boundaryOnly) return null;
+  const $from = boundaryOnly ? selection.$to : selection.$from;
+  if (!$from.parent.isTextblock || $from.parentOffset !== 0 || !("suggestionBreak" in $from.parent.attrs)) return null;
   if (textblockCount(tr.doc) !== textblockCount(state.doc) - 1 || tr.doc.textContent !== state.doc.textContent) return null;
   const pos = $from.before();
   // The break is already suggested for deletion: nothing more to suggest.
@@ -254,6 +258,8 @@ function deleteSelectionSuggestion(state: EditorState, tr: Transaction, context:
   const out = state.tr;
   const meta = chooseSuggestion(out.doc, selection.from, selection.to, context.group, context, types);
   markDeleted(out, selection.from, selection.to, meta, context.author, types);
+  // Only paragraph boundaries selected (no text, no objects): Backspace's join, see joinSuggestion.
+  if (!out.docChanged && state.doc.textBetween(selection.from, selection.to, "", "\ufffc") === "") return null;
   // The cursor goes after the struck-through text, as for other deletions.
   out.setSelection(Selection.near(out.doc.resolve(out.mapping.map(selection.to, 1)), -1));
   return { tr: out, group: { id: meta.id, createdAt: meta.createdAt, time: context.now }, made: meta.id };
@@ -277,6 +283,8 @@ function sameMaps(a: readonly StepMap[], b: readonly StepMap[]): boolean {
 function removesInline(doc: Node, step: ReplaceAroundStep): boolean {
   const after = step.apply(doc).doc;
   if (after && textblockCount(after) < textblockCount(doc)) return true;
+  // Starting or ending inside a paragraph's text: text moves from one paragraph into another (a join).
+  if (doc.resolve(step.from).parent.isTextblock || doc.resolve(step.to).parent.isTextblock) return true;
   let found = false;
   for (const [from, to] of [
     [step.from, step.gapFrom],

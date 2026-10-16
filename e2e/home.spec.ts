@@ -1,7 +1,8 @@
 // The document list (docs/spec/10-home.md).
+import { readFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { Document, HeadingLevel, LevelFormat, AlignmentType, FootnoteReferenceRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun } from "docx";
-import { editor } from "./helpers.ts";
+import { editor, mod } from "./helpers.ts";
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -249,6 +250,36 @@ test("uploading a .docx creates a document with the same structure", async ({ pa
   await expect(editor(page).locator("sup.footnote-ref")).toHaveCount(1);
   await expect(page.locator(".footnote-area .footnote-text")).toHaveText("Source");
   await expect(page.locator(".snackbar")).toHaveCount(0);
+});
+
+test("a real Word file's comments and equations are imported and the document saves", async ({ page }) => {
+  const upload = async (path: string, name: string) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open file picker" }).click();
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("dialog", { name: "Open a file" }).getByRole("button", { name: "Browse" }).click();
+    await (await chooser).setFiles({
+      name,
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      buffer: await readFile(new URL(`../server/src/import/fixtures/corpus/${path}`, import.meta.url)),
+    });
+    await expect(page).toHaveURL(/\/d\/[\w-]+$/);
+  };
+  // A comment with a reply (LibreOffice's test file): one thread in the margin.
+  await upload("libreoffice/CommentReply.docx", "Reply.docx");
+  const card = page.getByRole("complementary", { name: "Comments", exact: true }).locator(".comment-card");
+  await expect(card).toHaveCount(1);
+  await expect(card).toContainText("Parent");
+  await expect(card).toContainText("Child");
+
+  // An equation is kept as linear text, and the notice says so.
+  await upload("libreoffice/math-matrix.docx", "Matrix.docx");
+  await expect(editor(page)).toContainText("■(1&2@3&4)");
+  await expect(page.locator(".snackbar")).toContainText("Equations (kept as text)");
+  await editor(page).click();
+  await page.keyboard.press(`${mod}+End`);
+  await page.keyboard.type(" and more");
+  await expect(page.getByRole("status").first()).toHaveAttribute("title", "Saved");
 });
 
 test("dropping a .md file creates a document with the same structure", async ({ page }) => {

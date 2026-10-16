@@ -41,6 +41,8 @@ describe("suggestions found by the property tests", () => {
     ["a new column's cell deleted with text before the table", [], [{ kind: "table", at: 0.5152, op: "addColumn" }, { kind: "delete", from: 0, to: 0.5589 }]],
     ["Backspace on a paragraph break already suggested for deletion", [{ kind: "delete", from: 0.0152, to: 0.6213 }, { kind: "split", at: 0 }], [{ kind: "list", at: 0, list: "bulletList" }, { kind: "delete", from: 0.0371, to: 0 }, { kind: "join", at: 0.3334 }]],
     ["an empty list item taken out of its list and put in another kind", [], [{ kind: "split", at: 0.394 }, { kind: "join", at: 0.2 }, { kind: "list", at: 0.3881, list: "orderedList" }]],
+    ["a selection of only a paragraph boundary into a nested list item", [], [{ kind: "split", at: 0.4091 }, { kind: "list", at: 0.418, list: "bulletList" }, { kind: "delete", from: 0.3732, to: 0.3881 }]],
+    ["a selection of text already suggested for deletion deleted again", [], [{ kind: "list", at: 0.091, list: "bulletList" }, { kind: "delete", from: 0, to: 0.6364 }, { kind: "delete", from: 0.6364, to: 0.1061 }]],
   ];
   it.each(cases)("rejecting %s gives back the document", (_name, before, during) => {
     const { original, rejected } = rejectAfter(before, during);

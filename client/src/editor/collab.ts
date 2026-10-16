@@ -8,16 +8,17 @@
 //    removed the other session's formatting, and if the step was then dropped the editor kept
 //    showing text without formatting the server had.
 // 2. When a step no longer applies after rebasing (a deletion that now starts inside a list another
-//    session made) and is dropped, the undo and redo steps after it are dropped too. The library
-//    kept them: an undo of the dropped deletion then inserted its text a second time.
+//    session made) and is dropped, a later undo or redo of that step is dropped too. The library
+//    kept it: an undo of the dropped deletion then inserted its text a second time.
 //
 // The rest (versions, client ids, sendable steps, the transaction metadata the history plugin
 // reads) is unchanged, so the history, the sync and the server see the same plugin.
 import { Mark, type Node, type Schema } from "@tiptap/pm/model";
-import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import {
   AddMarkStep,
   RemoveMarkStep,
+  ReplaceStep,
   Step,
   StepMap,
   StepResult,
@@ -121,28 +122,51 @@ export function exactInverse(step: Step, doc: Node): Step {
 
 /**
  * Undoes `steps`, applies `over`, and redoes `steps` mapped over them. A step that no longer
- * applies is dropped, and with it the undo and redo steps after it: they may be the undo of that
- * very step, which would otherwise insert its text a second time.
+ * applies is dropped, and with it a later undo or redo of that very step (a history step equal to
+ * its inverse or to itself), which would otherwise insert its text a second time. A step that now
+ * changes less than it did (part of the text it deleted was deleted by the other session) is undone
+ * by the inverse of what it now does, for the same reason.
  */
 export function rebaseSteps(steps: readonly Rebaseable[], over: readonly Step[], transform: Transform): Rebaseable[] {
   for (let index = steps.length - 1; index >= 0; index--) transform.step(steps[index]!.inverted);
   for (const step of over) transform.step(step);
   const result: Rebaseable[] = [];
-  let dropped = false;
+  /** The dropped steps and their inverses, as JSON. */
+  const dropped = new Set<string>();
+  /** For steps that changed when rebased: their original inverse (JSON) → the inverse of what they now do. */
+  const changed = new Map<string, { inverse: Step; at: number }>();
+  const json = (step: Step) => JSON.stringify(step.toJSON());
   for (let index = 0, mapFrom = steps.length; index < steps.length; index++) {
     const original = steps[index]!;
-    const mapped = dropped && isHistoryStep(original) ? null : original.step.map(transform.mapping.slice(mapFrom));
+    const history = isHistoryStep(original);
+    const key = history ? json(original.step) : "";
+    const substitute = history ? changed.get(key) : undefined;
+    const mapped =
+      history && dropped.has(key)
+        ? null
+        : substitute
+          ? substitute.inverse.map(transform.mapping.slice(substitute.at))
+          : original.step.map(transform.mapping.slice(mapFrom));
     mapFrom--;
     const before = transform.doc;
     if (mapped && !transform.maybeStep(mapped).failed) {
       // The redone step mirrors its inverse, so positions in content it deleted map back (internal API, as in the library).
-      (transform.mapping as unknown as { setMirror(n: number, m: number): void }).setMirror(mapFrom, transform.steps.length - 1);
-      result.push(new Rebaseable(mapped, exactInverse(mapped, before), original.origin));
+      if (!substitute) (transform.mapping as unknown as { setMirror(n: number, m: number): void }).setMirror(mapFrom, transform.steps.length - 1);
+      const inverse = exactInverse(mapped, before);
+      result.push(new Rebaseable(mapped, inverse, original.origin));
+      if (!history && changesLess(original.step, mapped)) changed.set(json(original.inverted), { inverse, at: transform.steps.length });
     } else {
-      dropped = true;
+      dropped.add(json(original.step));
+      dropped.add(json(original.inverted));
     }
   }
   return result;
+}
+
+/** Whether a rebased replacement deletes or inserts a different amount than the step it came from. */
+function changesLess(original: Step, mapped: Step): boolean {
+  if (!(original instanceof ReplaceStep) || !(mapped instanceof ReplaceStep)) return false;
+  return mapped.to - mapped.from !== original.to - original.from || mapped.slice.size !== original.slice.size;
 }
 
 /** A step made by undo or redo. */
@@ -226,6 +250,15 @@ export function receiveTransaction(
     tr.setSelection(
       TextSelection.between(tr.doc.resolve(tr.mapping.map(state.selection.anchor, -1)), tr.doc.resolve(tr.mapping.map(state.selection.head, -1)), -1),
     );
+    (tr as unknown as { updated: number }).updated &= ~1;
+  } else if (state.selection instanceof NodeSelection) {
+    // Mapping a node selection over a rebase (inverted and mirrored steps) can land where the node
+    // no longer is without saying it was deleted, which ProseMirror's own mapping then fails on: a
+    // selected node that is still there stays selected, otherwise the cursor goes next to it.
+    const pos = tr.mapping.map(state.selection.from, 1);
+    const { node } = state.selection;
+    const after = tr.doc.resolve(pos).nodeAfter;
+    tr.setSelection(after?.type === node.type ? NodeSelection.create(tr.doc, pos) : Selection.near(tr.doc.resolve(pos)));
     (tr as unknown as { updated: number }).updated &= ~1;
   }
   return tr.setMeta("rebased", nUnconfirmed).setMeta("addToHistory", false).setMeta(collabKey, newCollabState);

@@ -189,8 +189,12 @@ describe("saving and collaboration (property)", () => {
         const tokens = new Tokens();
         const world = await run(list, { seed: worldSeed, tokens });
         checkConverged(world);
-        // No step was applied twice: every typed token is there at most once (duplicating a tab copies them).
-        if (!list.some((action) => action.kind === "edit" && action.edit.kind === "tab" && action.edit.op === "duplicate")) {
+        // No step was applied twice: every typed token is there at most once. (Duplicating a tab copies
+        // them, and merging cells moves a cell's text as a deletion and an insertion, so text typed
+        // into that cell by the other editor at the same time can end up in both places.)
+        const copies = (action: Action) =>
+          action.kind === "edit" && ((action.edit.kind === "tab" && action.edit.op === "duplicate") || (action.edit.kind === "table" && action.edit.op === "merge"));
+        if (!list.some(copies)) {
           const doc = world.serverDoc();
           for (const token of tokens.all) expect(countOf(doc, token)).toBeLessThanOrEqual(1);
         }
@@ -217,6 +221,39 @@ describe("saving and collaboration (property)", () => {
       }),
       settings,
     );
+  });
+
+  it("cases found before, replayed", { timeout: 60_000 }, async () => {
+    // A selected horizontal line, then steps received over a rebase (failed on mapping the node selection).
+    const list: Action[] = [
+      { kind: "edit", client: 0, edit: { kind: "tab", op: "add", index: 0 } },
+      { kind: "edit", client: 0, edit: { kind: "tab", op: "delete", index: 0 } },
+      { kind: "network", failure: 0, lostAnswer: 0, maxDelayMs: 800 },
+      { kind: "edit", client: 1, edit: { kind: "insert", at: 0.9849, object: "horizontalRule" } },
+      { kind: "wait", ms: 301 },
+      { kind: "edit", client: 1, edit: { kind: "blockType", at: 0, level: 0 } },
+      { kind: "offline", offline: true },
+      { kind: "wait", ms: 848 },
+      { kind: "edit", client: 0, edit: { kind: "mark", from: 0, to: 0, mark: "bold" } },
+    ];
+    checkConverged(await run(list, { seed: 0, tokens: new Tokens() }));
+
+    // A deletion that shrank when rebased (part of its text was deleted by the other editor), then
+    // undone: the undo puts back what it deleted, once.
+    const tokens = new Tokens();
+    const shrunk: Action[] = [
+      { kind: "edit", client: 1, edit: { kind: "delete", from: 0.9849, to: 0 } },
+      { kind: "crash", client: 0 },
+      { kind: "edit", client: 1, edit: { kind: "type", at: 0, text: "a" } },
+      { kind: "network", failure: 0, lostAnswer: 0, maxDelayMs: 800 },
+      { kind: "wait", ms: 500 },
+      { kind: "edit", client: 1, edit: { kind: "delete", from: 0, to: 0.0299 } },
+      { kind: "edit", client: 1, edit: { kind: "undo" } },
+      { kind: "edit", client: 0, edit: { kind: "list", at: 0, list: "bulletList" } },
+    ];
+    const world = await run(shrunk, { seed: 0, tokens });
+    checkConverged(world);
+    for (const token of tokens.all) expect(countOf(world.serverDoc(), token)).toBeLessThanOrEqual(1);
   });
 
   it("comment anchors in the editors match the server's after concurrent edits", { timeout: 600_000 }, async () => {

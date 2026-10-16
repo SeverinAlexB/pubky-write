@@ -7,7 +7,7 @@
 // lock while restoring keeps two tabs from restoring it both.
 import { documentSchema } from "@docs/shared";
 import type { Node, Schema } from "@tiptap/pm/model";
-import { Mapping, Step, Transform } from "@tiptap/pm/transform";
+import { Mapping, ReplaceStep, Step, Transform } from "@tiptap/pm/transform";
 import { getVersion, receiveTransaction, sendableSteps } from "./collab.ts";
 import { flushPendingSelection } from "./pendingSelection.ts";
 import type { CollabTarget } from "./sync.ts";
@@ -215,14 +215,51 @@ export function rebasePending(
   for (const step of over) mapping.appendMap(step.getMap());
   const transform = new Transform(doc);
   const steps: Step[] = [];
+  const undoing = inversePairs(remaining);
+  const dropped = new Set<number>();
   remaining.forEach((step, index) => {
-    const mapped = step.map(mapping.slice(remaining.length - index));
+    const undone = undoing.get(index);
+    const mapped = undone !== undefined && dropped.has(undone) ? null : step.map(mapping.slice(remaining.length - index));
     if (mapped && !transform.maybeStep(mapped).failed) {
       mapping.appendMap(mapped.getMap(), remaining.length - 1 - index);
       steps.push(mapped);
+    } else {
+      dropped.add(index);
     }
   });
   return { steps, alreadySaved, dropped: remaining.length - steps.length };
+}
+
+/**
+ * The steps that undo an earlier one (by index, to the index of the step they undo): a replacement
+ * of exactly the range the earlier step produced, by as much as it took out, once the steps
+ * between are mapped over (with the pairs among them cancelling out). If the earlier step no longer
+ * applies when the steps are rebased, its undo must not apply either: it would insert the text a
+ * second time.
+ */
+function inversePairs(pending: readonly Step[]): Map<number, number> {
+  const pairs = new Map<number, number>();
+  const paired = new Set<number>();
+  pending.forEach((step, index) => {
+    if (!(step instanceof ReplaceStep)) return;
+    for (let earlier = index - 1; earlier >= 0; earlier--) {
+      const original = pending[earlier]!;
+      if (paired.has(earlier) || !(original instanceof ReplaceStep)) continue;
+      const between = new Mapping();
+      for (let other = earlier + 1; other < index; other++) {
+        const undone = pairs.get(other);
+        between.appendMap(pending[other]!.getMap(), undone !== undefined && undone > earlier ? undone - earlier - 1 : undefined);
+      }
+      const from = between.map(original.from, -1);
+      const to = between.map(original.from + original.slice.size, 1);
+      if (step.from === from && step.to === to && step.slice.size === original.to - original.from) {
+        pairs.set(index, earlier);
+        paired.add(earlier);
+        return;
+      }
+    }
+  });
+  return pairs;
 }
 
 export type RestoreOutcome = "restored" | "nothing" | "partial" | "failed" | "offline";

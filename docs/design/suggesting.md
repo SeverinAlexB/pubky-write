@@ -85,8 +85,10 @@ commands (accept/reject) or only change document attributes.
    - **Content and format steps in one transaction** (Enter at the start of a heading splits it and
      makes the new empty block a paragraph) are split into runs, each rewritten on the result of
      the runs before (`rewriteInRuns`).
-   - A `ReplaceAroundStep` that removes text or a paragraph boundary is a content change, not a
-     wrap. Backspace joining a paragraph into an empty list item, when the diff cannot express it,
+   - A `ReplaceAroundStep` that removes text or a paragraph boundary, or starts or ends inside a
+     paragraph's text, is a content change, not a wrap. A selection of only a paragraph boundary
+     is Backspace before the second paragraph; deleting text already suggested for deletion
+     changes nothing. Backspace joining a paragraph into an empty list item, when the diff cannot express it,
      becomes a deleted paragraph break on that paragraph (`joinSuggestion`).
    - Inside a table that is itself a pending insertion, a cell of a new column is never removed on
      its own (its row would be a cell short); its text is.
